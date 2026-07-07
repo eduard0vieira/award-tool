@@ -6,8 +6,8 @@ async function buscarEmissoes() {
   const rl = readline.createInterface({ input, output });
 
   console.log("✈️  Bot de Emissões TAP Iniciado!\n");
-  const origem = await rl.question("🛫 Digite a origem:");
-  const destino = await rl.question("🛬 Digite o destino:");
+  const origem = await rl.question("🛫 Digite a origem: ");
+  const destino = await rl.question("🛬 Digite o destino: ");
   const cabine = await rl.question(
     "💺 Cabine (1 para Executiva, 2 para Econômica): ",
   );
@@ -53,44 +53,37 @@ async function buscarEmissoes() {
   const origemContainer = autocompletes.nth(0);
   const inputOrigem = origemContainer.locator("input");
 
-  // 1. Clica no input para garantir o foco
   await inputOrigem.click({ force: true });
   await page.waitForTimeout(500);
 
-  // 2. Apaga o valor pré-existente (ex: GRU)
   const clearOrigemBtn = origemContainer.locator(
     'button[aria-label="Clear"], button[title="Clear"]',
   );
   if (await clearOrigemBtn.isVisible()) {
     await clearOrigemBtn.click({ force: true });
   } else {
-    // Fallback marreta: Backspace para apagar o "chip" caso o botão de limpar esteja escondido
     await page.keyboard.press("Backspace");
     await page.keyboard.press("Backspace");
   }
 
-  // 3. Faz o fluxo de preenchimento
   await inputOrigem.pressSequentially(origem, { delay: 150 });
-  await page.waitForTimeout(2000); // Espera a lista carregar
+  await page.waitForTimeout(2000);
 
-  await page.keyboard.press("ArrowDown"); // Vai para a primeira opção
-  await page.keyboard.press("Enter"); // Marca o checkbox
-  await page.keyboard.press("Escape"); // Fecha o dropdown multi-select
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("Escape");
   await page.waitForTimeout(500);
 
   // 3.2 Tratando o DESTINO
-  // 4. Dá o Tab para pular para o "Where to?"
   await page.keyboard.press("Tab");
   await page.waitForTimeout(500);
 
   await page.keyboard.press("Enter");
   await page.waitForTimeout(500);
 
-  // Se o cursor não foi para o lugar certo com o Tab, garantimos o foco manual
   const inputDestino = autocompletes.nth(1).locator("input");
   await inputDestino.click({ force: true });
 
-  // Limpa o destino se tiver algo
   const clearDestinoBtn = autocompletes
     .nth(1)
     .locator('button[aria-label="Clear"], button[title="Clear"]');
@@ -98,7 +91,6 @@ async function buscarEmissoes() {
     await clearDestinoBtn.click({ force: true });
   }
 
-  // 5. Preenche o LIS
   await inputDestino.pressSequentially(destino, { delay: 150 });
   await page.waitForTimeout(2000);
 
@@ -112,7 +104,6 @@ async function buscarEmissoes() {
   console.log("Configurando Cabine e Programa...");
 
   // 4.1. Filtro de Cabine
-  // Localizamos o combobox da cabine usando o ícone da poltrona para ser à prova de falhas
   const cabineDropdown = page.locator('div[role="combobox"]').filter({
     has: page.locator('[data-testid="FlightClassOutlinedIcon"]'),
   });
@@ -121,20 +112,16 @@ async function buscarEmissoes() {
 
   const cabineText = cabine === "1" ? "Business" : "Economy";
 
-  // getByRole com exact: true garante que o Playwright clique apenas na opção idêntica ao texto
   await page.getByRole("option", { name: cabineText, exact: true }).click();
   await page.waitForTimeout(500);
 
   // 4.2. Filtro de Programa (TAP)
-  // Localiza o botão de Programas usando o ícone do cartão
   const programasBtn = page.locator("button").filter({
     has: page.locator('[data-testid="CardMembershipIcon"]'),
   });
   await programasBtn.click();
-  await page.waitForTimeout(1000); // Espera a lista de programas renderizar
+  await page.waitForTimeout(1000);
 
-  // Com base no seu print, cada programa é uma div "flex justify-between"
-  // Vamos achar a que contém a TAP e clicar no botão "Only" dentro dela
   const tapRow = page
     .locator("div.flex.justify-between")
     .filter({ hasText: "TAP" });
@@ -143,63 +130,120 @@ async function buscarEmissoes() {
   await tapOnlyBtn.click();
   await page.waitForTimeout(500);
 
-  // O Material-UI pode deixar o menu de programas aberto após clicar no "Only".
-  // Um Escape garante que ele saia da frente para podermos clicar em Search.
   await page.keyboard.press("Escape");
   await page.waitForTimeout(500);
 
   console.log("Filtros aplicados com sucesso!");
 
-  // --- 5. SELEÇÃO DO PERÍODO DE DATAS ---
-  console.log("Configurando o calendário para 36 dias...");
+  // --- 5. SELEÇÃO DO PERÍODO DE DATAS (36 DIAS) ---
+  const DIAS_BUSCA = 36;
+  console.log(`Configurando o calendário para ${DIAS_BUSCA} dias...`);
 
-  // 5.1. Abre o calendário
   const dateInput = page.locator('input[placeholder="Departure Date Range"]');
-  await dateInput.click();
-  await page.waitForTimeout(1000); // Espera a animação do calendário renderizar
 
-  // 5.2. Acha o "hoje" e captura o timestamp do frontend
+  async function clicarDiaNoCalendario(timestamp: string) {
+    const dayBtn = page.locator(`button[data-timestamp="${timestamp}"]`);
+    const nextMonthBtn = page.locator(
+      'button[aria-label="Next month"], button[title="Next month"]',
+    );
+
+    for (let tentativa = 0; tentativa < 6; tentativa++) {
+      if (await dayBtn.isVisible()) {
+        await dayBtn.click({ force: true });
+        return;
+      }
+      await nextMonthBtn.click({ force: true });
+      await page.waitForTimeout(300);
+    }
+
+    throw new Error(
+      `Não foi possível encontrar o dia com timestamp ${timestamp} no calendário.`,
+    );
+  }
+
+  await dateInput.click({ force: true });
+  await page.waitForTimeout(1000);
+
   const todayBtn = page.locator("button.MuiPickersDay-today");
   const todayTimestamp = await todayBtn.getAttribute("data-timestamp");
 
-  if (!todayTimestamp)
+  if (!todayTimestamp) {
     throw new Error("Não foi possível encontrar a data de hoje no calendário.");
+  }
 
-  // 5.3. Calcula matematicamente o timestamp do final do range
-  const dataInicio = new Date(parseInt(todayTimestamp));
+  const dataInicio = new Date(parseInt(todayTimestamp, 10));
   const dataFim = new Date(dataInicio);
-  dataFim.setDate(dataInicio.getDate() + 35); // +35 dias para dar o intervalo de 36
+  dataFim.setDate(dataInicio.getDate() + DIAS_BUSCA - 1);
+
+  const startTimestamp = dataInicio.getTime().toString();
   const endTimestamp = dataFim.getTime().toString();
 
-  // 5.4. Clica na data de Início (Hoje)
-  await page.locator(`button[data-timestamp="${todayTimestamp}"]`).click();
+  // Clica na primeira data
+  await clicarDiaNoCalendario(startTimestamp);
   await page.waitForTimeout(500);
 
-  // 5.5. Clica na data de Fim
-  const endBtn = page.locator(`button[data-timestamp="${endTimestamp}"]`);
-
-  // Verifica se o botão do mês seguinte está visível.
-  // (Caso os 36 dias caiam fora dos 2 meses visíveis, adicionaremos a lógica da seta depois)
-  await endBtn.click({ force: true });
+  // Clica na segunda data
+  await clicarDiaNoCalendario(endTimestamp);
   await page.waitForTimeout(500);
 
+  // Força o fechamento do modal do calendário apertando ESC para não bloquear o botão Search
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(500);
+
+  const rangeSelecionado = await dateInput.inputValue();
   console.log(
-    `Calendário configurado: ${dataInicio.toLocaleDateString()} a ${dataFim.toLocaleDateString()}`,
+    `Calendário configurado: ${dataInicio.toLocaleDateString()} a ${dataFim.toLocaleDateString()} (${rangeSelecionado})`,
   );
 
   // --- 6. EXECUTAR A BUSCA ---
-  console.log("Iniciando a pesquisa...");
+  console.log("Clicando no botão Search principal...");
 
-  // Localiza o botão que contém especificamente o ícone de busca do MUI
-  const searchBtn = page.locator("button").filter({
-    has: page.locator('[data-testid="SearchIcon"]'),
+  // getByRole com exact: true ignora os botões "Real-time Search" ou "Search History"
+  // e pega EXATAMENTE o botão que se chama apenas "Search"
+  const searchBtn = page
+    .getByRole("button", { name: "Search", exact: true })
+    .first();
+
+  // Garante que o botão está de fato atachado na página antes de tentar clicar
+  await searchBtn.waitFor({ state: "attached" });
+
+  console.log("Forçando a execução do clique via DOM...");
+  // Ignora o ripple effect e clica direto na raiz do elemento
+  await searchBtn.evaluate((node) => {
+    (node as HTMLElement).click();
   });
 
-  await searchBtn.click();
-  console.log("Botão Search clicado com sucesso!");
+  console.log("Pesquisa iniciada com sucesso!");
 
-  // --- 7. AGUARDAR CONCLUSÃO DA PESQUISA PARCELADA ---
-  console.log("Aguardando o processamento dos voos...");
+  // --- 7. AGUARDAR PESQUISA PARCELADA (TEMPO FIXO) ---
+  console.log(
+    "Aguardando a plataforma processar os voos (tempo fixo de 35 segundos)...",
+  );
+
+  // Pausa absoluta de 35 segundos (evita que o script quebre tentando adivinhar as requisições de API)
+  await page.waitForTimeout(35000);
+  console.log("Busca finalizada!");
+
+  // --- 8. ABRIR O MODAL DE DATAS ---
+  console.log("Procurando o filtro de 'Date' nos resultados...");
+
+  const dateFilterBtn = page
+    .locator("button")
+    .filter({ has: page.locator('[data-testid="DateRangeIcon"]') })
+    .filter({ visible: true });
+
+  await dateFilterBtn.first().waitFor({ state: "visible", timeout: 30000 });
+
+  const botaoAlvo = dateFilterBtn.first();
+
+  console.log("Forçando a abertura do modal via DOM...");
+  // Força o clique nativo via JavaScript para ignorar qualquer overlay residual do Material-UI
+  await botaoAlvo.evaluate((node) => {
+    (node as HTMLElement).click();
+  });
+
+  await page.waitForTimeout(2000);
+  console.log("Modal de datas aberto com sucesso!");
 }
 
 buscarEmissoes();
