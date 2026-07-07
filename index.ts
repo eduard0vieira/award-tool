@@ -149,6 +149,57 @@ async function buscarEmissoes() {
   await page.waitForTimeout(500);
 
   console.log("Filtros aplicados com sucesso!");
+
+  // --- 5. SELEÇÃO DO PERÍODO DE DATAS ---
+  console.log("Configurando o calendário para 36 dias...");
+
+  // 5.1. Abre o calendário
+  const dateInput = page.locator('input[placeholder="Departure Date Range"]');
+  await dateInput.click();
+  await page.waitForTimeout(1000); // Espera a animação do calendário renderizar
+
+  // 5.2. Acha o "hoje" e captura o timestamp do frontend
+  const todayBtn = page.locator("button.MuiPickersDay-today");
+  const todayTimestamp = await todayBtn.getAttribute("data-timestamp");
+
+  if (!todayTimestamp)
+    throw new Error("Não foi possível encontrar a data de hoje no calendário.");
+
+  // 5.3. Calcula matematicamente o timestamp do final do range
+  const dataInicio = new Date(parseInt(todayTimestamp));
+  const dataFim = new Date(dataInicio);
+  dataFim.setDate(dataInicio.getDate() + 35); // +35 dias para dar o intervalo de 36
+  const endTimestamp = dataFim.getTime().toString();
+
+  // 5.4. Clica na data de Início (Hoje)
+  await page.locator(`button[data-timestamp="${todayTimestamp}"]`).click();
+  await page.waitForTimeout(500);
+
+  // 5.5. Clica na data de Fim
+  const endBtn = page.locator(`button[data-timestamp="${endTimestamp}"]`);
+
+  // Verifica se o botão do mês seguinte está visível.
+  // (Caso os 36 dias caiam fora dos 2 meses visíveis, adicionaremos a lógica da seta depois)
+  await endBtn.click({ force: true });
+  await page.waitForTimeout(500);
+
+  console.log(
+    `Calendário configurado: ${dataInicio.toLocaleDateString()} a ${dataFim.toLocaleDateString()}`,
+  );
+
+  // --- 6. EXECUTAR A BUSCA ---
+  console.log("Iniciando a pesquisa...");
+
+  // Localiza o botão que contém especificamente o ícone de busca do MUI
+  const searchBtn = page.locator("button").filter({
+    has: page.locator('[data-testid="SearchIcon"]'),
+  });
+
+  await searchBtn.click();
+  console.log("Botão Search clicado com sucesso!");
+
+  // --- 7. AGUARDAR CONCLUSÃO DA PESQUISA PARCELADA ---
+  console.log("Aguardando o processamento dos voos...");
 }
 
 buscarEmissoes();
