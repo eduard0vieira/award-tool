@@ -107,6 +107,48 @@ async function buscarEmissoes() {
   await page.keyboard.press("Escape");
 
   console.log("Trechos preenchidos com sucesso!");
+
+  // --- 4. FILTROS DE CABINE E PROGRAMA ---
+  console.log("Configurando Cabine e Programa...");
+
+  // 4.1. Filtro de Cabine
+  // Localizamos o combobox da cabine usando o ícone da poltrona para ser à prova de falhas
+  const cabineDropdown = page.locator('div[role="combobox"]').filter({
+    has: page.locator('[data-testid="FlightClassOutlinedIcon"]'),
+  });
+  await cabineDropdown.click();
+  await page.waitForTimeout(500);
+
+  const cabineText = cabine === "1" ? "Business" : "Economy";
+
+  // getByRole com exact: true garante que o Playwright clique apenas na opção idêntica ao texto
+  await page.getByRole("option", { name: cabineText, exact: true }).click();
+  await page.waitForTimeout(500);
+
+  // 4.2. Filtro de Programa (TAP)
+  // Localiza o botão de Programas usando o ícone do cartão
+  const programasBtn = page.locator("button").filter({
+    has: page.locator('[data-testid="CardMembershipIcon"]'),
+  });
+  await programasBtn.click();
+  await page.waitForTimeout(1000); // Espera a lista de programas renderizar
+
+  // Com base no seu print, cada programa é uma div "flex justify-between"
+  // Vamos achar a que contém a TAP e clicar no botão "Only" dentro dela
+  const tapRow = page
+    .locator("div.flex.justify-between")
+    .filter({ hasText: "TAP" });
+  const tapOnlyBtn = tapRow.locator("button");
+
+  await tapOnlyBtn.click();
+  await page.waitForTimeout(500);
+
+  // O Material-UI pode deixar o menu de programas aberto após clicar no "Only".
+  // Um Escape garante que ele saia da frente para podermos clicar em Search.
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(500);
+
+  console.log("Filtros aplicados com sucesso!");
 }
 
 buscarEmissoes();
