@@ -1,62 +1,56 @@
-import dotenv from "dotenv";
 import { chromium } from "playwright";
-dotenv.config();
+import { stdin as input, stdout as output } from "process";
+import * as readline from "readline/promises";
 
 async function buscarEmissoes() {
+  const rl = readline.createInterface({ input, output });
+
+  console.log("✈️  Bot de Emissões TAP Iniciado!\n");
+  const origem = await rl.question("🛫 Digite a origem:");
+  const destino = await rl.question("🛬 Digite o destino:");
+  const cabine = await rl.question(
+    "💺 Cabine (1 para Executiva, 2 para Todas): ",
+  );
+
+  rl.close();
+
+  console.log(
+    `\nBuscando ${origem.toUpperCase()} -> ${destino.toUpperCase()}...`,
+  );
+
   const browser = await chromium.launch({ headless: false });
   const context = await browser.newContext();
   const page = await context.newPage();
 
-  const loginUrl = process.env.LOGIN_URL;
-  const emailAccount = process.env.EMAIL_ACCOUNT;
-  const passwordAccount = process.env.PASSWORD_ACCOUNT;
-
-  if (!loginUrl || !emailAccount || !passwordAccount) {
-    throw new Error("URL de login, email ou senha não encontrados");
-  }
+  const loginUrl = "https://www.awardtool.com/password";
+  const emailAccount = "contato@vamoscomclasse.com";
+  const passwordAccount = "Vcc$2026";
 
   console.log("Acessando a página de login...");
   await page.goto(loginUrl);
 
   await page.locator('input[name="username"]').fill(emailAccount);
-
-  // 2. Preenche a Senha (no Amplify, o padrão para o field de senha é name="password")
   await page.locator('input[name="password"]').fill(passwordAccount);
-
-  // 3. Clica no botão "Sign in"
   await page.locator('button[type="submit"]').click();
 
-  console.log("Aguardando autenticação...");
-
-  // 4. Precisamos esperar o login ser processado antes de tentar buscar os voos.
-  // A melhor forma é esperar a página mudar para a URL interna ou a rede acalmar.
   await page.waitForLoadState("networkidle");
-
   console.log("Login concluído!");
 
-  // Clica para abrir o modal de datas
-  await page.click("SELETOR_DO_BOTAO_DATE");
+  // --- 3. INTERAÇÃO COM O FORMULÁRIO DE BUSCA ---
+  // (Precisaremos dos seletores exatos para preencher isso aqui)
 
-  // Espera as linhas das datas renderizarem no DOM
-  // Precisamos substituir '.row-date-class' pela classe real da div
-  await page.waitForSelector(".row-date-class", { state: "visible" });
+  // Exemplo mental do fluxo:
+  // await page.locator('SELETOR_CABINE').click();
+  // await page.locator(cabine === '1' ? 'SELETOR_BUSINESS' : 'SELETOR_ALL_CABINS').click();
 
-  // Extrai os dados lendo o HTML descriptografado
-  const resultados = await page.$$eval(".row-date-class", (linhas) => {
-    return linhas
-      .map((linha) => {
-        // Ajustar as classes abaixo conforme o HTML real do site
-        const data = linha.querySelector(".date-text")?.textContent?.trim();
-        const pontos = linha.querySelector(".points-text")?.textContent?.trim();
+  // await page.locator('SELETOR_PROGRAMAS').click();
+  // await page.locator('SELETOR_TAP').click();
 
-        return { data, pontos };
-      })
-      .filter((item) => item.pontos); // Filtro básico de segurança
-  });
+  // await page.locator('SELETOR_ORIGEM').fill(origem);
+  // await page.locator('SELETOR_DESTINO').fill(destino);
+  // await page.locator('SELETOR_BOTAO_SEARCH').click();
 
-  console.log("Emissões encontradas:", resultados);
-
-  await browser.close();
+  // ... (Restante do fluxo do Modal)
 }
 
 buscarEmissoes();
