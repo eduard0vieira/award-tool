@@ -9,7 +9,7 @@ async function buscarEmissoes() {
   const origem = await rl.question("🛫 Digite a origem:");
   const destino = await rl.question("🛬 Digite o destino:");
   const cabine = await rl.question(
-    "💺 Cabine (1 para Executiva, 2 para Todas): ",
+    "💺 Cabine (1 para Executiva, 2 para Econômica): ",
   );
 
   rl.close();
@@ -36,21 +36,77 @@ async function buscarEmissoes() {
   await page.waitForLoadState("networkidle");
   console.log("Login concluído!");
 
-  // --- 3. INTERAÇÃO COM O FORMULÁRIO DE BUSCA ---
-  // (Precisaremos dos seletores exatos para preencher isso aqui)
+  // --- 3. PREENCHIMENTO DE ORIGEM E DESTINO ---
+  console.log("Aguardando a interface de busca renderizar...");
+  await page.waitForSelector(".MuiAutocomplete-root", {
+    state: "visible",
+    timeout: 15000,
+  });
+  await page.waitForTimeout(2000);
 
-  // Exemplo mental do fluxo:
-  // await page.locator('SELETOR_CABINE').click();
-  // await page.locator(cabine === '1' ? 'SELETOR_BUSINESS' : 'SELETOR_ALL_CABINS').click();
+  console.log("Preenchendo os trechos...");
+  const autocompletes = page
+    .locator(".MuiAutocomplete-root")
+    .filter({ visible: true });
 
-  // await page.locator('SELETOR_PROGRAMAS').click();
-  // await page.locator('SELETOR_TAP').click();
+  // 3.1 Tratando a ORIGEM
+  const origemContainer = autocompletes.nth(0);
+  const inputOrigem = origemContainer.locator("input");
 
-  // await page.locator('SELETOR_ORIGEM').fill(origem);
-  // await page.locator('SELETOR_DESTINO').fill(destino);
-  // await page.locator('SELETOR_BOTAO_SEARCH').click();
+  // 1. Clica no input para garantir o foco
+  await inputOrigem.click({ force: true });
+  await page.waitForTimeout(500);
 
-  // ... (Restante do fluxo do Modal)
+  // 2. Apaga o valor pré-existente (ex: GRU)
+  const clearOrigemBtn = origemContainer.locator(
+    'button[aria-label="Clear"], button[title="Clear"]',
+  );
+  if (await clearOrigemBtn.isVisible()) {
+    await clearOrigemBtn.click({ force: true });
+  } else {
+    // Fallback marreta: Backspace para apagar o "chip" caso o botão de limpar esteja escondido
+    await page.keyboard.press("Backspace");
+    await page.keyboard.press("Backspace");
+  }
+
+  // 3. Faz o fluxo de preenchimento
+  await inputOrigem.pressSequentially(origem, { delay: 150 });
+  await page.waitForTimeout(2000); // Espera a lista carregar
+
+  await page.keyboard.press("ArrowDown"); // Vai para a primeira opção
+  await page.keyboard.press("Enter"); // Marca o checkbox
+  await page.keyboard.press("Escape"); // Fecha o dropdown multi-select
+  await page.waitForTimeout(500);
+
+  // 3.2 Tratando o DESTINO
+  // 4. Dá o Tab para pular para o "Where to?"
+  await page.keyboard.press("Tab");
+  await page.waitForTimeout(500);
+
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(500);
+
+  // Se o cursor não foi para o lugar certo com o Tab, garantimos o foco manual
+  const inputDestino = autocompletes.nth(1).locator("input");
+  await inputDestino.click({ force: true });
+
+  // Limpa o destino se tiver algo
+  const clearDestinoBtn = autocompletes
+    .nth(1)
+    .locator('button[aria-label="Clear"], button[title="Clear"]');
+  if (await clearDestinoBtn.isVisible()) {
+    await clearDestinoBtn.click({ force: true });
+  }
+
+  // 5. Preenche o LIS
+  await inputDestino.pressSequentially(destino, { delay: 150 });
+  await page.waitForTimeout(2000);
+
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("Escape");
+
+  console.log("Trechos preenchidos com sucesso!");
 }
 
 buscarEmissoes();
