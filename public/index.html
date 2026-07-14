@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <title>Bot de Emissões TAP</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <main>
+    <h1>✈️ Bot de Emissões TAP</h1>
+
+    <form id="form-busca">
+      <div class="campo">
+        <label for="origem">Origem</label>
+        <input id="origem" name="origem" placeholder="GRU" maxlength="3" required autocomplete="off" />
+      </div>
+      <div class="campo">
+        <label for="destino">Destino</label>
+        <input id="destino" name="destino" placeholder="LIS" maxlength="3" required autocomplete="off" />
+      </div>
+      <div class="campo">
+        <label for="cabine">Cabine</label>
+        <select id="cabine" name="cabine">
+          <option value="1">Executiva</option>
+          <option value="2">Econômica</option>
+        </select>
+      </div>
+      <button type="submit" id="btn-buscar">Buscar</button>
+    </form>
+
+    <p id="aviso" class="aviso" hidden></p>
+
+    <section id="progresso" hidden>
+      <h2>Progresso</h2>
+      <pre id="log"></pre>
+    </section>
+
+    <section id="resultado" hidden>
+      <h2>Resultado</h2>
+      <div class="colunas">
+        <div class="coluna">
+          <h3>Executivas</h3>
+          <pre id="saida-executivas"></pre>
+        </div>
+        <div class="coluna">
+          <h3>Econômicas</h3>
+          <pre id="saida-economicas"></pre>
+        </div>
+      </div>
+      <button type="button" id="btn-volta"></button>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>
