@@ -5,7 +5,16 @@ import {
   construirRelatorio,
   iniciarSessao,
   pesquisarAnoCompleto,
+  type SecaoRelatorio,
 } from "./bot.ts";
+
+function formatarSecaoParaTexto(nome: string, secao: SecaoRelatorio): string {
+  if (secao.dias.length === 0) {
+    return `${nome}:\n${secao.texto}`;
+  }
+  const resumo = `Menor valor: ${secao.menor}K | Maior valor: ${secao.maior}K | Dias com disponibilidade: ${secao.dias.length}`;
+  return `${nome}:\n${resumo}\n${secao.texto}`;
+}
 
 async function perguntarComPadrao(
   rl: readline.Interface,
@@ -52,9 +61,9 @@ async function buscarEmissoes() {
     const relatorio = construirRelatorio(todasAsDatas);
 
     console.log("\n--- RESULTADO ---\n");
-    console.log(relatorio.executivas);
+    console.log(formatarSecaoParaTexto("Executivas", relatorio.executivas));
     console.log("");
-    console.log(relatorio.economicas);
+    console.log(formatarSecaoParaTexto("Economicas", relatorio.economicas));
 
     const querOutroTrecho = await perguntarSimNao(
       rl,

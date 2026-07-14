@@ -17,12 +17,25 @@ export type ParametrosBusca = {
   cabine: string; // "1" = Executiva, "2" = Econômica
 };
 
+export type DiaFormatado = {
+  data: string; // YYYY-MM-DD
+  valorK: number;
+};
+
+export type SecaoRelatorio = {
+  menor: number | null;
+  maior: number | null;
+  dias: DiaFormatado[]; // ordenados cronologicamente
+  texto: string; // "Mmm YYYY: DD, DD, ..." (pra copiar)
+};
+
 export type Relatorio = {
-  executivas: string;
-  economicas: string;
+  executivas: SecaoRelatorio;
+  economicas: SecaoRelatorio;
 };
 
 export type OnLog = (mensagem: string) => void;
+export type OnProgresso = (fracao: number) => void;
 
 // Cada linha do popover "Date" tem um parágrafo "YYYY-MM-DD (achados/total)"
 // seguido de 4 valores de preço, um por cabine, identificados pela cor da
@@ -99,6 +112,12 @@ async function pesquisarJanela(
     dataFim: Date;
   },
   onLog: OnLog,
+  // fracaoBase..fracaoBase+fracaoPasso é a fatia do progresso total (0..1)
+  // que esta janela ocupa. Usado só para animar a barra suavemente durante a
+  // espera dos ~35s, em vez de pular só quando a janela inteira termina.
+  onProgresso: OnProgresso,
+  fracaoBase: number,
+  fracaoPasso: number,
 ): Promise<DiaDisponibilidade[]> {
   const { baseUrl, origem, destino, cabineParam, dataInicio, dataFim } = opts;
 
@@ -122,6 +141,7 @@ async function pesquisarJanela(
   onLog(
     `Buscando de ${dataInicio.toLocaleDateString()} a ${dataFim.toLocaleDateString()}...`,
   );
+  onProgresso(fracaoBase);
   await page.goto(resultsUrl);
   await page.waitForLoadState("domcontentloaded");
 
@@ -129,9 +149,15 @@ async function pesquisarJanela(
   // termina de verdade. Isso demora pelo menos ~35s, e o aviso de "carregando"
   // às vezes some antes da tabela terminar de fato de preencher todos os
   // preços. Por isso esperamos os dois: um tempo mínimo fixo de 35s E o aviso
-  // de carregando desaparecer — o que demorar mais.
+  // de carregando desaparecer — o que demorar mais. Enquanto espera, avisa o
+  // progresso periodicamente pra a barra andar suave em vez de travar.
   const ESPERA_MINIMA_MS = 35000;
   const inicioEspera = Date.now();
+  const tickProgresso = setInterval(() => {
+    const decorrido = Date.now() - inicioEspera;
+    const fracaoDaEspera = Math.min(decorrido / ESPERA_MINIMA_MS, 1);
+    onProgresso(fracaoBase + fracaoPasso * fracaoDaEspera * 0.9);
+  }, 1000);
   try {
     await page
       .getByText(
@@ -141,6 +167,8 @@ async function pesquisarJanela(
       .waitFor({ state: "hidden", timeout: 60000 });
   } catch {
     // segue mesmo assim: o tempo mínimo abaixo ainda vale como rede de segurança
+  } finally {
+    clearInterval(tickProgresso);
   }
   const tempoRestante = ESPERA_MINIMA_MS - (Date.now() - inicioEspera);
   if (tempoRestante > 0) {
@@ -175,6 +203,7 @@ async function pesquisarJanela(
   }
 
   onLog(`Foram encontradas ${dias.length} datas nessa janela.`);
+  onProgresso(fracaoBase + fracaoPasso);
   return dias;
 }
 
@@ -219,24 +248,26 @@ function construirSecao(
   nome: string,
   campo: "economy" | "business",
   aceita: (valorK: number) => boolean,
-): string {
+): SecaoRelatorio {
   const disponiveis = todasAsDatas.filter((d) => {
     const v = parseValorK(d[campo]);
     return v !== null && aceita(v);
   });
 
   if (disponiveis.length === 0) {
-    return `${nome}:\nNenhuma disponibilidade encontrada nesse período.`;
+    return { menor: null, maior: null, dias: [], texto: "Nenhuma disponibilidade encontrada nesse período." };
   }
 
-  const valores = disponiveis.map((d) => parseValorK(d[campo])!);
+  const dias: DiaFormatado[] = disponiveis
+    .map((d) => ({ data: d.date, valorK: parseValorK(d[campo])! }))
+    .sort((a, b) => a.data.localeCompare(b.data));
+
+  const valores = dias.map((d) => d.valorK);
   const menor = Math.min(...valores);
   const maior = Math.max(...valores);
-  const datasOrdenadas = disponiveis.map((d) => d.date).sort();
-  const resumo = `Menor valor: ${menor}K | Maior valor: ${maior}K | Dias com disponibilidade: ${disponiveis.length}`;
-  const corpo = formatarListaPorMes(datasOrdenadas);
+  const texto = formatarListaPorMes(dias.map((d) => d.data));
 
-  return `${nome}:\n${resumo}\n${corpo}`;
+  return { menor, maior, dias, texto };
 }
 
 export function construirRelatorio(todasAsDatas: DiaDisponibilidade[]): Relatorio {
@@ -271,6 +302,7 @@ export async function pesquisarAnoCompleto(
     cabineParam: string;
   },
   onLog: OnLog = () => {},
+  onProgresso: OnProgresso = () => {},
 ): Promise<DiaDisponibilidade[]> {
   const { baseUrl, origem, destino, cabineParam } = opts;
 
@@ -309,6 +341,9 @@ export async function pesquisarAnoCompleto(
       page,
       { baseUrl, origem, destino, cabineParam, dataInicio: janelaInicio, dataFim: janelaFim },
       onLog,
+      onProgresso,
+      (numeroJanela - 1) / totalJanelas,
+      1 / totalJanelas,
     );
     todasAsDatas.push(...diasDaJanela);
 
@@ -317,6 +352,7 @@ export async function pesquisarAnoCompleto(
     numeroJanela++;
   }
 
+  onProgresso(1);
   onLog(`Busca do ano completa! Total de ${todasAsDatas.length} datas capturadas.`);
   return todasAsDatas;
 }

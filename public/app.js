@@ -3,13 +3,15 @@ const btnBuscar = document.getElementById("btn-buscar");
 const inputOrigem = document.getElementById("origem");
 const inputDestino = document.getElementById("destino");
 const selectCabine = document.getElementById("cabine");
+const checkboxIdaVolta = document.getElementById("ida-volta");
 const aviso = document.getElementById("aviso");
 const progresso = document.getElementById("progresso");
-const logEl = document.getElementById("log");
+const progressoLabel = document.getElementById("progresso-label");
+const barraPreenchida = document.getElementById("barra-preenchida");
 const resultado = document.getElementById("resultado");
-const saidaExecutivas = document.getElementById("saida-executivas");
-const saidaEconomicas = document.getElementById("saida-economicas");
-const btnVolta = document.getElementById("btn-volta");
+const tplPerna = document.getElementById("tpl-perna");
+
+const MESES_PT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
 function mostrarAviso(mensagem) {
   aviso.textContent = mensagem;
@@ -21,77 +23,154 @@ function limparAviso() {
   aviso.textContent = "";
 }
 
-function adicionarLog(mensagem) {
-  logEl.textContent += mensagem + "\n";
-  logEl.scrollTop = logEl.scrollHeight;
-}
-
 function definirCarregando(carregando) {
   btnBuscar.disabled = carregando;
   inputOrigem.disabled = carregando;
   inputDestino.disabled = carregando;
   selectCabine.disabled = carregando;
+  checkboxIdaVolta.disabled = carregando;
 }
 
-async function iniciarBusca(origem, destino, cabine) {
+function atualizarBarra(fracao) {
+  barraPreenchida.style.width = `${Math.min(Math.round(fracao * 100), 100)}%`;
+}
+
+// Roda uma busca (uma perna) via SSE e resolve com o relatório final.
+function buscarPerna(origem, destino, cabine, rotuloProgresso) {
+  return new Promise(async (resolve, reject) => {
+    progressoLabel.textContent = rotuloProgresso;
+    atualizarBarra(0);
+
+    let resposta;
+    try {
+      resposta = await fetch("/api/buscar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ origem, destino, cabine }),
+      });
+    } catch {
+      reject(new Error("Não foi possível conectar ao servidor."));
+      return;
+    }
+
+    if (!resposta.ok) {
+      const corpo = await resposta.json().catch(() => ({}));
+      reject(new Error(corpo.erro || "Erro ao iniciar a busca."));
+      return;
+    }
+
+    const { jobId } = await resposta.json();
+    const fonte = new EventSource(`/api/buscar/${jobId}/eventos`);
+
+    fonte.onmessage = (evento) => {
+      const dado = JSON.parse(evento.data);
+      if (dado.tipo === "progresso") {
+        atualizarBarra(dado.fracao);
+      } else if (dado.tipo === "done") {
+        fonte.close();
+        resolve(dado.relatorio);
+      } else if (dado.tipo === "erro") {
+        fonte.close();
+        reject(new Error(dado.mensagem));
+      }
+    };
+
+    fonte.onerror = () => {
+      fonte.close();
+      reject(new Error("Conexão com o servidor perdida."));
+    };
+  });
+}
+
+function formatarPorMes(dias) {
+  const grupos = new Map();
+  for (const { data } of dias) {
+    const [ano, mes, dia] = data.split("-");
+    const chave = `${ano}-${mes}`;
+    if (!grupos.has(chave)) grupos.set(chave, []);
+    grupos.get(chave).push(dia);
+  }
+  return Array.from(grupos.keys())
+    .sort()
+    .map((chave) => {
+      const [ano, mesNum] = chave.split("-");
+      return { titulo: `${MESES_PT[parseInt(mesNum, 10) - 1]} ${ano}`, dias: grupos.get(chave) };
+    });
+}
+
+function renderizarColuna(colunaEl, secao, corClasse) {
+  const resumoEl = colunaEl.querySelector(".coluna-resumo");
+  const cartoesEl = colunaEl.querySelector(".cartoes");
+  const btnCopiar = colunaEl.querySelector(".btn-copiar");
+
+  if (!secao.dias || secao.dias.length === 0) {
+    resumoEl.textContent = "Sem disponibilidade nesse período.";
+    btnCopiar.hidden = true;
+    return;
+  }
+
+  resumoEl.textContent = `${secao.menor}K–${secao.maior}K · ${secao.dias.length} dia(s)`;
+
+  const grupos = formatarPorMes(secao.dias);
+  cartoesEl.innerHTML = "";
+  for (const grupo of grupos) {
+    const tituloMes = document.createElement("div");
+    tituloMes.className = "mes-titulo";
+    tituloMes.textContent = grupo.titulo;
+    cartoesEl.appendChild(tituloMes);
+
+    const linha = document.createElement("div");
+    linha.className = "linha-cartoes";
+    for (const dia of grupo.dias) {
+      const cartao = document.createElement("span");
+      cartao.className = `cartao ${corClasse}`;
+      cartao.textContent = dia;
+      linha.appendChild(cartao);
+    }
+    cartoesEl.appendChild(linha);
+  }
+
+  btnCopiar.hidden = false;
+  btnCopiar.onclick = () => {
+    navigator.clipboard.writeText(secao.texto);
+    btnCopiar.textContent = "Copiado!";
+    setTimeout(() => (btnCopiar.textContent = "Copiar"), 1500);
+  };
+}
+
+function renderizarPerna(rotulo, relatorio) {
+  const fragmento = tplPerna.content.cloneNode(true);
+  const raiz = fragmento.querySelector(".perna");
+  raiz.querySelector(".perna-titulo").textContent = rotulo;
+  renderizarColuna(raiz.querySelector(".coluna-executiva"), relatorio.executivas, "cartao-executiva");
+  renderizarColuna(raiz.querySelector(".coluna-economica"), relatorio.economicas, "cartao-economica");
+  resultado.appendChild(raiz);
+}
+
+async function iniciarBusca(origem, destino, cabine, idaEVolta) {
   limparAviso();
   definirCarregando(true);
   resultado.hidden = true;
+  resultado.innerHTML = "";
   progresso.hidden = false;
-  logEl.textContent = "";
 
-  let resposta;
   try {
-    resposta = await fetch("/api/buscar", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ origem, destino, cabine }),
-    });
-  } catch (err) {
-    mostrarAviso("Não foi possível conectar ao servidor.");
-    definirCarregando(false);
-    return;
-  }
+    const rotuloIda = idaEVolta ? "Buscando ida..." : "Buscando...";
+    const relatorioIda = await buscarPerna(origem, destino, cabine, rotuloIda);
+    renderizarPerna(idaEVolta ? `Ida: ${origem} → ${destino}` : `${origem} → ${destino}`, relatorioIda);
 
-  if (!resposta.ok) {
-    const corpo = await resposta.json().catch(() => ({}));
-    mostrarAviso(corpo.erro || "Erro ao iniciar a busca.");
-    definirCarregando(false);
-    return;
-  }
-
-  const { jobId } = await resposta.json();
-  const fonte = new EventSource(`/api/buscar/${jobId}/eventos`);
-
-  fonte.onmessage = (evento) => {
-    const dado = JSON.parse(evento.data);
-
-    if (dado.tipo === "log") {
-      adicionarLog(dado.mensagem);
-    } else if (dado.tipo === "done") {
-      adicionarLog("Busca concluída!");
-      saidaExecutivas.textContent = dado.relatorio.executivas;
-      saidaEconomicas.textContent = dado.relatorio.economicas;
-      resultado.hidden = false;
-      btnVolta.textContent = `Buscar a volta (${destino} → ${origem})`;
-      btnVolta.onclick = () => {
-        inputOrigem.value = destino;
-        inputDestino.value = origem;
-        iniciarBusca(destino, origem, selectCabine.value);
-      };
-      definirCarregando(false);
-      fonte.close();
-    } else if (dado.tipo === "erro") {
-      mostrarAviso(dado.mensagem);
-      definirCarregando(false);
-      fonte.close();
+    if (idaEVolta) {
+      const relatorioVolta = await buscarPerna(destino, origem, cabine, "Buscando volta...");
+      renderizarPerna(`Volta: ${destino} → ${origem}`, relatorioVolta);
     }
-  };
 
-  fonte.onerror = () => {
-    fonte.close();
+    resultado.hidden = false;
+  } catch (err) {
+    mostrarAviso(err.message || "Erro inesperado.");
+  } finally {
+    progresso.hidden = true;
     definirCarregando(false);
-  };
+  }
 }
 
 form.addEventListener("submit", (evento) => {
@@ -103,5 +182,5 @@ form.addEventListener("submit", (evento) => {
     mostrarAviso("Preencha origem e destino.");
     return;
   }
-  iniciarBusca(origem, destino, cabine);
+  iniciarBusca(origem, destino, cabine, checkboxIdaVolta.checked);
 });

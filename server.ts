@@ -15,7 +15,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 type Job = {
   status: "running" | "done" | "erro";
-  logs: string[];
+  progresso: number; // 0..1
   relatorio?: Relatorio;
   erro?: string;
   ouvintes: Set<Response>;
@@ -42,11 +42,11 @@ function emitirEvento(jobId: string, dado: object) {
   }
 }
 
-function log(jobId: string, mensagem: string) {
+function atualizarProgresso(jobId: string, fracao: number) {
   const job = jobs.get(jobId);
   if (!job) return;
-  job.logs.push(mensagem);
-  emitirEvento(jobId, { tipo: "log", mensagem });
+  job.progresso = fracao;
+  emitirEvento(jobId, { tipo: "progresso", fracao });
 }
 
 async function executarJob(
@@ -56,13 +56,13 @@ async function executarJob(
   const job = jobs.get(jobId)!;
   try {
     const { page, baseUrl } = await getSessao();
-    log(jobId, "Login concluído. Iniciando busca...");
 
     const cabineParam = cabineParamDe(params.cabine);
     const todasAsDatas = await pesquisarAnoCompleto(
       page,
       { baseUrl, origem: params.origem, destino: params.destino, cabineParam },
-      (msg) => log(jobId, msg),
+      (msg) => console.log(`[${jobId}] ${msg}`), // só no terminal do servidor, não vai pro front
+      (fracao) => atualizarProgresso(jobId, fracao),
     );
 
     const relatorio = construirRelatorio(todasAsDatas);
@@ -98,7 +98,7 @@ app.post("/api/buscar", (req: Request, res: Response) => {
 
   buscaEmAndamento = true;
   const jobId = randomUUID();
-  jobs.set(jobId, { status: "running", logs: [], ouvintes: new Set() });
+  jobs.set(jobId, { status: "running", progresso: 0, ouvintes: new Set() });
 
   executarJob(jobId, {
     origem: String(origem).toUpperCase(),
@@ -123,10 +123,8 @@ app.get("/api/buscar/:jobId/eventos", (req: Request, res: Response) => {
     Connection: "keep-alive",
   });
 
-  // Reenvia o que já aconteceu até agora, pra quem conectar atrasado.
-  for (const mensagem of job.logs) {
-    res.write(`data: ${JSON.stringify({ tipo: "log", mensagem })}\n\n`);
-  }
+  // Reenvia o progresso atual, pra quem conectar atrasado.
+  res.write(`data: ${JSON.stringify({ tipo: "progresso", fracao: job.progresso })}\n\n`);
   if (job.status === "done") {
     res.write(`data: ${JSON.stringify({ tipo: "done", relatorio: job.relatorio })}\n\n`);
     res.end();

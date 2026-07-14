@@ -8,7 +8,7 @@
 </head>
 <body>
   <main>
-    <h1>✈️ Bot de Emissões TAP</h1>
+    <h1>✈️ Emissões TAP</h1>
 
     <form id="form-busca">
       <div class="campo">
@@ -26,31 +26,48 @@
           <option value="2">Econômica</option>
         </select>
       </div>
+      <label class="checkbox">
+        <input type="checkbox" id="ida-volta" checked />
+        Ida e volta
+      </label>
       <button type="submit" id="btn-buscar">Buscar</button>
     </form>
 
     <p id="aviso" class="aviso" hidden></p>
 
     <section id="progresso" hidden>
-      <h2>Progresso</h2>
-      <pre id="log"></pre>
+      <p id="progresso-label">Buscando...</p>
+      <div class="barra">
+        <div class="barra-preenchida" id="barra-preenchida"></div>
+      </div>
     </section>
 
-    <section id="resultado" hidden>
-      <h2>Resultado</h2>
+    <section id="resultado" hidden></section>
+  </main>
+
+  <template id="tpl-perna">
+    <div class="perna">
+      <h2 class="perna-titulo"></h2>
       <div class="colunas">
-        <div class="coluna">
-          <h3>Executivas</h3>
-          <pre id="saida-executivas"></pre>
+        <div class="coluna coluna-executiva">
+          <div class="coluna-cabecalho">
+            <h3>Executiva</h3>
+            <button type="button" class="btn-copiar">Copiar</button>
+          </div>
+          <p class="coluna-resumo"></p>
+          <div class="cartoes"></div>
         </div>
-        <div class="coluna">
-          <h3>Econômicas</h3>
-          <pre id="saida-economicas"></pre>
+        <div class="coluna coluna-economica">
+          <div class="coluna-cabecalho">
+            <h3>Econômica</h3>
+            <button type="button" class="btn-copiar">Copiar</button>
+          </div>
+          <p class="coluna-resumo"></p>
+          <div class="cartoes"></div>
         </div>
       </div>
-      <button type="button" id="btn-volta"></button>
-    </section>
-  </main>
+    </div>
+  </template>
 
   <script src="/app.js"></script>
 </body>
