@@ -129,10 +129,24 @@ button:hover:not(:disabled) {
   margin-top: 24px;
 }
 
+.progresso-linha {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
 #progresso-label {
   font-size: 13px;
+  color: #e6e6e6;
+  font-weight: 600;
+}
+
+#progresso-janela {
+  font-size: 12px;
   color: #9aa0aa;
-  margin: 0 0 8px;
+  white-space: nowrap;
 }
 
 .barra {

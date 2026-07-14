@@ -7,6 +7,7 @@ const checkboxIdaVolta = document.getElementById("ida-volta");
 const aviso = document.getElementById("aviso");
 const progresso = document.getElementById("progresso");
 const progressoLabel = document.getElementById("progresso-label");
+const progressoJanela = document.getElementById("progresso-janela");
 const barraPreenchida = document.getElementById("barra-preenchida");
 const resultado = document.getElementById("resultado");
 const tplPerna = document.getElementById("tpl-perna");
@@ -39,6 +40,7 @@ function atualizarBarra(fracao) {
 function buscarPerna(origem, destino, cabine, rotuloProgresso) {
   return new Promise(async (resolve, reject) => {
     progressoLabel.textContent = rotuloProgresso;
+    progressoJanela.textContent = "";
     atualizarBarra(0);
 
     let resposta;
@@ -66,6 +68,8 @@ function buscarPerna(origem, destino, cabine, rotuloProgresso) {
       const dado = JSON.parse(evento.data);
       if (dado.tipo === "progresso") {
         atualizarBarra(dado.fracao);
+      } else if (dado.tipo === "janela") {
+        progressoJanela.textContent = `Janela ${dado.atual} de ${dado.total} · ${dado.inicio} – ${dado.fim}`;
       } else if (dado.tipo === "done") {
         fonte.close();
         resolve(dado.relatorio);

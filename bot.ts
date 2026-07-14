@@ -36,6 +36,12 @@ export type Relatorio = {
 
 export type OnLog = (mensagem: string) => void;
 export type OnProgresso = (fracao: number) => void;
+export type OnJanela = (info: {
+  atual: number;
+  total: number;
+  inicio: string;
+  fim: string;
+}) => void;
 
 // Cada linha do popover "Date" tem um parágrafo "YYYY-MM-DD (achados/total)"
 // seguido de 4 valores de preço, um por cabine, identificados pela cor da
@@ -113,8 +119,7 @@ async function pesquisarJanela(
   },
   onLog: OnLog,
   // fracaoBase..fracaoBase+fracaoPasso é a fatia do progresso total (0..1)
-  // que esta janela ocupa. Usado só para animar a barra suavemente durante a
-  // espera dos ~35s, em vez de pular só quando a janela inteira termina.
+  // que esta janela ocupa (atualizada no início e no fim da janela).
   onProgresso: OnProgresso,
   fracaoBase: number,
   fracaoPasso: number,
@@ -149,15 +154,9 @@ async function pesquisarJanela(
   // termina de verdade. Isso demora pelo menos ~35s, e o aviso de "carregando"
   // às vezes some antes da tabela terminar de fato de preencher todos os
   // preços. Por isso esperamos os dois: um tempo mínimo fixo de 35s E o aviso
-  // de carregando desaparecer — o que demorar mais. Enquanto espera, avisa o
-  // progresso periodicamente pra a barra andar suave em vez de travar.
+  // de carregando desaparecer — o que demorar mais.
   const ESPERA_MINIMA_MS = 35000;
   const inicioEspera = Date.now();
-  const tickProgresso = setInterval(() => {
-    const decorrido = Date.now() - inicioEspera;
-    const fracaoDaEspera = Math.min(decorrido / ESPERA_MINIMA_MS, 1);
-    onProgresso(fracaoBase + fracaoPasso * fracaoDaEspera * 0.9);
-  }, 1000);
   try {
     await page
       .getByText(
@@ -167,8 +166,6 @@ async function pesquisarJanela(
       .waitFor({ state: "hidden", timeout: 60000 });
   } catch {
     // segue mesmo assim: o tempo mínimo abaixo ainda vale como rede de segurança
-  } finally {
-    clearInterval(tickProgresso);
   }
   const tempoRestante = ESPERA_MINIMA_MS - (Date.now() - inicioEspera);
   if (tempoRestante > 0) {
@@ -303,6 +300,7 @@ export async function pesquisarAnoCompleto(
   },
   onLog: OnLog = () => {},
   onProgresso: OnProgresso = () => {},
+  onJanela: OnJanela = () => {},
 ): Promise<DiaDisponibilidade[]> {
   const { baseUrl, origem, destino, cabineParam } = opts;
 
@@ -337,6 +335,12 @@ export async function pesquisarAnoCompleto(
     if (janelaFim > limitePeriodo) janelaFim = new Date(limitePeriodo);
 
     onLog(`Janela ${numeroJanela}/${totalJanelas}:`);
+    onJanela({
+      atual: numeroJanela,
+      total: totalJanelas,
+      inicio: janelaInicio.toLocaleDateString("pt-BR"),
+      fim: janelaFim.toLocaleDateString("pt-BR"),
+    });
     const diasDaJanela = await pesquisarJanela(
       page,
       { baseUrl, origem, destino, cabineParam, dataInicio: janelaInicio, dataFim: janelaFim },

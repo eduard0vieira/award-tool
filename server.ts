@@ -13,9 +13,12 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+type InfoJanela = { atual: number; total: number; inicio: string; fim: string };
+
 type Job = {
   status: "running" | "done" | "erro";
   progresso: number; // 0..1
+  janela?: InfoJanela;
   relatorio?: Relatorio;
   erro?: string;
   ouvintes: Set<Response>;
@@ -23,11 +26,22 @@ type Job = {
 
 const jobs = new Map<string, Job>();
 
+// Reaproveita a mesma sessão (browser/página logada) entre buscas. Se a
+// janela do Chrome foi fechada (manualmente, crash, etc.) nesse meio tempo,
+// abre e loga numa nova em vez de continuar tentando usar uma sessão morta
+// (o que causaria "Target page, context or browser has been closed" em toda
+// busca seguinte).
 let sessaoPromise: Promise<Sessao> | null = null;
-function getSessao(): Promise<Sessao> {
-  if (!sessaoPromise) {
-    sessaoPromise = iniciarSessao(false);
+async function getSessao(): Promise<Sessao> {
+  if (sessaoPromise) {
+    const sessao = await sessaoPromise;
+    if (sessao.browser.isConnected() && !sessao.page.isClosed()) {
+      return sessao;
+    }
+    console.log("Sessão anterior foi fechada, abrindo uma nova...");
+    sessaoPromise = null;
   }
+  sessaoPromise = iniciarSessao(false);
   return sessaoPromise;
 }
 
@@ -49,6 +63,13 @@ function atualizarProgresso(jobId: string, fracao: number) {
   emitirEvento(jobId, { tipo: "progresso", fracao });
 }
 
+function atualizarJanela(jobId: string, info: InfoJanela) {
+  const job = jobs.get(jobId);
+  if (!job) return;
+  job.janela = info;
+  emitirEvento(jobId, { tipo: "janela", ...info });
+}
+
 async function executarJob(
   jobId: string,
   params: { origem: string; destino: string; cabine: string },
@@ -63,6 +84,7 @@ async function executarJob(
       { baseUrl, origem: params.origem, destino: params.destino, cabineParam },
       (msg) => console.log(`[${jobId}] ${msg}`), // só no terminal do servidor, não vai pro front
       (fracao) => atualizarProgresso(jobId, fracao),
+      (info) => atualizarJanela(jobId, info),
     );
 
     const relatorio = construirRelatorio(todasAsDatas);
@@ -70,8 +92,12 @@ async function executarJob(
     job.relatorio = relatorio;
     emitirEvento(jobId, { tipo: "done", relatorio });
   } catch (err) {
+    const mensagemOriginal = err instanceof Error ? err.message : String(err);
+    const fechouNoMeio = /Target page, context or browser has been closed/i.test(mensagemOriginal);
     job.status = "erro";
-    job.erro = err instanceof Error ? err.message : String(err);
+    job.erro = fechouNoMeio
+      ? "A janela do navegador foi fechada durante a busca. Tente buscar de novo."
+      : mensagemOriginal;
     emitirEvento(jobId, { tipo: "erro", mensagem: job.erro });
   } finally {
     buscaEmAndamento = false;
@@ -123,8 +149,11 @@ app.get("/api/buscar/:jobId/eventos", (req: Request, res: Response) => {
     Connection: "keep-alive",
   });
 
-  // Reenvia o progresso atual, pra quem conectar atrasado.
+  // Reenvia o progresso/janela atuais, pra quem conectar atrasado.
   res.write(`data: ${JSON.stringify({ tipo: "progresso", fracao: job.progresso })}\n\n`);
+  if (job.janela) {
+    res.write(`data: ${JSON.stringify({ tipo: "janela", ...job.janela })}\n\n`);
+  }
   if (job.status === "done") {
     res.write(`data: ${JSON.stringify({ tipo: "done", relatorio: job.relatorio })}\n\n`);
     res.end();
