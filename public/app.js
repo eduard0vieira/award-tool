@@ -11,8 +11,96 @@ const progressoJanela = document.getElementById("progresso-janela");
 const barraPreenchida = document.getElementById("barra-preenchida");
 const resultado = document.getElementById("resultado");
 const tplPerna = document.getElementById("tpl-perna");
+const abasBtns = document.querySelectorAll(".aba-btn");
+const painelBuscar = document.getElementById("painel-buscar");
+const painelHistorico = document.getElementById("painel-historico");
+const listaHistorico = document.getElementById("lista-historico");
+const historicoVazio = document.getElementById("historico-vazio");
 
 const MESES_PT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+const CABINE_LABEL = { 1: "Executiva", 2: "Econômica" };
+const HISTORICO_KEY = "awardtool_historico";
+const TOLERANCIA_DIAS = 5;
+const TOLERANCIA_MS = TOLERANCIA_DIAS * 24 * 60 * 60 * 1000;
+
+abasBtns.forEach((btn) => {
+  btn.addEventListener("click", () => {
+    abasBtns.forEach((b) => b.classList.remove("ativo"));
+    btn.classList.add("ativo");
+    const aba = btn.dataset.aba;
+    painelBuscar.hidden = aba !== "buscar";
+    painelHistorico.hidden = aba !== "historico";
+    if (aba === "historico") renderizarHistorico();
+  });
+});
+
+function carregarHistorico() {
+  try {
+    return JSON.parse(localStorage.getItem(HISTORICO_KEY)) || [];
+  } catch {
+    return [];
+  }
+}
+
+function salvarNoHistorico(origem, destino, cabine) {
+  const historico = carregarHistorico();
+  historico.push({ origem, destino, cabine: Number(cabine), timestamp: Date.now() });
+  localStorage.setItem(HISTORICO_KEY, JSON.stringify(historico));
+}
+
+function buscaRecenteDe(origem, destino, cabine) {
+  const historico = carregarHistorico();
+  const doMesmoTrecho = historico.filter(
+    (h) => h.origem === origem && h.destino === destino && Number(h.cabine) === Number(cabine),
+  );
+  if (doMesmoTrecho.length === 0) return null;
+  return doMesmoTrecho.reduce((mais, atual) => (atual.timestamp > mais.timestamp ? atual : mais));
+}
+
+function formatarDataHora(timestamp) {
+  const data = new Date(timestamp);
+  const dataStr = data.toLocaleDateString("pt-BR");
+  const horaStr = data.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  return `${dataStr} às ${horaStr}`;
+}
+
+function formatarTempoRelativo(timestamp) {
+  const diffMs = Date.now() - timestamp;
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return "agora mesmo";
+  if (diffMin < 60) return `há ${diffMin} min`;
+  const diffHoras = Math.floor(diffMin / 60);
+  if (diffHoras < 24) return `há ${diffHoras}h`;
+  const diffDias = Math.floor(diffHoras / 24);
+  if (diffDias === 1) return "há 1 dia";
+  return `há ${diffDias} dias`;
+}
+
+function renderizarHistorico() {
+  const historico = carregarHistorico().slice().sort((a, b) => b.timestamp - a.timestamp);
+  listaHistorico.innerHTML = "";
+  historicoVazio.hidden = historico.length > 0;
+
+  for (const item of historico) {
+    const linha = document.createElement("div");
+    linha.className = "item-historico";
+
+    const rota = document.createElement("span");
+    rota.className = "item-historico-rota";
+    rota.textContent = `${item.origem} → ${item.destino}`;
+
+    const cabineTag = document.createElement("span");
+    cabineTag.className = `item-historico-cabine ${item.cabine === 1 ? "cartao-executiva" : "cartao-economica"}`;
+    cabineTag.textContent = CABINE_LABEL[item.cabine] || "";
+
+    const quando = document.createElement("span");
+    quando.className = "item-historico-quando";
+    quando.textContent = `${formatarDataHora(item.timestamp)} · ${formatarTempoRelativo(item.timestamp)}`;
+
+    linha.append(rota, cabineTag, quando);
+    listaHistorico.appendChild(linha);
+  }
+}
 
 function mostrarAviso(mensagem) {
   aviso.textContent = mensagem;
@@ -162,10 +250,12 @@ async function iniciarBusca(origem, destino, cabine, idaEVolta) {
     const rotuloIda = idaEVolta ? "Buscando ida..." : "Buscando...";
     const relatorioIda = await buscarPerna(origem, destino, cabine, rotuloIda);
     renderizarPerna(idaEVolta ? `Ida: ${origem} → ${destino}` : `${origem} → ${destino}`, relatorioIda);
+    salvarNoHistorico(origem, destino, cabine);
 
     if (idaEVolta) {
       const relatorioVolta = await buscarPerna(destino, origem, cabine, "Buscando volta...");
       renderizarPerna(`Volta: ${destino} → ${origem}`, relatorioVolta);
+      salvarNoHistorico(destino, origem, cabine);
     }
 
     resultado.hidden = false;
@@ -177,14 +267,37 @@ async function iniciarBusca(origem, destino, cabine, idaEVolta) {
   }
 }
 
+function avisoDeRepeticao(origem, destino, cabine, idaEVolta) {
+  const trechos = idaEVolta
+    ? [
+        [origem, destino],
+        [destino, origem],
+      ]
+    : [[origem, destino]];
+
+  for (const [de, para] of trechos) {
+    const anterior = buscaRecenteDe(de, para, cabine);
+    if (anterior && Date.now() - anterior.timestamp < TOLERANCIA_MS) {
+      const confirmado = confirm(
+        `Você já buscou ${de} → ${para} (${CABINE_LABEL[cabine]}) ${formatarTempoRelativo(anterior.timestamp)} ` +
+          `(${formatarDataHora(anterior.timestamp)}), há menos de ${TOLERANCIA_DIAS} dias. Buscar de novo mesmo assim?`,
+      );
+      if (!confirmado) return false;
+    }
+  }
+  return true;
+}
+
 form.addEventListener("submit", (evento) => {
   evento.preventDefault();
   const origem = inputOrigem.value.trim().toUpperCase();
   const destino = inputDestino.value.trim().toUpperCase();
   const cabine = selectCabine.value;
+  const idaEVolta = checkboxIdaVolta.checked;
   if (!origem || !destino) {
     mostrarAviso("Preencha origem e destino.");
     return;
   }
-  iniciarBusca(origem, destino, cabine, checkboxIdaVolta.checked);
+  if (!avisoDeRepeticao(origem, destino, cabine, idaEVolta)) return;
+  iniciarBusca(origem, destino, cabine, idaEVolta);
 });
