@@ -2,7 +2,6 @@ const form = document.getElementById("form-busca");
 const btnBuscar = document.getElementById("btn-buscar");
 const inputOrigem = document.getElementById("origem");
 const inputDestino = document.getElementById("destino");
-const selectCabine = document.getElementById("cabine");
 const checkboxIdaVolta = document.getElementById("ida-volta");
 const aviso = document.getElementById("aviso");
 const progresso = document.getElementById("progresso");
@@ -18,7 +17,6 @@ const listaHistorico = document.getElementById("lista-historico");
 const historicoVazio = document.getElementById("historico-vazio");
 
 const MESES_PT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
-const CABINE_LABEL = { 1: "Executiva", 2: "Econômica" };
 const HISTORICO_KEY = "awardtool_historico";
 const TOLERANCIA_DIAS = 5;
 const TOLERANCIA_MS = TOLERANCIA_DIAS * 24 * 60 * 60 * 1000;
@@ -42,17 +40,15 @@ function carregarHistorico() {
   }
 }
 
-function salvarNoHistorico(origem, destino, cabine) {
+function salvarNoHistorico(origem, destino) {
   const historico = carregarHistorico();
-  historico.push({ origem, destino, cabine: Number(cabine), timestamp: Date.now() });
+  historico.push({ origem, destino, timestamp: Date.now() });
   localStorage.setItem(HISTORICO_KEY, JSON.stringify(historico));
 }
 
-function buscaRecenteDe(origem, destino, cabine) {
+function buscaRecenteDe(origem, destino) {
   const historico = carregarHistorico();
-  const doMesmoTrecho = historico.filter(
-    (h) => h.origem === origem && h.destino === destino && Number(h.cabine) === Number(cabine),
-  );
+  const doMesmoTrecho = historico.filter((h) => h.origem === origem && h.destino === destino);
   if (doMesmoTrecho.length === 0) return null;
   return doMesmoTrecho.reduce((mais, atual) => (atual.timestamp > mais.timestamp ? atual : mais));
 }
@@ -89,15 +85,19 @@ function renderizarHistorico() {
     rota.className = "item-historico-rota";
     rota.textContent = `${item.origem} → ${item.destino}`;
 
-    const cabineTag = document.createElement("span");
-    cabineTag.className = `item-historico-cabine ${item.cabine === 1 ? "cartao-executiva" : "cartao-economica"}`;
-    cabineTag.textContent = CABINE_LABEL[item.cabine] || "";
+    const tagExecutiva = document.createElement("span");
+    tagExecutiva.className = "item-historico-cabine cartao-executiva";
+    tagExecutiva.textContent = "Executiva";
+
+    const tagEconomica = document.createElement("span");
+    tagEconomica.className = "item-historico-cabine cartao-economica";
+    tagEconomica.textContent = "Econômica";
 
     const quando = document.createElement("span");
     quando.className = "item-historico-quando";
     quando.textContent = `${formatarDataHora(item.timestamp)} · ${formatarTempoRelativo(item.timestamp)}`;
 
-    linha.append(rota, cabineTag, quando);
+    linha.append(rota, tagExecutiva, tagEconomica, quando);
     listaHistorico.appendChild(linha);
   }
 }
@@ -116,7 +116,6 @@ function definirCarregando(carregando) {
   btnBuscar.disabled = carregando;
   inputOrigem.disabled = carregando;
   inputDestino.disabled = carregando;
-  selectCabine.disabled = carregando;
   checkboxIdaVolta.disabled = carregando;
 }
 
@@ -125,7 +124,7 @@ function atualizarBarra(fracao) {
 }
 
 // Roda uma busca (uma perna) via SSE e resolve com o relatório final.
-function buscarPerna(origem, destino, cabine, rotuloProgresso) {
+function buscarPerna(origem, destino, rotuloProgresso) {
   return new Promise(async (resolve, reject) => {
     progressoLabel.textContent = rotuloProgresso;
     progressoJanela.textContent = "";
@@ -136,7 +135,7 @@ function buscarPerna(origem, destino, cabine, rotuloProgresso) {
       resposta = await fetch("/api/buscar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ origem, destino, cabine }),
+        body: JSON.stringify({ origem, destino }),
       });
     } catch {
       reject(new Error("Não foi possível conectar ao servidor."));
@@ -239,7 +238,7 @@ function renderizarPerna(rotulo, relatorio) {
   resultado.appendChild(raiz);
 }
 
-async function iniciarBusca(origem, destino, cabine, idaEVolta) {
+async function iniciarBusca(origem, destino, idaEVolta) {
   limparAviso();
   definirCarregando(true);
   resultado.hidden = true;
@@ -248,14 +247,14 @@ async function iniciarBusca(origem, destino, cabine, idaEVolta) {
 
   try {
     const rotuloIda = idaEVolta ? "Buscando ida..." : "Buscando...";
-    const relatorioIda = await buscarPerna(origem, destino, cabine, rotuloIda);
+    const relatorioIda = await buscarPerna(origem, destino, rotuloIda);
     renderizarPerna(idaEVolta ? `Ida: ${origem} → ${destino}` : `${origem} → ${destino}`, relatorioIda);
-    salvarNoHistorico(origem, destino, cabine);
+    salvarNoHistorico(origem, destino);
 
     if (idaEVolta) {
-      const relatorioVolta = await buscarPerna(destino, origem, cabine, "Buscando volta...");
+      const relatorioVolta = await buscarPerna(destino, origem, "Buscando volta...");
       renderizarPerna(`Volta: ${destino} → ${origem}`, relatorioVolta);
-      salvarNoHistorico(destino, origem, cabine);
+      salvarNoHistorico(destino, origem);
     }
 
     resultado.hidden = false;
@@ -267,7 +266,7 @@ async function iniciarBusca(origem, destino, cabine, idaEVolta) {
   }
 }
 
-function avisoDeRepeticao(origem, destino, cabine, idaEVolta) {
+function avisoDeRepeticao(origem, destino, idaEVolta) {
   const trechos = idaEVolta
     ? [
         [origem, destino],
@@ -276,10 +275,10 @@ function avisoDeRepeticao(origem, destino, cabine, idaEVolta) {
     : [[origem, destino]];
 
   for (const [de, para] of trechos) {
-    const anterior = buscaRecenteDe(de, para, cabine);
+    const anterior = buscaRecenteDe(de, para);
     if (anterior && Date.now() - anterior.timestamp < TOLERANCIA_MS) {
       const confirmado = confirm(
-        `Você já buscou ${de} → ${para} (${CABINE_LABEL[cabine]}) ${formatarTempoRelativo(anterior.timestamp)} ` +
+        `Você já buscou ${de} → ${para} ${formatarTempoRelativo(anterior.timestamp)} ` +
           `(${formatarDataHora(anterior.timestamp)}), há menos de ${TOLERANCIA_DIAS} dias. Buscar de novo mesmo assim?`,
       );
       if (!confirmado) return false;
@@ -292,12 +291,11 @@ form.addEventListener("submit", (evento) => {
   evento.preventDefault();
   const origem = inputOrigem.value.trim().toUpperCase();
   const destino = inputDestino.value.trim().toUpperCase();
-  const cabine = selectCabine.value;
   const idaEVolta = checkboxIdaVolta.checked;
   if (!origem || !destino) {
     mostrarAviso("Preencha origem e destino.");
     return;
   }
-  if (!avisoDeRepeticao(origem, destino, cabine, idaEVolta)) return;
-  iniciarBusca(origem, destino, cabine, idaEVolta);
+  if (!avisoDeRepeticao(origem, destino, idaEVolta)) return;
+  iniciarBusca(origem, destino, idaEVolta);
 });

@@ -25,6 +25,10 @@
           <label for="destino">Destino</label>
           <input id="destino" name="destino" placeholder="LIS" maxlength="3" required autocomplete="off" />
         </div>
+        <!--
+          Removido: a busca já traz executiva e econômica juntas na mesma
+          pesquisa (ver comentário em server.ts), então escolher cabine aqui
+          não muda nada no resultado.
         <div class="campo">
           <label for="cabine">Cabine</label>
           <select id="cabine" name="cabine">
@@ -32,6 +36,7 @@
             <option value="2">Econômica</option>
           </select>
         </div>
+        -->
         <label class="checkbox">
           <input type="checkbox" id="ida-volta" checked />
           Ida e volta

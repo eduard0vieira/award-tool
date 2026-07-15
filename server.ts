@@ -3,13 +3,18 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  cabineParamDe,
   construirRelatorio,
   iniciarSessao,
   pesquisarAnoCompleto,
   type Relatorio,
   type Sessao,
 } from "./bot.ts";
+
+// A extração de preços lê as 4 cores (Economy/PremiumEconomy/Business/First)
+// de cada dia independente do valor de "cabins" mandado na URL — então o
+// relatório sempre traz executiva e econômica juntas nessa mesma busca, e o
+// valor abaixo é só o que a busca em si exige pra funcionar.
+const CABINE_PARAM_PADRAO = "Economy";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -72,16 +77,20 @@ function atualizarJanela(jobId: string, info: InfoJanela) {
 
 async function executarJob(
   jobId: string,
-  params: { origem: string; destino: string; cabine: string },
+  params: { origem: string; destino: string },
 ) {
   const job = jobs.get(jobId)!;
   try {
     const { page, baseUrl } = await getSessao();
 
-    const cabineParam = cabineParamDe(params.cabine);
     const todasAsDatas = await pesquisarAnoCompleto(
       page,
-      { baseUrl, origem: params.origem, destino: params.destino, cabineParam },
+      {
+        baseUrl,
+        origem: params.origem,
+        destino: params.destino,
+        cabineParam: CABINE_PARAM_PADRAO,
+      },
       (msg) => console.log(`[${jobId}] ${msg}`), // só no terminal do servidor, não vai pro front
       (fracao) => atualizarProgresso(jobId, fracao),
       (info) => atualizarJanela(jobId, info),
@@ -110,10 +119,10 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
 app.post("/api/buscar", (req: Request, res: Response) => {
-  const { origem, destino, cabine } = req.body ?? {};
+  const { origem, destino } = req.body ?? {};
 
-  if (!origem || !destino || !cabine) {
-    res.status(400).json({ erro: "origem, destino e cabine são obrigatórios." });
+  if (!origem || !destino) {
+    res.status(400).json({ erro: "origem e destino são obrigatórios." });
     return;
   }
 
@@ -129,7 +138,6 @@ app.post("/api/buscar", (req: Request, res: Response) => {
   executarJob(jobId, {
     origem: String(origem).toUpperCase(),
     destino: String(destino).toUpperCase(),
-    cabine: String(cabine),
   });
 
   res.json({ jobId });
