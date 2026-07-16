@@ -380,10 +380,14 @@ export async function iniciarSessao(headless = false): Promise<Sessao> {
   const passwordAccount = process.env.PASSWORD_ACCOUNT!;
 
   await page.goto(loginUrl);
-  await page.locator('input[name="username"]').fill(emailAccount);
+  const campoUsuario = page.locator('input[name="username"]');
+  await campoUsuario.fill(emailAccount);
   await page.locator('input[name="password"]').fill(passwordAccount);
   await page.locator('button[type="submit"]').click();
-  await page.waitForLoadState("networkidle");
+  // "networkidle" nunca dispara aqui: o site mantém polling/conexões em
+  // segundo plano mesmo depois do login. Esperar o formulário de login sumir
+  // da tela é um sinal direto de que o login deu certo, sem depender disso.
+  await campoUsuario.waitFor({ state: "detached" });
 
   const baseUrl = new URL(loginUrl).origin;
 
