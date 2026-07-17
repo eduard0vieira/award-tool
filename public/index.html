@@ -18,6 +18,14 @@
     <section id="painel-buscar" class="painel">
       <form id="form-busca">
         <div class="campo">
+          <label for="programa">Programa</label>
+          <select id="programa" name="programa">
+            <option value="tap">TAP</option>
+            <option value="IB">Iberia</option>
+            <option value="BA">British Airways</option>
+          </select>
+        </div>
+        <div class="campo">
           <label for="origem">Origem</label>
           <input id="origem" name="origem" placeholder="GRU" maxlength="3" required autocomplete="off" />
         </div>
@@ -42,6 +50,23 @@
           Ida e volta
         </label>
         <button type="submit" id="btn-buscar">Buscar</button>
+
+        <!-- Só para Iberia/British (SeatSpy): teto de milhas por cabine, em K.
+             Dias mais caros que o teto ficam fora do relatório. Vazio = sem filtro. -->
+        <div id="linha-tetos" class="linha-tetos" hidden>
+          <div class="campo">
+            <label for="teto-economica">Teto Econômica (K)</label>
+            <input id="teto-economica" type="number" min="1" step="0.25" placeholder="ex.: 25" autocomplete="off" />
+          </div>
+          <div class="campo">
+            <label for="teto-premium">Teto Premium (K)</label>
+            <input id="teto-premium" type="number" min="1" step="0.25" placeholder="ex.: 51" autocomplete="off" />
+          </div>
+          <div class="campo">
+            <label for="teto-executiva">Teto Executiva (K)</label>
+            <input id="teto-executiva" type="number" min="1" step="0.25" placeholder="ex.: 74" autocomplete="off" />
+          </div>
+        </div>
       </form>
 
       <p id="aviso" class="aviso" hidden></p>
@@ -60,7 +85,11 @@
     </section>
 
     <section id="painel-historico" class="painel" hidden>
-      <p id="historico-vazio" class="historico-vazio" hidden>Nenhum trecho pesquisado ainda.</p>
+      <div id="historico-topo" class="historico-topo" hidden>
+        <p id="historico-resumo" class="historico-resumo"></p>
+        <button type="button" id="btn-limpar-historico" class="btn-limpar">Limpar histórico</button>
+      </div>
+      <p id="historico-vazio" class="historico-vazio" hidden>Nenhum trecho pesquisado ainda. As buscas feitas na aba Buscar aparecem aqui.</p>
       <div id="lista-historico" class="lista-historico"></div>
     </section>
   </main>

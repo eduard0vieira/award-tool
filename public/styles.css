@@ -68,29 +68,146 @@ h3 {
 .historico-vazio {
   color: #9aa0aa;
   font-size: 13px;
+  text-align: center;
+  padding: 40px 0;
+}
+
+.historico-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.historico-resumo {
+  font-size: 12px;
+  color: #9aa0aa;
+  margin: 0;
+}
+
+.btn-limpar {
+  background: transparent;
+  border: 1px solid #2e3440;
+  color: #9aa0aa;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.btn-limpar:hover:not(:disabled) {
+  background: #3a1f1f;
+  border-color: #5c2b2b;
+  color: #ff9d9d;
 }
 
 .lista-historico {
   display: flex;
   flex-direction: column;
+  gap: 24px;
+}
+
+.dia-grupo {
+  display: flex;
+  flex-direction: column;
   gap: 8px;
+}
+
+.dia-cabecalho {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.dia-cabecalho::after {
+  content: "";
+  flex: 1;
+  border-bottom: 1px solid #262b36;
+  transform: translateY(-4px);
+}
+
+.dia-rotulo {
+  font-size: 13px;
+  font-weight: 600;
+  color: #e6e6e6;
+}
+
+.dia-sub {
+  font-size: 11px;
+  color: #6b7280;
+  white-space: nowrap;
 }
 
 .item-historico {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   background: #171a21;
   border: 1px solid #262b36;
+  border-left-width: 3px;
   border-radius: 8px;
   padding: 10px 14px;
   flex-wrap: wrap;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.item-historico:hover {
+  background: #1a1e27;
+}
+
+.accent-tap {
+  border-left-color: #4c8bf5;
+}
+
+.accent-IB {
+  border-left-color: #e05252;
+}
+
+.accent-BA {
+  border-left-color: #7bb0ff;
+}
+
+.item-historico-principal {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 190px;
 }
 
 .item-historico-rota {
+  font-size: 15px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  letter-spacing: 0.02em;
+}
+
+.rota-seta {
+  color: #6b7280;
+  font-size: 13px;
+  cursor: default;
+}
+
+.rota-seta-iv {
+  color: #7bb0ff;
+  font-size: 15px;
   font-weight: 600;
-  font-size: 14px;
-  min-width: 110px;
+}
+
+.ponto-recente {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ffbc5c;
+  flex-shrink: 0;
+  cursor: help;
+}
+
+.item-historico-cabines {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .item-historico-cabine {
@@ -100,10 +217,67 @@ h3 {
   border-radius: 999px;
 }
 
-.item-historico-quando {
-  font-size: 12px;
-  color: #9aa0aa;
+.tag-programa {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.tag-tap {
+  background: rgba(76, 139, 245, 0.15);
+  color: #7bb0ff;
+  border: 1px solid rgba(76, 139, 245, 0.35);
+}
+
+.tag-IB {
+  background: rgba(224, 82, 82, 0.15);
+  color: #ff9d9d;
+  border: 1px solid rgba(224, 82, 82, 0.35);
+}
+
+.tag-BA {
+  background: rgba(123, 176, 255, 0.12);
+  color: #a9ccff;
+  border: 1px solid rgba(123, 176, 255, 0.3);
+}
+
+.item-historico-direita {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
   margin-left: auto;
+}
+
+.item-historico-hora {
+  font-size: 14px;
+  font-weight: 600;
+  color: #e6e6e6;
+  font-variant-numeric: tabular-nums;
+}
+
+.item-historico-relativo {
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.btn-rebuscar {
+  background: transparent;
+  border: 1px solid #2e3440;
+  color: #cfd3da;
+  padding: 6px 10px;
+  font-size: 14px;
+  line-height: 1;
+  border-radius: 6px;
+}
+
+.btn-rebuscar:hover:not(:disabled) {
+  background: #1d212b;
+  border-color: #4c8bf5;
+  color: #7bb0ff;
 }
 
 form {
@@ -250,8 +424,13 @@ button:hover:not(:disabled) {
   gap: 16px;
 }
 
+.colunas-3 {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
 @media (max-width: 620px) {
-  .colunas {
+  .colunas,
+  .colunas-3 {
     grid-template-columns: 1fr;
   }
 }
@@ -329,4 +508,22 @@ button:hover:not(:disabled) {
   background: rgba(76, 175, 80, 0.15);
   color: #7fd484;
   border: 1px solid rgba(76, 175, 80, 0.35);
+}
+
+.cartao-premium {
+  background: rgba(255, 167, 38, 0.15);
+  color: #ffbc5c;
+  border: 1px solid rgba(255, 167, 38, 0.35);
+}
+
+.linha-tetos {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.linha-tetos input {
+  width: 140px;
+  text-transform: none;
 }
