@@ -1,0 +1,283 @@
+import "dotenv/config";
+import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
+import { formatarListaPorMes, type OnLog, type OnProgresso } from "./bot.ts";
+
+export type SessaoSeatspy = {
+  browser: Browser;
+  context: BrowserContext;
+  page: Page;
+};
+
+export type CompanhiaSeatspy = "IB" | "BA";
+
+export type ParametrosSeatspy = {
+  companhia: CompanhiaSeatspy;
+  origem: string; // IATA, ex.: "GRU"
+  destino: string; // IATA, ex.: "MAD"
+  idaEVolta: boolean;
+};
+
+// Milhas por cabine num dia (menor valor entre os voos com assento), ou null
+// se a cabine não tem disponibilidade nesse dia.
+export type DiaSeatspy = {
+  data: string; // YYYY-MM-DD
+  economica: number | null;
+  premium: number | null;
+  executiva: number | null;
+};
+
+export type SecaoSeatspy = {
+  rotulo: string;
+  corClasse: string;
+  menor: number | null; // em K (milhares de milhas)
+  maior: number | null;
+  dias: { data: string; valorK: number }[];
+  texto: string;
+};
+
+export type RelatorioSeatspy = { secoes: SecaoSeatspy[] };
+
+// Teto opcional de milhas por cabine (valor absoluto, ex.: 25000). Dias mais
+// caros que o teto ficam de fora do relatório daquela cabine.
+export type TetosSeatspy = {
+  economica?: number | null;
+  premium?: number | null;
+  executiva?: number | null;
+};
+
+export const NOME_COMPANHIA: Record<CompanhiaSeatspy, string> = {
+  IB: "Iberia Airlines",
+  BA: "British Airways",
+};
+
+export async function iniciarSessaoSeatspy(headless = false): Promise<SessaoSeatspy> {
+  const browser = await chromium.launch({ headless });
+  const context = await browser.newContext();
+  const page = await context.newPage();
+
+  await page.goto(process.env.SEATSPY_LOGIN_URL!);
+  await page.locator("#email").fill(process.env.SEATSPY_EMAIL!);
+  await page.locator("#password").fill(process.env.SEATSPY_PASSWORD!);
+  await page.locator("#submit").click();
+  await page.waitForURL((url) => !url.pathname.includes("sign-in"), { timeout: 30000 });
+
+  return { browser, context, page };
+}
+
+// Os campos do formulário são comboboxes Tom Select. Clicar neles via UI é
+// instável (o input interno fica "fora do viewport" pro Playwright), então a
+// seleção é feita direto pela API do Tom Select (el.tomselect.setValue), que
+// dispara o mesmo evento "change" no <select> que uma seleção manual.
+// As opções carregam de forma assíncrona ("Loading"), daí as esperas.
+
+type ElComTomSelect = HTMLSelectElement & {
+  tomselect?: {
+    options: Record<string, { iata?: string; iatas?: string }>;
+    setValue: (v: string) => void;
+  };
+};
+
+// As companhias são chaveadas pelo próprio código IATA ("IB", "BA", ...).
+async function selecionarCompanhia(page: Page, companhia: CompanhiaSeatspy) {
+  await page.waitForFunction(
+    (cia) => {
+      const sel = document.querySelector("#airline") as ElComTomSelect | null;
+      return !!sel?.tomselect?.options?.[cia];
+    },
+    companhia,
+    { timeout: 30000 },
+  );
+  await page.evaluate(
+    (cia) => (document.querySelector("#airline") as ElComTomSelect).tomselect!.setValue(cia),
+    companhia,
+  );
+}
+
+// Os aeroportos são chaveados por um id interno; o código IATA fica nos
+// campos "iata"/"iatas" de cada opção.
+async function selecionarAeroporto(page: Page, campoId: "outbound" | "inbound", iata: string) {
+  const chaveHandle = await page.waitForFunction(
+    ({ campoId, iata }) => {
+      const sel = document.querySelector(`#${campoId}`) as ElComTomSelect | null;
+      if (!sel?.tomselect) return null;
+      const par = Object.entries(sel.tomselect.options).find(
+        ([, o]) => o.iata === iata || (typeof o.iatas === "string" && o.iatas.split(/[\s,]+/).includes(iata)),
+      );
+      return par ? par[0] : null;
+    },
+    { campoId, iata },
+    { timeout: 30000 },
+  );
+  const chave = (await chaveHandle.jsonValue()) as string;
+
+  await page.evaluate(
+    ({ campoId, chave }) => (document.querySelector(`#${campoId}`) as ElComTomSelect).tomselect!.setValue(chave),
+    { campoId, chave },
+  );
+}
+
+type RespostaAnoCru = {
+  data?: { dates?: DataCrua[] };
+};
+
+type DataCrua = {
+  startDate: string; // "Sun, 19 Jul 2026 00:00:00 GMT"
+  flights?: VooCru[];
+};
+
+type VooCru = {
+  originIATA: string;
+  economy: number;
+  economyMiles: number | null;
+  premium: number;
+  premiumMiles: number | null;
+  business: number;
+  businessMiles: number | null;
+};
+
+function paraISO(dataGMT: string): string {
+  return new Date(dataGMT).toISOString().slice(0, 10);
+}
+
+function menorMilhas(voos: VooCru[], assentos: (v: VooCru) => number, milhas: (v: VooCru) => number | null): number | null {
+  const valores = voos
+    .filter((v) => assentos(v) > 0 && milhas(v) !== null)
+    .map((v) => milhas(v)!);
+  return valores.length > 0 ? Math.min(...valores) : null;
+}
+
+function extrairDias(datas: DataCrua[]): DiaSeatspy[] {
+  return datas
+    .map((d) => {
+      const voos = d.flights ?? [];
+      return {
+        data: paraISO(d.startDate),
+        economica: menorMilhas(voos, (v) => v.economy, (v) => v.economyMiles),
+        premium: menorMilhas(voos, (v) => v.premium, (v) => v.premiumMiles),
+        executiva: menorMilhas(voos, (v) => v.business, (v) => v.businessMiles),
+      };
+    })
+    .sort((a, b) => a.data.localeCompare(b.data));
+}
+
+// Roda a busca pela interface e captura os JSONs de /api/retrieve-year-data
+// que o próprio site pede — cada resposta traz o ano inteiro de uma direção.
+export async function pesquisarSeatspy(
+  page: Page,
+  params: ParametrosSeatspy,
+  onLog: OnLog,
+  onProgresso: OnProgresso,
+): Promise<{ ida: DiaSeatspy[]; volta: DiaSeatspy[] | null }> {
+  const origem = params.origem.toUpperCase();
+  const destino = params.destino.toUpperCase();
+
+  onLog(`Abrindo formulário de busca (${NOME_COMPANHIA[params.companhia]})...`);
+  await page.goto("https://www.seatspy.com/");
+
+  // As respostas não dizem qual direção são; identifica pelo IATA de origem
+  // dos voos, com fallback pra ordem de chegada (ida vem primeiro).
+  const porDirecao = new Map<"ida" | "volta", DiaSeatspy[]>();
+  const aoResponder = async (res: import("playwright").Response) => {
+    if (!res.url().includes("/api/retrieve-year-data") || res.status() !== 200) return;
+    let corpo: RespostaAnoCru;
+    try {
+      corpo = (await res.json()) as RespostaAnoCru;
+    } catch {
+      return;
+    }
+    const datas = corpo.data?.dates;
+    if (!datas || datas.length === 0) return;
+
+    const primeiroVoo = datas.flatMap((d) => d.flights ?? [])[0];
+    let direcao: "ida" | "volta";
+    if (primeiroVoo?.originIATA === origem) direcao = "ida";
+    else if (primeiroVoo?.originIATA === destino) direcao = "volta";
+    else direcao = porDirecao.has("ida") ? "volta" : "ida";
+
+    porDirecao.set(direcao, extrairDias(datas));
+    onLog(`Recebido ano completo da ${direcao} (${datas.length} dias).`);
+  };
+  page.on("response", aoResponder);
+
+  try {
+    await selecionarCompanhia(page, params.companhia);
+    await selecionarAeroporto(page, "outbound", origem);
+    await selecionarAeroporto(page, "inbound", destino);
+
+    // Radios/botões também sofrem do problema de viewport — clique via JS.
+    await page.evaluate((idaEVolta) => {
+      const label = document.querySelector<HTMLLabelElement>(`label[for="${idaEVolta ? "return" : "one-way"}"]`);
+      label?.click();
+    }, params.idaEVolta);
+    onProgresso(0.15);
+
+    onLog(`Buscando ${origem} → ${destino}${params.idaEVolta ? " (ida e volta)" : ""}...`);
+    await page.evaluate(() => {
+      document.querySelector<HTMLButtonElement>("#search-submit")?.click();
+    });
+
+    // O site responde as direções de forma assíncrona; espera chegar tudo.
+    const precisaDe = params.idaEVolta ? 2 : 1;
+    const limite = Date.now() + 120000;
+    while (Date.now() < limite && porDirecao.size < precisaDe) {
+      await page.waitForTimeout(500);
+      onProgresso(Math.min(0.15 + porDirecao.size * 0.4, 0.95));
+    }
+
+    if (!porDirecao.has("ida")) {
+      throw new Error("A busca no SeatSpy não retornou dados (tempo esgotado). Tente de novo.");
+    }
+    if (params.idaEVolta && !porDirecao.has("volta")) {
+      throw new Error("A busca retornou só a ida; a volta não chegou a tempo. Tente de novo.");
+    }
+
+    onProgresso(1);
+    return { ida: porDirecao.get("ida")!, volta: porDirecao.get("volta") ?? null };
+  } finally {
+    page.off("response", aoResponder);
+  }
+}
+
+const CABINES = [
+  { campo: "economica", rotulo: "Econômica", corClasse: "cartao-economica" },
+  { campo: "premium", rotulo: "Premium", corClasse: "cartao-premium" },
+  { campo: "executiva", rotulo: "Executiva", corClasse: "cartao-executiva" },
+] as const;
+
+export function construirRelatorioSeatspy(dias: DiaSeatspy[], tetos: TetosSeatspy = {}): RelatorioSeatspy {
+  const secoes = CABINES.map(({ campo, rotulo, corClasse }) => {
+    const teto = tetos[campo];
+    const disponiveis = dias.filter((d) => {
+      const milhas = d[campo];
+      return milhas !== null && (teto == null || milhas <= teto);
+    });
+
+    if (disponiveis.length === 0) {
+      return {
+        rotulo,
+        corClasse,
+        menor: null,
+        maior: null,
+        dias: [],
+        texto: "Nenhuma disponibilidade encontrada nesse período.",
+      };
+    }
+
+    const diasFormatados = disponiveis.map((d) => ({
+      data: d.data,
+      valorK: Math.round(d[campo]! / 10) / 100,
+    }));
+    const valores = diasFormatados.map((d) => d.valorK);
+
+    return {
+      rotulo,
+      corClasse,
+      menor: Math.min(...valores),
+      maior: Math.max(...valores),
+      dias: diasFormatados,
+      texto: formatarListaPorMes(diasFormatados.map((d) => d.data)),
+    };
+  });
+
+  return { secoes };
+}
