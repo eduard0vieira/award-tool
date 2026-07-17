@@ -215,7 +215,7 @@ function parseValorK(valor: string): number | null {
   return Number.isNaN(num) ? null : num;
 }
 
-function formatarListaPorMes(datas: string[]): string {
+export function formatarListaPorMes(datas: string[]): string {
   const grupos = new Map<string, string[]>();
   for (const d of datas) {
     const [ano, mes, dia] = d.split("-") as [string, string, string];
