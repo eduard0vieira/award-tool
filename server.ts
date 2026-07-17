@@ -9,6 +9,15 @@ import {
   type Relatorio,
   type Sessao,
 } from "./bot.ts";
+import {
+  construirRelatorioSeatspy,
+  iniciarSessaoSeatspy,
+  pesquisarSeatspy,
+  type CompanhiaSeatspy,
+  type SecaoSeatspy,
+  type SessaoSeatspy,
+  type TetosSeatspy,
+} from "./bot-seatspy.ts";
 
 // A extração de preços lê as 4 cores (Economy/PremiumEconomy/Business/First)
 // de cada dia independente do valor de "cabins" mandado na URL — então o
@@ -20,11 +29,14 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 type InfoJanela = { atual: number; total: number; inicio: string; fim: string };
 
+type PernaSeatspy = { rotulo: string; secoes: SecaoSeatspy[] };
+
 type Job = {
   status: "running" | "done" | "erro";
   progresso: number; // 0..1
   janela?: InfoJanela;
   relatorio?: Relatorio;
+  pernas?: PernaSeatspy[]; // resultado das buscas via SeatSpy
   erro?: string;
   ouvintes: Set<Response>;
 };
@@ -48,6 +60,22 @@ async function getSessao(): Promise<Sessao> {
   }
   sessaoPromise = iniciarSessao(false);
   return sessaoPromise;
+}
+
+// Mesma lógica de reaproveitamento, mas pra sessão do SeatSpy (site próprio,
+// login próprio — independente da sessão do AwardTool).
+let sessaoSeatspyPromise: Promise<SessaoSeatspy> | null = null;
+async function getSessaoSeatspy(): Promise<SessaoSeatspy> {
+  if (sessaoSeatspyPromise) {
+    const sessao = await sessaoSeatspyPromise;
+    if (sessao.browser.isConnected() && !sessao.page.isClosed()) {
+      return sessao;
+    }
+    console.log("Sessão SeatSpy anterior foi fechada, abrindo uma nova...");
+    sessaoSeatspyPromise = null;
+  }
+  sessaoSeatspyPromise = iniciarSessaoSeatspy(false);
+  return sessaoSeatspyPromise;
 }
 
 let buscaEmAndamento = false;
@@ -114,15 +142,82 @@ async function executarJob(
   }
 }
 
+// Uma busca "Return" no SeatSpy já traz ida e volta juntas (e consome um
+// crédito só), então o job resolve as duas pernas de uma vez — diferente do
+// fluxo da TAP, em que o front pede uma perna por vez.
+async function executarJobSeatspy(
+  jobId: string,
+  params: {
+    companhia: CompanhiaSeatspy;
+    origem: string;
+    destino: string;
+    idaEVolta: boolean;
+    tetos: TetosSeatspy;
+  },
+) {
+  const job = jobs.get(jobId)!;
+  try {
+    const { page } = await getSessaoSeatspy();
+
+    const { ida, volta } = await pesquisarSeatspy(
+      page,
+      params,
+      (msg) => console.log(`[${jobId}] ${msg}`),
+      (fracao) => atualizarProgresso(jobId, fracao),
+    );
+
+    const pernas: PernaSeatspy[] = [
+      {
+        rotulo: params.idaEVolta
+          ? `Ida: ${params.origem} → ${params.destino}`
+          : `${params.origem} → ${params.destino}`,
+        secoes: construirRelatorioSeatspy(ida, params.tetos).secoes,
+      },
+    ];
+    if (volta) {
+      pernas.push({
+        rotulo: `Volta: ${params.destino} → ${params.origem}`,
+        secoes: construirRelatorioSeatspy(volta, params.tetos).secoes,
+      });
+    }
+
+    job.status = "done";
+    job.pernas = pernas;
+    emitirEvento(jobId, { tipo: "done", pernas });
+  } catch (err) {
+    const mensagemOriginal = err instanceof Error ? err.message : String(err);
+    const fechouNoMeio = /Target page, context or browser has been closed/i.test(mensagemOriginal);
+    job.status = "erro";
+    job.erro = fechouNoMeio
+      ? "A janela do navegador foi fechada durante a busca. Tente buscar de novo."
+      : mensagemOriginal;
+    emitirEvento(jobId, { tipo: "erro", mensagem: job.erro });
+  } finally {
+    buscaEmAndamento = false;
+    for (const res of job.ouvintes) res.end();
+  }
+}
+
 const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
+function tetoDe(valor: unknown): number | null {
+  const num = Number(valor);
+  return Number.isFinite(num) && num > 0 ? num : null;
+}
+
 app.post("/api/buscar", (req: Request, res: Response) => {
-  const { origem, destino } = req.body ?? {};
+  const { fonte, origem, destino, companhia, idaEVolta, tetos } = req.body ?? {};
 
   if (!origem || !destino) {
     res.status(400).json({ erro: "origem e destino são obrigatórios." });
+    return;
+  }
+
+  const ehSeatspy = fonte === "seatspy";
+  if (ehSeatspy && companhia !== "IB" && companhia !== "BA") {
+    res.status(400).json({ erro: "companhia deve ser IB ou BA para buscas no SeatSpy." });
     return;
   }
 
@@ -135,10 +230,24 @@ app.post("/api/buscar", (req: Request, res: Response) => {
   const jobId = randomUUID();
   jobs.set(jobId, { status: "running", progresso: 0, ouvintes: new Set() });
 
-  executarJob(jobId, {
-    origem: String(origem).toUpperCase(),
-    destino: String(destino).toUpperCase(),
-  });
+  if (ehSeatspy) {
+    executarJobSeatspy(jobId, {
+      companhia,
+      origem: String(origem).toUpperCase(),
+      destino: String(destino).toUpperCase(),
+      idaEVolta: Boolean(idaEVolta),
+      tetos: {
+        economica: tetoDe(tetos?.economica),
+        premium: tetoDe(tetos?.premium),
+        executiva: tetoDe(tetos?.executiva),
+      },
+    });
+  } else {
+    executarJob(jobId, {
+      origem: String(origem).toUpperCase(),
+      destino: String(destino).toUpperCase(),
+    });
+  }
 
   res.json({ jobId });
 });
@@ -163,7 +272,8 @@ app.get("/api/buscar/:jobId/eventos", (req: Request, res: Response) => {
     res.write(`data: ${JSON.stringify({ tipo: "janela", ...job.janela })}\n\n`);
   }
   if (job.status === "done") {
-    res.write(`data: ${JSON.stringify({ tipo: "done", relatorio: job.relatorio })}\n\n`);
+    const dado = job.pernas ? { tipo: "done", pernas: job.pernas } : { tipo: "done", relatorio: job.relatorio };
+    res.write(`data: ${JSON.stringify(dado)}\n\n`);
     res.end();
     return;
   }
