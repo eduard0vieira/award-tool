@@ -177,7 +177,7 @@ app.get("/api/buscar/:jobId/eventos", (req: Request, res: Response) => {
   req.on("close", () => job.ouvintes.delete(res));
 });
 
-const PORTA = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+const PORTA = process.env.PORT ? parseInt(process.env.PORT, 10) : 5555;
 app.listen(PORTA, () => {
   console.log(`Servidor rodando em http://localhost:${PORTA}`);
 });
