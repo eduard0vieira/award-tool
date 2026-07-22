@@ -81,7 +81,22 @@
         </div>
       </section>
 
+      <nav id="sub-abas-resultado" class="sub-abas" hidden>
+        <button type="button" class="sub-aba-btn ativo" data-subaba="datas">Datas</button>
+        <button type="button" class="sub-aba-btn" data-subaba="upgrade">Upgrade</button>
+      </nav>
+
       <section id="resultado" hidden></section>
+
+      <section id="subpainel-upgrade" hidden>
+        <p class="upgrade-explicacao">
+          Dias em que Econômica e Executiva têm disponibilidade juntas — nesses dias dá pra
+          emitir a passagem em Econômica e usar o upgrade da TAP pra ficar mais barato do que
+          emitir direto em Executiva.
+        </p>
+        <p id="upgrade-vazio" class="historico-vazio" hidden>Nenhum dia com as duas cabines disponíveis nesse período.</p>
+        <div id="lista-upgrade" class="lista-upgrade"></div>
+      </section>
     </section>
 
     <section id="painel-historico" class="painel" hidden>
@@ -98,22 +113,24 @@
     <div class="perna">
       <h2 class="perna-titulo"></h2>
       <div class="colunas">
-        <div class="coluna coluna-executiva">
-          <div class="coluna-cabecalho">
+        <details class="coluna coluna-executiva" open>
+          <summary class="coluna-cabecalho">
+            <span class="chevron" aria-hidden="true">›</span>
             <h3>Executiva</h3>
             <button type="button" class="btn-copiar">Copiar</button>
-          </div>
+          </summary>
           <p class="coluna-resumo"></p>
           <div class="cartoes"></div>
-        </div>
-        <div class="coluna coluna-economica">
-          <div class="coluna-cabecalho">
+        </details>
+        <details class="coluna coluna-economica" open>
+          <summary class="coluna-cabecalho">
+            <span class="chevron" aria-hidden="true">›</span>
             <h3>Econômica</h3>
             <button type="button" class="btn-copiar">Copiar</button>
-          </div>
+          </summary>
           <p class="coluna-resumo"></p>
           <div class="cartoes"></div>
-        </div>
+        </details>
       </div>
     </div>
   </template>

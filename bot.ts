@@ -147,8 +147,37 @@ async function pesquisarJanela(
     `Buscando de ${dataInicio.toLocaleDateString()} a ${dataFim.toLocaleDateString()}...`,
   );
   onProgresso(fracaoBase);
-  await page.goto(resultsUrl);
-  await page.waitForLoadState("domcontentloaded");
+
+  // Bug conhecido do AwardTool: na primeira busca de cada sessão (login
+  // recente), ele às vezes não reconhece o plano Pro da conta ainda e recusa
+  // a janela com um modal ("Search range is too broad"), mesmo ela sendo do
+  // tamanho de sempre. Fechar o modal e repetir a mesma busca resolve — o
+  // plano já é reconhecido normalmente da segunda tentativa em diante.
+  const MAX_TENTATIVAS_MODAL = 3;
+  for (let tentativa = 1; ; tentativa++) {
+    await page.goto(resultsUrl);
+    await page.waitForLoadState("domcontentloaded");
+
+    const apareceuModal = await page
+      .getByText(/search range is too broad/i)
+      .first()
+      .waitFor({ state: "visible", timeout: 5000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!apareceuModal) break;
+
+    if (tentativa >= MAX_TENTATIVAS_MODAL) {
+      throw new Error(
+        `O AwardTool continua recusando essa janela como "muito ampla" mesmo depois de ${MAX_TENTATIVAS_MODAL} tentativas — pode não ser mais o bug de reconhecimento do plano na primeira busca.`,
+      );
+    }
+    onLog(`  (AwardTool não reconheceu o plano Pro nessa tentativa — fechando aviso e buscando de novo [${tentativa}/${MAX_TENTATIVAS_MODAL}]...)`);
+    const botaoOk = page.getByRole("button", { name: /got it/i }).first();
+    if (await botaoOk.isVisible().catch(() => false)) {
+      await botaoOk.click();
+    }
+    await page.waitForTimeout(1500);
+  }
 
   // Os preços por dia só ficam corretos depois que o long polling de voos
   // termina de verdade. Isso demora pelo menos ~35s, e o aviso de "carregando"

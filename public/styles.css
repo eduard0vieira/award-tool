@@ -2,6 +2,13 @@
   box-sizing: border-box;
 }
 
+/* Garante que o atributo hidden sempre esconda o elemento, mesmo quando ele
+   (ou uma classe nele) declara display:flex/grid pra quando está visível —
+   sem isso, seletores por id/classe (mais específicos que [hidden]) vencem. */
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -63,6 +70,105 @@ h3 {
 .aba-btn.ativo {
   color: #e6e6e6;
   border-bottom: 2px solid #4c8bf5;
+}
+
+.sub-abas {
+  display: flex;
+  gap: 4px;
+  margin: 20px 0 16px;
+  border-bottom: 1px solid #262b36;
+}
+
+.sub-aba-btn {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  color: #9aa0aa;
+  font-weight: 600;
+  font-size: 13px;
+  padding: 8px 4px;
+  margin-right: 18px;
+  border-bottom: 2px solid transparent;
+}
+
+.sub-aba-btn:hover:not(:disabled) {
+  background: transparent;
+  color: #e6e6e6;
+}
+
+.sub-aba-btn.ativo {
+  color: #7bb0ff;
+  border-bottom: 2px solid #4c8bf5;
+}
+
+.upgrade-explicacao {
+  font-size: 13px;
+  color: #9aa0aa;
+  line-height: 1.5;
+  margin: 0 0 20px;
+  max-width: 640px;
+}
+
+.lista-upgrade {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.perna-upgrade {
+  background: #171a21;
+  border: 1px solid #262b36;
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+
+.upgrade-titulo {
+  font-size: 14px;
+  font-weight: 600;
+  color: #e6e6e6;
+  margin: 0;
+}
+
+.upgrade-lista {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.upgrade-lista .mes-titulo {
+  margin: 4px 0 0;
+}
+
+.upgrade-lista .mes-titulo:first-child {
+  margin-top: 0;
+}
+
+.upgrade-linhas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.upgrade-linha {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #0f1115;
+  border: 1px solid #262b36;
+  border-radius: 8px;
+  padding: 5px 8px 5px 6px;
+}
+
+.upgrade-dia {
+  font-size: 12px;
+  font-weight: 700;
+  color: #e6e6e6;
+  background: #1d212b;
+  border-radius: 5px;
+  min-width: 22px;
+  text-align: center;
+  padding: 2px 5px;
 }
 
 .historico-vazio {
@@ -445,8 +551,37 @@ button:hover:not(:disabled) {
 .coluna-cabecalho {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 8px;
   margin-bottom: 6px;
+}
+
+/* .coluna e .perna-upgrade viraram <details>, com esse header como <summary> —
+   removemos o marcador nativo e usamos um chevron próprio que gira ao abrir. */
+summary.coluna-cabecalho {
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+summary.coluna-cabecalho::-webkit-details-marker {
+  display: none;
+}
+
+.coluna-cabecalho .chevron {
+  flex-shrink: 0;
+  color: #6b7280;
+  font-size: 15px;
+  transition: transform 0.15s ease;
+}
+
+details[open] > .coluna-cabecalho .chevron {
+  transform: rotate(90deg);
+}
+
+.coluna-cabecalho h3,
+.coluna-cabecalho .upgrade-titulo {
+  flex: 1;
+  min-width: 0;
 }
 
 .btn-copiar {

@@ -17,6 +17,11 @@ const resultado = document.getElementById("resultado");
 const tplPerna = document.getElementById("tpl-perna");
 const abasBtns = document.querySelectorAll(".aba-btn");
 const painelBuscar = document.getElementById("painel-buscar");
+const subAbasResultado = document.getElementById("sub-abas-resultado");
+const subAbaBtns = document.querySelectorAll(".sub-aba-btn");
+const subpainelUpgrade = document.getElementById("subpainel-upgrade");
+const listaUpgrade = document.getElementById("lista-upgrade");
+const upgradeVazio = document.getElementById("upgrade-vazio");
 const painelHistorico = document.getElementById("painel-historico");
 const listaHistorico = document.getElementById("lista-historico");
 const historicoVazio = document.getElementById("historico-vazio");
@@ -33,6 +38,10 @@ const PROGRAMA_LABEL = { tap: "TAP", IB: "Iberia", BA: "British Airways" };
 // Registros antigos do histórico (antes do seletor de programa) eram sempre TAP.
 const programaDe = (item) => item.programa || "tap";
 
+// Datas de Executiva/Econômica da última busca, por perna, pra aba Upgrade
+// cruzar. Não persiste (some ao recarregar a página), igual à seção Resultado.
+let pernasParaUpgrade = [];
+
 selectPrograma.addEventListener("change", () => {
   linhaTetos.hidden = selectPrograma.value === "tap";
 });
@@ -45,6 +54,19 @@ abasBtns.forEach((btn) => {
     painelBuscar.hidden = aba !== "buscar";
     painelHistorico.hidden = aba !== "historico";
     if (aba === "historico") renderizarHistorico();
+  });
+});
+
+// Sub-abas dentro de Buscar: alternam entre as datas normais e o cruzamento
+// de upgrade, sem sair da tela de resultado.
+subAbaBtns.forEach((btn) => {
+  btn.addEventListener("click", () => {
+    subAbaBtns.forEach((b) => b.classList.remove("ativo"));
+    btn.classList.add("ativo");
+    const sub = btn.dataset.subaba;
+    resultado.hidden = sub !== "datas";
+    subpainelUpgrade.hidden = sub !== "upgrade";
+    if (sub === "upgrade") renderizarUpgrade();
   });
 });
 
@@ -399,6 +421,137 @@ function formatarPorMes(dias) {
     });
 }
 
+// Mesmo agrupamento por mês do formatarPorMes, mas mantendo o objeto do dia
+// inteiro (não só o número), pra aba Upgrade poder mostrar os dois preços.
+function agruparPorMesCompleto(itens) {
+  const grupos = new Map();
+  for (const item of itens) {
+    const [ano, mes] = item.data.split("-");
+    const chave = `${ano}-${mes}`;
+    if (!grupos.has(chave)) grupos.set(chave, []);
+    grupos.get(chave).push(item);
+  }
+  return Array.from(grupos.keys())
+    .sort()
+    .map((chave) => {
+      const [ano, mesNum] = chave.split("-");
+      return { titulo: `${MESES_PT[parseInt(mesNum, 10) - 1]} ${ano}`, itens: grupos.get(chave) };
+    });
+}
+
+function textoDatasPorMes(datas) {
+  return agruparPorMesCompleto(datas.map((data) => ({ data })))
+    .map((g) => `${g.titulo}: ${g.itens.map((it) => it.data.split("-")[2]).join(", ")}`)
+    .join("\n");
+}
+
+// Dias em que Executiva e Econômica têm disponibilidade no mesmo dia — é
+// nesses dias que dá pra emitir a passagem em Econômica e pedir upgrade pra
+// Executiva na TAP, saindo mais barato que emitir direto em Executiva.
+function calcularUpgrade(diasExecutiva, diasEconomica) {
+  const mapaEconomica = new Map((diasEconomica || []).map((d) => [d.data, d.valorK]));
+  return (diasExecutiva || [])
+    .filter((d) => mapaEconomica.has(d.data))
+    .map((d) => ({ data: d.data, execK: d.valorK, econK: mapaEconomica.get(d.data) }))
+    .sort((a, b) => a.data.localeCompare(b.data));
+}
+
+function extrairDiasPorRotulo(secoes, rotulo) {
+  return secoes.find((s) => s.rotulo === rotulo)?.dias || [];
+}
+
+function renderizarUpgrade() {
+  listaUpgrade.innerHTML = "";
+  upgradeVazio.hidden = pernasParaUpgrade.length > 0;
+  if (pernasParaUpgrade.length === 0) return;
+
+  for (const perna of pernasParaUpgrade) {
+    const cruzadas = calcularUpgrade(perna.executiva, perna.economica);
+
+    // <details> deixa cada perna colapsável — pernas sem cruzamento já
+    // nascem fechadas, pra sobrar espaço pras que têm datas de verdade.
+    const bloco = document.createElement("details");
+    bloco.className = "perna-upgrade";
+    bloco.open = cruzadas.length > 0;
+
+    const cabecalho = document.createElement("summary");
+    cabecalho.className = "coluna-cabecalho";
+
+    const chevron = document.createElement("span");
+    chevron.className = "chevron";
+    chevron.setAttribute("aria-hidden", "true");
+    chevron.textContent = "›";
+    cabecalho.appendChild(chevron);
+
+    const titulo = document.createElement("h3");
+    titulo.className = "upgrade-titulo";
+    titulo.textContent = perna.rotulo;
+    cabecalho.appendChild(titulo);
+
+    if (cruzadas.length > 0) {
+      const btnCopiar = document.createElement("button");
+      btnCopiar.type = "button";
+      btnCopiar.className = "btn-copiar";
+      btnCopiar.textContent = "Copiar datas";
+      btnCopiar.onclick = (evento) => {
+        // Impede que o clique no botão (dentro do <summary>) também colapse o bloco.
+        evento.preventDefault();
+        evento.stopPropagation();
+        navigator.clipboard.writeText(textoDatasPorMes(cruzadas.map((c) => c.data)));
+        btnCopiar.textContent = "Copiado!";
+        setTimeout(() => (btnCopiar.textContent = "Copiar datas"), 1500);
+      };
+      cabecalho.appendChild(btnCopiar);
+    }
+    bloco.appendChild(cabecalho);
+
+    const resumo = document.createElement("p");
+    resumo.className = "coluna-resumo";
+    resumo.textContent =
+      cruzadas.length > 0
+        ? `${cruzadas.length} dia(s) com as duas cabines disponíveis.`
+        : "Nenhum dia com Executiva e Econômica juntas nesse período.";
+    bloco.appendChild(resumo);
+
+    if (cruzadas.length > 0) {
+      const lista = document.createElement("div");
+      lista.className = "upgrade-lista";
+      for (const grupo of agruparPorMesCompleto(cruzadas)) {
+        const tituloMes = document.createElement("div");
+        tituloMes.className = "mes-titulo";
+        tituloMes.textContent = grupo.titulo;
+        lista.appendChild(tituloMes);
+
+        const linhas = document.createElement("div");
+        linhas.className = "upgrade-linhas";
+        for (const item of grupo.itens) {
+          const linha = document.createElement("div");
+          linha.className = "upgrade-linha";
+
+          const dia = document.createElement("span");
+          dia.className = "upgrade-dia";
+          dia.textContent = item.data.split("-")[2];
+
+          const exec = document.createElement("span");
+          exec.className = "cartao cartao-executiva";
+          exec.textContent = `Exec ${item.execK}K`;
+
+          const econ = document.createElement("span");
+          econ.className = "cartao cartao-economica";
+          econ.textContent = `Econ ${item.econK}K`;
+
+          linha.append(dia, exec, econ);
+          linhas.appendChild(linha);
+        }
+        lista.appendChild(linhas);
+      }
+      bloco.appendChild(lista);
+    }
+
+    listaUpgrade.appendChild(bloco);
+  }
+}
+
 function renderizarColuna(colunaEl, secao, corClasse) {
   const resumoEl = colunaEl.querySelector(".coluna-resumo");
   const cartoesEl = colunaEl.querySelector(".cartoes");
@@ -407,8 +560,10 @@ function renderizarColuna(colunaEl, secao, corClasse) {
   if (!secao.dias || secao.dias.length === 0) {
     resumoEl.textContent = "Sem disponibilidade nesse período.";
     btnCopiar.hidden = true;
+    colunaEl.open = false;
     return;
   }
+  colunaEl.open = true;
 
   resumoEl.textContent = `${secao.menor}K–${secao.maior}K · ${secao.dias.length} dia(s)`;
 
@@ -432,7 +587,9 @@ function renderizarColuna(colunaEl, secao, corClasse) {
   }
 
   btnCopiar.hidden = false;
-  btnCopiar.onclick = () => {
+  btnCopiar.onclick = (evento) => {
+    evento.preventDefault();
+    evento.stopPropagation();
     navigator.clipboard.writeText(secao.texto);
     btnCopiar.textContent = "Copiado!";
     setTimeout(() => (btnCopiar.textContent = "Copiar"), 1500);
@@ -462,13 +619,14 @@ function renderizarPernaSecoes(rotulo, secoes) {
   const colunas = document.createElement("div");
   colunas.className = "colunas colunas-3";
   for (const secao of secoes) {
-    const col = document.createElement("div");
+    const col = document.createElement("details");
     col.className = "coluna";
     col.innerHTML = `
-      <div class="coluna-cabecalho">
+      <summary class="coluna-cabecalho">
+        <span class="chevron" aria-hidden="true">›</span>
         <h3></h3>
         <button type="button" class="btn-copiar">Copiar</button>
-      </div>
+      </summary>
       <p class="coluna-resumo"></p>
       <div class="cartoes"></div>`;
     col.querySelector("h3").textContent = secao.rotulo;
@@ -489,18 +647,35 @@ async function iniciarBusca(programa, origem, destino, idaEVolta) {
   definirCarregando(true);
   resultado.hidden = true;
   resultado.innerHTML = "";
+  subAbasResultado.hidden = true;
+  subpainelUpgrade.hidden = true;
+  subAbaBtns.forEach((b) => b.classList.remove("ativo"));
+  document.querySelector('.sub-aba-btn[data-subaba="datas"]').classList.add("ativo");
   progresso.hidden = false;
+  pernasParaUpgrade = [];
 
   try {
     if (programa === "tap") {
       const rotuloIda = idaEVolta ? "Buscando ida..." : "Buscando...";
       const relatorioIda = await buscarNoServidor({ origem, destino }, rotuloIda);
-      renderizarPerna(idaEVolta ? `Ida: ${origem} → ${destino}` : `${origem} → ${destino}`, relatorioIda);
+      const rotuloPernaIda = idaEVolta ? `Ida: ${origem} → ${destino}` : `${origem} → ${destino}`;
+      renderizarPerna(rotuloPernaIda, relatorioIda);
+      pernasParaUpgrade.push({
+        rotulo: rotuloPernaIda,
+        executiva: relatorioIda.executivas.dias,
+        economica: relatorioIda.economicas.dias,
+      });
       salvarNoHistorico(origem, destino, "tap");
 
       if (idaEVolta) {
         const relatorioVolta = await buscarNoServidor({ origem: destino, destino: origem }, "Buscando volta...");
-        renderizarPerna(`Volta: ${destino} → ${origem}`, relatorioVolta);
+        const rotuloPernaVolta = `Volta: ${destino} → ${origem}`;
+        renderizarPerna(rotuloPernaVolta, relatorioVolta);
+        pernasParaUpgrade.push({
+          rotulo: rotuloPernaVolta,
+          executiva: relatorioVolta.executivas.dias,
+          economica: relatorioVolta.economicas.dias,
+        });
         promoverUltimaParaIdaEVolta(origem, destino, "tap");
       }
     } else {
@@ -520,11 +695,19 @@ async function iniciarBusca(programa, origem, destino, idaEVolta) {
         },
         idaEVolta ? "Buscando ida e volta..." : "Buscando...",
       );
-      for (const perna of pernas) renderizarPernaSecoes(perna.rotulo, perna.secoes);
+      for (const perna of pernas) {
+        renderizarPernaSecoes(perna.rotulo, perna.secoes);
+        pernasParaUpgrade.push({
+          rotulo: perna.rotulo,
+          executiva: extrairDiasPorRotulo(perna.secoes, "Executiva"),
+          economica: extrairDiasPorRotulo(perna.secoes, "Econômica"),
+        });
+      }
       salvarNoHistorico(origem, destino, programa, idaEVolta);
     }
 
     resultado.hidden = false;
+    subAbasResultado.hidden = false;
   } catch (err) {
     mostrarAviso(err.message || "Erro inesperado.");
   } finally {

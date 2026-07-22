@@ -55,7 +55,11 @@ export async function iniciarSessaoSeatspy(headless = false): Promise<SessaoSeat
   const context = await browser.newContext();
   const page = await context.newPage();
 
-  await page.goto(process.env.SEATSPY_LOGIN_URL!);
+  // O evento "load" (padrão do goto) só dispara quando todo recurso de
+  // terceiros termina (Freshworks, Sentry, Clarity...), e qualquer um deles
+  // travando trava o goto também. "domcontentloaded" dispara assim que o HTML
+  // em si carrega, que é tudo que os campos de login abaixo precisam.
+  await page.goto(process.env.SEATSPY_LOGIN_URL!, { waitUntil: "domcontentloaded" });
   await page.locator("#email").fill(process.env.SEATSPY_EMAIL!);
   await page.locator("#password").fill(process.env.SEATSPY_PASSWORD!);
   await page.locator("#submit").click();
@@ -172,7 +176,10 @@ export async function pesquisarSeatspy(
   const destino = params.destino.toUpperCase();
 
   onLog(`Abrindo formulário de busca (${NOME_COMPANHIA[params.companhia]})...`);
-  await page.goto("https://www.seatspy.com/");
+  // Mesmo motivo do login: não espera o "load" completo (scripts de
+  // terceiros), só o HTML — o resto do fluxo já espera o Tom Select carregar
+  // via selecionarCompanhia/selecionarAeroporto.
+  await page.goto("https://www.seatspy.com/", { waitUntil: "domcontentloaded" });
 
   // As respostas não dizem qual direção são; identifica pelo IATA de origem
   // dos voos, com fallback pra ordem de chegada (ida vem primeiro).
