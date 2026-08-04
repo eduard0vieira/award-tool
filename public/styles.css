@@ -688,8 +688,11 @@ button:hover:not(:disabled) {
   gap: 16px;
 }
 
+/* Colunas do SeatSpy: o número de cabines varia (3 sem primeira classe, 4
+   com), então o grid se ajusta sozinho em vez de ter uma regra por
+   quantidade — com 4 elas ficam lado a lado até faltar espaço. */
 .colunas-3 {
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
 }
 
 @media (max-width: 620px) {
@@ -711,6 +714,9 @@ button:hover:not(:disabled) {
   align-items: center;
   gap: 8px;
   margin-bottom: 6px;
+  /* Com 4 cabines as colunas ficam estreitas: o botão Copiar desce de linha
+     em vez de o título ser partido no meio da palavra. */
+  flex-wrap: wrap;
 }
 
 /* .coluna e .perna-upgrade viraram <details>, com esse header como <summary> —
@@ -739,7 +745,14 @@ details[open] > .coluna-cabecalho .chevron {
 .coluna-cabecalho h3,
 .coluna-cabecalho .upgrade-titulo {
   flex: 1;
-  min-width: 0;
+  /* min-content (e não 0) impede o título de encolher além da própria
+     palavra e invadir o botão Copiar nas colunas estreitas de 4 cabines —
+     quando não cabe, o botão desce de linha pelo flex-wrap do container. */
+  min-width: min-content;
+}
+
+.coluna-cabecalho .btn-copiar {
+  flex-shrink: 0;
 }
 
 .btn-copiar {
