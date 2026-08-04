@@ -883,6 +883,14 @@ details[open] > .coluna-cabecalho .chevron {
   gap: 12px;
 }
 
+.alerta-titulo {
+  font-size: 11px;
+  font-weight: 700;
+  color: #9aa0aa;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
 .alerta-galeria {
   display: flex;
   gap: 12px;

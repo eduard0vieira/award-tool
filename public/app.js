@@ -983,9 +983,18 @@ function mostrarBotoesAlerta(card, fonte, origem, destino, opcoes) {
   card.raiz.appendChild(barra);
 }
 
-function mostrarAlertaGerado(card, { imagens, legenda }) {
+// Monta um bloco "imagens + legenda + copiar" — usado tanto pro alerta
+// principal quanto pro complementar de combinações.
+function blocoDeAlerta(titulo, imagens, legenda) {
   const bloco = document.createElement("div");
   bloco.className = "alerta-resultado";
+
+  if (titulo) {
+    const tituloEl = document.createElement("div");
+    tituloEl.className = "alerta-titulo";
+    tituloEl.textContent = titulo;
+    bloco.appendChild(tituloEl);
+  }
 
   const galeria = document.createElement("div");
   galeria.className = "alerta-galeria";
@@ -1018,7 +1027,17 @@ function mostrarAlertaGerado(card, { imagens, legenda }) {
   });
   bloco.appendChild(btnCopiar);
 
-  card.raiz.appendChild(bloco);
+  return bloco;
+}
+
+function mostrarAlertaGerado(card, { imagens, legenda, imagemCombo, legendaCombo }) {
+  // Combos só vem quando as datas de ida e volta se cruzam — é o alerta que
+  // vocês mandam depois do principal, com as combinações já prontas.
+  const temCombo = Boolean(imagemCombo);
+  card.raiz.appendChild(blocoDeAlerta(temCombo ? "Alerta principal" : "", imagens, legenda));
+  if (temCombo) {
+    card.raiz.appendChild(blocoDeAlerta("Combinações ida + volta", [imagemCombo], legendaCombo || ""));
+  }
 }
 
 // AA: uma cabine por busca, cada direção é um job próprio (como na TAP).

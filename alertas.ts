@@ -50,6 +50,10 @@ export type PedidoAlerta = {
 export type AlertaGerado = {
   imagens: string[]; // caminhos públicos (/alertas/...)
   legenda: string;
+  // Alerta complementar de combinações ida+volta — só existe quando as datas
+  // das duas direções se cruzam (ver RenderAlerta.jsx no portal).
+  imagemCombo?: string;
+  legendaCombo?: string;
 };
 
 function montarRota(pedido: PedidoAlerta) {
@@ -136,7 +140,18 @@ export async function gerarAlerta(
     }
 
     const legenda = (await page.locator("#render-legenda").textContent()) ?? "";
-    return { imagens, legenda };
+
+    const alerta: AlertaGerado = { imagens, legenda };
+
+    const cardCombo = page.locator("#render-combo");
+    if (await cardCombo.count()) {
+      const nomeCombo = `alerta-${pedido.origem}-${pedido.destino}-combos.png`;
+      await cardCombo.screenshot({ path: path.join(DIR_ALERTAS, pasta, nomeCombo) });
+      alerta.imagemCombo = `/alertas/${pasta}/${nomeCombo}`;
+      alerta.legendaCombo = (await page.locator("#render-legenda-combo").textContent()) ?? "";
+    }
+
+    return alerta;
   } finally {
     await browser.close();
   }
