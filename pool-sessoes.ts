@@ -19,12 +19,24 @@ export class PoolSessoes<S> {
   private async sessaoDoSlot(indice: number): Promise<S> {
     const slot = this.slots[indice]!;
     if (slot.sessaoPromise) {
-      const sessao = await slot.sessaoPromise;
-      if (this.sessaoViva(sessao)) return sessao;
+      try {
+        const sessao = await slot.sessaoPromise;
+        if (this.sessaoViva(sessao)) return sessao;
+      } catch {
+        // A criação anterior falhou (ex.: site bloqueou o acesso) — cai fora
+        // do if e tenta criar de novo em vez de repetir o mesmo erro.
+      }
       slot.sessaoPromise = null;
     }
-    slot.sessaoPromise = this.criarSessao(false);
-    return slot.sessaoPromise;
+
+    const promessa = this.criarSessao(false);
+    slot.sessaoPromise = promessa;
+    // Sem isso, uma falha na criação deixaria o slot preso numa promise
+    // rejeitada e toda busca seguinte nele falharia igual até reiniciar.
+    promessa.catch(() => {
+      if (slot.sessaoPromise === promessa) slot.sessaoPromise = null;
+    });
+    return promessa;
   }
 
   async adquirir(): Promise<{ sessao: S; indice: number }> {

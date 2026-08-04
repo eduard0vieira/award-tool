@@ -7,7 +7,8 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "tsx index.ts",
     "server": "tsx server.ts",
-    "tunnel": "ngrok http 5555"
+    "tunnel": "ngrok http 5555",
+    "chrome": "'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' --remote-debugging-port=9222"
   },
   "keywords": [],
   "author": "",
@@ -16,7 +17,7 @@
   "dependencies": {
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
-    "playwright": "^1.61.1"
+    "playwright": "^1.62.1"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",

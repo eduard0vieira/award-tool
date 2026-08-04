@@ -80,10 +80,12 @@ const poolSeatspy = new PoolSessoes<SessaoSeatspy>(
   (s) => s.browser.isConnected() && !s.page.isClosed(),
 );
 
+// A sessão da AA pode ser uma aba no Chrome do próprio usuário (ver
+// iniciarSessaoAA) — daí o browser poder ser null e a checagem olhar a aba.
 const poolAA = new PoolSessoes<SessaoAA>(
   CONCORRENCIA_AA,
   (headless) => iniciarSessaoAA(headless),
-  (s) => s.browser.isConnected() && !s.page.isClosed(),
+  (s) => !s.page.isClosed() && (s.browser?.isConnected() ?? true),
 );
 
 function emitirEvento(jobId: string, dado: object) {

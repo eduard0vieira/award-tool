@@ -1,4 +1,6 @@
 import "dotenv/config";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import {
   LimitadorFrequencia,
@@ -24,10 +26,13 @@ import {
 // - O request aceita cabine e maxStops (0 = só direto, 1 = até 1 conexão)
 //   server-side, então o filtro de conexões é o mesmo do site.
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 export type SessaoAA = {
-  browser: Browser;
+  browser: Browser | null; // null em contexto persistente (ver iniciarSessaoAA)
   context: BrowserContext;
   page: Page;
+  viaCdp: boolean; // true = aba no Chrome do usuário (não fechar o navegador!)
 };
 
 export type CabineAA = "economica" | "premium" | "executiva";
@@ -70,21 +75,73 @@ const limitadorAA = new LimitadorFrequencia(INTERVALO_MIN_AA_MS);
 const MAX_MESES_FALHAS_SEGUIDAS = 3;
 const MESES_A_VARRER = 12;
 
+// Onde o Chrome do usuário expõe o DevTools Protocol (ver `npm run chrome`).
+const AA_CDP_URL = process.env.AA_CDP_URL || "http://localhost:9222";
+// Perfil próprio do bot, usado no modo avulso. Diferente de um contexto novo
+// a cada busca, ele acumula cookies/histórico entre execuções — o Akamai
+// confia mais num perfil com passado do que num recém-criado.
+const DIR_PERFIL_AA = path.join(__dirname, ".perfil-aa");
+
+// Duas formas de sessão, nessa ordem:
+//
+// 1. Aba no SEU Chrome (preferida): se o Chrome estiver rodando com a porta
+//    de depuração aberta (`npm run chrome`), o bot abre só mais uma aba nele
+//    e herda seu perfil real — mesmos cookies, mesmo histórico, mesma
+//    reputação de sempre. É o que resolve o "Access Denied" que só acontece
+//    no navegador automatizado, já que pro Akamai é a sua navegação normal.
+// 2. Chrome próprio com perfil persistente (fallback automático): funciona
+//    sem preparo nenhum, mas parte de uma reputação zerada e pode apanhar do
+//    anti-bot até o perfil "esquentar".
 export async function iniciarSessaoAA(headless = false): Promise<SessaoAA> {
-  const browser = await chromium.launch({
-    headless,
-    channel: "chrome",
-    args: ["--disable-blink-features=AutomationControlled"],
-  });
-  const context = await browser.newContext();
-  const page = await context.newPage();
+  const sessao = (await conectarNoChromeDoUsuario()) ?? (await abrirChromePróprio(headless));
 
   // Aquecimento: sem passar pela home primeiro, o Akamai devolve 403 nas
   // URLs de /booking.
-  await page.goto("https://www.aa.com/", { waitUntil: "domcontentloaded", timeout: 60000 });
-  await page.waitForTimeout(4000);
+  await sessao.page.goto("https://www.aa.com/", { waitUntil: "domcontentloaded", timeout: 60000 });
+  await sessao.page.waitForTimeout(4000);
 
-  return { browser, context, page };
+  if (/access denied/i.test(await sessao.page.title())) {
+    throw new Error(
+      sessao.viaCdp
+        ? "A AA bloqueou o acesso mesmo pelo seu Chrome. Espere alguns minutos antes de tentar de novo."
+        : "A AA bloqueou o acesso ao navegador do bot. Rode `npm run chrome` (com o Chrome fechado antes) " +
+          "pra o bot buscar numa aba do seu próprio navegador, que costuma passar.",
+    );
+  }
+
+  return sessao;
+}
+
+async function conectarNoChromeDoUsuario(): Promise<SessaoAA | null> {
+  try {
+    const browser = await chromium.connectOverCDP(AA_CDP_URL, { timeout: 3000 });
+    // contexts()[0] é o perfil já aberto do usuário (com os cookies dele);
+    // newContext() criaria um anônimo, sem nenhuma dessa reputação.
+    const context = browser.contexts()[0];
+    if (!context) {
+      await browser.close();
+      return null;
+    }
+    console.log(`[AA] usando uma aba do seu Chrome (${AA_CDP_URL}).`);
+    return { browser, context, page: await context.newPage(), viaCdp: true };
+  } catch {
+    return null;
+  }
+}
+
+async function abrirChromePróprio(headless: boolean): Promise<SessaoAA> {
+  console.log(
+    "[AA] Chrome do usuário indisponível — abrindo navegador próprio. " +
+      "Pra usar o seu (menos bloqueios), feche o Chrome e rode `npm run chrome`.",
+  );
+  const context = await chromium.launchPersistentContext(DIR_PERFIL_AA, {
+    headless,
+    channel: "chrome",
+    args: ["--disable-blink-features=AutomationControlled"],
+    viewport: null,
+  });
+  const page = context.pages()[0] ?? (await context.newPage());
+  return { browser: context.browser(), context, page, viaCdp: false };
 }
 
 function dataISO(d: Date): string {
