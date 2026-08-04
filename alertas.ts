@@ -114,20 +114,25 @@ export async function gerarAlerta(
     await page.evaluate(() => document.fonts?.ready);
 
     const totalCards = await page.locator('[id^="render-card-"]').count();
+
+    // Mesmo padrão de nome do download manual do portal (ver App.jsx):
+    // "alerta-GRU-MIA.png", com sufixo -1/-2 quando o alerta divide em dois
+    // cards. Cada geração vai numa subpasta com timestamp pra alertas da
+    // mesma rota (ex.: Executiva e Econômica) não sobrescreverem um ao outro
+    // — o nome baixado continua sendo só o do arquivo.
     const agora = new Date();
-    const timestamp =
+    const pasta =
       `${agora.getFullYear()}${String(agora.getMonth() + 1).padStart(2, "0")}${String(agora.getDate()).padStart(2, "0")}` +
-      `-${String(agora.getHours()).padStart(2, "0")}${String(agora.getMinutes()).padStart(2, "0")}${String(agora.getSeconds()).padStart(2, "0")}`;
+      `-${String(agora.getHours()).padStart(2, "0")}${String(agora.getMinutes()).padStart(2, "0")}${String(agora.getSeconds()).padStart(2, "0")}` +
+      `-${slug(pedido.classe)}`;
+    fs.mkdirSync(path.join(DIR_ALERTAS, pasta), { recursive: true });
 
     const imagens: string[] = [];
     for (let i = 0; i < totalCards; i++) {
       const cardEl = page.locator(`#render-card-${i}`);
-      // Quando o alerta é denso demais, o portal divide em 2 cards: o
-      // primeiro é sempre a IDA e o segundo a VOLTA (ver computeCards).
-      const rotulo = totalCards > 1 ? (i === 0 ? "-ida" : "-volta") : "";
-      const nome = `alerta-${pedido.origem}-${pedido.destino}-${slug(pedido.classe)}${rotulo}-${timestamp}.png`;
-      await cardEl.screenshot({ path: path.join(DIR_ALERTAS, nome) });
-      imagens.push(`/alertas/${nome}`);
+      const nome = `alerta-${pedido.origem}-${pedido.destino}${totalCards > 1 ? `-${i + 1}` : ""}.png`;
+      await cardEl.screenshot({ path: path.join(DIR_ALERTAS, pasta, nome) });
+      imagens.push(`/alertas/${pasta}/${nome}`);
     }
 
     const legenda = (await page.locator("#render-legenda").textContent()) ?? "";
