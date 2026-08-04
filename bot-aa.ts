@@ -33,12 +33,13 @@ export type SessaoAA = {
   viaCdp: boolean; // true = aba no Chrome do usuário (não fechar o navegador!)
 };
 
-export type CabineAA = "economica" | "premium" | "executiva";
+export type CabineAA = "economica" | "premium" | "executiva" | "primeira";
 
 export const CABINE_AA_LABEL: Record<CabineAA, string> = {
   economica: "Econômica",
   premium: "Premium Economy",
   executiva: "Executiva",
+  primeira: "Primeira Classe",
 };
 
 // Valores aceitos no campo slices[].cabin do request (o site manda
@@ -46,7 +47,11 @@ export const CABINE_AA_LABEL: Record<CabineAA, string> = {
 const CABINE_AA_REQUEST: Record<CabineAA, string> = {
   economica: "COACH",
   premium: "PREMIUM_ECONOMY",
+  // "BUSINESS,FIRST" é o que o site manda ao escolher Business; conferido que
+  // devolve exatamente o mesmo que "BUSINESS" (a primeira classe é sempre mais
+  // cara, então nunca vira o menor valor do dia).
   executiva: "BUSINESS,FIRST",
+  primeira: "FIRST",
 };
 
 export type ParametrosAA = {

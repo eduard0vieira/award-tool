@@ -63,8 +63,8 @@ const PROGRAMA_LABEL = {
   VIR: "Virgin Atlantic",
 };
 
-const CABINE_AA_LABEL = { economica: "Econômica", premium: "Premium Economy", executiva: "Executiva" };
-const CABINE_AA_COR = { economica: "cartao-economica", premium: "cartao-premium", executiva: "cartao-executiva" };
+const CABINE_AA_LABEL = { economica: "Econômica", premium: "Premium Economy", executiva: "Executiva", primeira: "Primeira Classe" };
+const CABINE_AA_COR = { economica: "cartao-economica", premium: "cartao-premium", executiva: "cartao-executiva", primeira: "cartao-primeira" };
 // Registros antigos do histórico (antes do seletor de programa) eram sempre TAP.
 const programaDe = (item) => item.programa || "tap";
 
