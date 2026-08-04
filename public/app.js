@@ -754,12 +754,14 @@ async function iniciarBuscaTap(origem, destino, idaEVolta) {
     });
     salvarNoHistorico(origem, destino, "tap");
 
+    let relatorioVolta = null;
     if (idaEVolta) {
-      const { resultado: relatorioVolta, avisoParcial: avisoVolta } = await buscarNoServidor(
+      const { resultado, avisoParcial: avisoVolta } = await buscarNoServidor(
         card,
         { origem: destino, destino: origem },
         "Buscando volta...",
       );
+      relatorioVolta = resultado;
       if (avisoVolta) avisosParciais.push(avisoVolta);
       const rotuloPernaVolta = `Volta: ${destino} → ${origem}`;
       renderizarPerna(card.resultadoEl, rotuloPernaVolta, relatorioVolta);
@@ -778,6 +780,10 @@ async function iniciarBuscaTap(origem, destino, idaEVolta) {
       card.avisoEl.textContent = avisosParciais.join(" ");
       card.avisoEl.hidden = false;
     }
+    mostrarBotoesAlerta(card, "tap", origem, destino, [
+      { classe: "Executiva", secaoIda: relatorioIda.executivas, secaoVolta: relatorioVolta?.executivas },
+      { classe: "Econômica", secaoIda: relatorioIda.economicas, secaoVolta: relatorioVolta?.economicas },
+    ]);
   } catch (err) {
     card.definirStatus("Erro", "status-erro");
     card.avisoEl.textContent = err.message || "Erro inesperado.";
@@ -824,6 +830,14 @@ async function iniciarBuscaSeatspy(programa, origem, destino, idaEVolta) {
     card.definirStatus("Pronto", "status-pronto");
     card.resultadoEl.hidden = false;
     card.subAbasEl.hidden = false;
+    // pernas[0] = ida, pernas[1] = volta (quando ida e volta). O rótulo
+    // "Premium" do SeatSpy vira "Premium Economy" na nomenclatura do portal.
+    const secaoDe = (perna, rotulo) => perna?.secoes.find((s) => s.rotulo === rotulo);
+    mostrarBotoesAlerta(card, programa, origem, destino, [
+      { classe: "Econômica", secaoIda: secaoDe(pernas[0], "Econômica"), secaoVolta: secaoDe(pernas[1], "Econômica") },
+      { classe: "Premium Economy", secaoIda: secaoDe(pernas[0], "Premium"), secaoVolta: secaoDe(pernas[1], "Premium") },
+      { classe: "Executiva", secaoIda: secaoDe(pernas[0], "Executiva"), secaoVolta: secaoDe(pernas[1], "Executiva") },
+    ]);
   } catch (err) {
     card.definirStatus("Erro", "status-erro");
     card.avisoEl.textContent = err.message || "Erro inesperado.";
@@ -831,6 +845,115 @@ async function iniciarBuscaSeatspy(programa, origem, destino, idaEVolta) {
   } finally {
     card.progressoEl.hidden = true;
   }
+}
+
+// ─── Geração de alertas (conexão com o vcc-alertas-portal) ────────────────
+// Depois que uma busca termina, cada cabine com disponibilidade vira um
+// botão "Gerar alerta": o servidor renderiza o card oficial do portal e a
+// legenda de WhatsApp, e devolve as imagens prontas pra encaminhar no grupo.
+
+// Junta o menor/maior das duas direções (a legenda mostra uma faixa só).
+function faixaDeMilhas(secaoIda, secaoVolta) {
+  const menores = [secaoIda?.menor, secaoVolta?.menor].filter((v) => v != null);
+  const maiores = [secaoIda?.maior, secaoVolta?.maior].filter((v) => v != null);
+  return {
+    menorK: menores.length ? Math.min(...menores) : null,
+    maiorK: maiores.length ? Math.max(...maiores) : null,
+  };
+}
+
+function temDias(secao) {
+  return (secao?.dias?.length || 0) > 0;
+}
+
+// opcoes: [{ classe, secaoIda, secaoVolta }] — só viram botão as cabines com
+// alguma disponibilidade.
+function mostrarBotoesAlerta(card, fonte, origem, destino, opcoes) {
+  const comDados = opcoes.filter((o) => temDias(o.secaoIda) || temDias(o.secaoVolta));
+  if (comDados.length === 0) return;
+
+  const barra = document.createElement("div");
+  barra.className = "alerta-acoes";
+  const rotuloBarra = document.createElement("span");
+  rotuloBarra.className = "alerta-rotulo";
+  rotuloBarra.textContent = "Alerta pro grupo:";
+  barra.appendChild(rotuloBarra);
+
+  for (const opcao of comDados) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn-alerta";
+    btn.textContent = `📢 ${opcao.classe}`;
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      btn.textContent = "⏳ Gerando...";
+      try {
+        const resposta = await fetch("/api/alerta", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fonte,
+            origem,
+            destino,
+            classe: opcao.classe,
+            ...faixaDeMilhas(opcao.secaoIda, opcao.secaoVolta),
+            textoIda: temDias(opcao.secaoIda) ? opcao.secaoIda.texto : "",
+            textoVolta: temDias(opcao.secaoVolta) ? opcao.secaoVolta.texto : "",
+          }),
+        });
+        const corpo = await resposta.json();
+        if (!resposta.ok) throw new Error(corpo.erro || "Falha ao gerar o alerta.");
+        mostrarAlertaGerado(card, corpo);
+        btn.textContent = `✓ ${opcao.classe}`;
+      } catch (err) {
+        btn.textContent = `📢 ${opcao.classe}`;
+        card.avisoEl.textContent = err.message || "Falha ao gerar o alerta.";
+        card.avisoEl.hidden = false;
+      } finally {
+        btn.disabled = false;
+      }
+    });
+    barra.appendChild(btn);
+  }
+  card.raiz.appendChild(barra);
+}
+
+function mostrarAlertaGerado(card, { imagens, legenda }) {
+  const bloco = document.createElement("div");
+  bloco.className = "alerta-resultado";
+
+  const galeria = document.createElement("div");
+  galeria.className = "alerta-galeria";
+  for (const url of imagens) {
+    const link = document.createElement("a");
+    link.href = url;
+    link.target = "_blank";
+    link.download = url.split("/").pop();
+    const img = document.createElement("img");
+    img.src = url;
+    img.alt = "Imagem do alerta";
+    link.appendChild(img);
+    galeria.appendChild(link);
+  }
+  bloco.appendChild(galeria);
+
+  const legendaEl = document.createElement("pre");
+  legendaEl.className = "alerta-legenda";
+  legendaEl.textContent = legenda;
+  bloco.appendChild(legendaEl);
+
+  const btnCopiar = document.createElement("button");
+  btnCopiar.type = "button";
+  btnCopiar.className = "btn-copiar";
+  btnCopiar.textContent = "Copiar legenda";
+  btnCopiar.addEventListener("click", () => {
+    navigator.clipboard.writeText(legenda);
+    btnCopiar.textContent = "Copiado!";
+    setTimeout(() => (btnCopiar.textContent = "Copiar legenda"), 1500);
+  });
+  bloco.appendChild(btnCopiar);
+
+  card.raiz.appendChild(bloco);
 }
 
 // AA: uma cabine por busca, cada direção é um job próprio (como na TAP).
@@ -854,12 +977,14 @@ async function iniciarBuscaAA(origem, destino, cabine, maxConexoes, tetoK, idaEV
     renderizarPernaSecoes(card.resultadoEl, rotuloPernaIda, [{ ...secaoIda, corClasse: CABINE_AA_COR[cabine] }]);
     salvarNoHistorico(origem, destino, "AA", false, { cabine });
 
+    let secaoVolta = null;
     if (idaEVolta) {
-      const { resultado: secaoVolta, avisoParcial: avisoVolta } = await buscarNoServidor(
+      const { resultado, avisoParcial: avisoVolta } = await buscarNoServidor(
         card,
         { ...corpoBase, origem: destino, destino: origem },
         "Buscando volta...",
       );
+      secaoVolta = resultado;
       if (avisoVolta) avisosParciais.push(avisoVolta);
       renderizarPernaSecoes(card.resultadoEl, `Volta: ${destino} → ${origem}`, [
         { ...secaoVolta, corClasse: CABINE_AA_COR[cabine] },
@@ -873,6 +998,9 @@ async function iniciarBuscaAA(origem, destino, cabine, maxConexoes, tetoK, idaEV
       card.avisoEl.textContent = avisosParciais.join(" ");
       card.avisoEl.hidden = false;
     }
+    mostrarBotoesAlerta(card, "aa", origem, destino, [
+      { classe: CABINE_AA_LABEL[cabine] || cabine, secaoIda, secaoVolta },
+    ]);
   } catch (err) {
     card.definirStatus("Erro", "status-erro");
     card.avisoEl.textContent = err.message || "Erro inesperado.";

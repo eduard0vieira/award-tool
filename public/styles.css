@@ -816,6 +816,86 @@ details[open] > .coluna-cabecalho .chevron {
   width: 100%;
 }
 
+/* ─── Geração de alertas (conexão com o vcc-alertas-portal) ─── */
+
+.alerta-acoes {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #262b36;
+}
+
+.alerta-rotulo {
+  font-size: 12px;
+  font-weight: 600;
+  color: #9aa0aa;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.btn-alerta {
+  background: transparent;
+  border: 1px solid #3d3423;
+  color: #ffbc5c;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.btn-alerta:hover:not(:disabled) {
+  background: #2a2214;
+  border-color: #ffbc5c;
+}
+
+.alerta-resultado {
+  margin-top: 16px;
+  background: #171a21;
+  border: 1px solid #262b36;
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.alerta-galeria {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.alerta-galeria img {
+  width: 180px;
+  border-radius: 8px;
+  border: 1px solid #2e3440;
+  display: block;
+  transition: border-color 0.15s ease;
+}
+
+.alerta-galeria a:hover img {
+  border-color: #ffbc5c;
+}
+
+.alerta-legenda {
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #cfd3da;
+  background: #0f1115;
+  border: 1px solid #262b36;
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.alerta-resultado .btn-copiar {
+  align-self: flex-start;
+}
+
 .linha-tetos input {
   width: 140px;
   text-transform: none;

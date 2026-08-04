@@ -29,6 +29,7 @@ import {
 } from "./bot-aa.ts";
 import type { SecaoRelatorio } from "./comum.ts";
 import { PoolSessoes } from "./pool-sessoes.ts";
+import { DIR_ALERTAS, DIR_PORTAL_DIST, gerarAlerta, type PedidoAlerta } from "./alertas.ts";
 
 // A extração de preços lê as 4 cores (Economy/PremiumEconomy/Business/First)
 // de cada dia independente do valor de "cabins" mandado na URL — então o
@@ -296,6 +297,10 @@ if (AUTH_USER && AUTH_PASS) {
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
+// Build do portal de alertas (vcc-alertas-portal) e imagens de alerta já
+// geradas — ver alertas.ts.
+app.use("/portal", express.static(DIR_PORTAL_DIST));
+app.use("/alertas", express.static(DIR_ALERTAS));
 
 function tetoDe(valor: unknown): number | null {
   const num = Number(valor);
@@ -356,6 +361,39 @@ app.post("/api/buscar", (req: Request, res: Response) => {
   }
 
   res.json({ jobId });
+});
+
+// Gera o alerta pronto pra encaminhar no grupo (imagens do card + legenda)
+// a partir do resultado de uma busca — ver alertas.ts.
+app.post("/api/alerta", async (req: Request, res: Response) => {
+  const { fonte, origem, destino, classe, menorK, maiorK, textoIda, textoVolta } = req.body ?? {};
+  if (!origem || !destino || !classe) {
+    res.status(400).json({ erro: "origem, destino e classe são obrigatórios." });
+    return;
+  }
+
+  const pedido: PedidoAlerta = {
+    fonte: String(fonte || ""),
+    origem: String(origem),
+    destino: String(destino),
+    classe: String(classe),
+    menorK: Number.isFinite(Number(menorK)) && Number(menorK) > 0 ? Number(menorK) : null,
+    maiorK: Number.isFinite(Number(maiorK)) && Number(maiorK) > 0 ? Number(maiorK) : null,
+    textoIda: String(textoIda || ""),
+    textoVolta: String(textoVolta || ""),
+  };
+
+  try {
+    const alerta = await gerarAlerta(pedido, {
+      baseUrl: `http://localhost:${PORTA}`,
+      ...(AUTH_USER && AUTH_PASS ? { authUser: AUTH_USER, authPass: AUTH_PASS } : {}),
+    });
+    res.json(alerta);
+  } catch (err) {
+    const mensagem = err instanceof Error ? err.message : String(err);
+    console.error(`[alerta] falha: ${mensagem}`);
+    res.status(500).json({ erro: mensagem });
+  }
 });
 
 app.get("/api/buscar/:jobId/eventos", (req: Request, res: Response) => {
