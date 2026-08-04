@@ -16,6 +16,7 @@ const checkboxSeatspyIdaVolta = document.getElementById("seatspy-ida-volta");
 const inputSeatspyTetoEconomica = document.getElementById("seatspy-teto-economica");
 const inputSeatspyTetoPremium = document.getElementById("seatspy-teto-premium");
 const inputSeatspyTetoExecutiva = document.getElementById("seatspy-teto-executiva");
+const inputSeatspyTetoPrimeira = document.getElementById("seatspy-teto-primeira");
 const avisoSeatspy = document.getElementById("seatspy-aviso");
 const filaSeatspy = document.getElementById("seatspy-fila-buscas");
 
@@ -324,7 +325,7 @@ function criarItemHistorico(item) {
       ? [["Executiva", "cartao-executiva"], ["Econômica", "cartao-economica"]]
       : programa === "AA"
         ? [[CABINE_AA_LABEL[item.cabine] || "Cabine n/d", CABINE_AA_COR[item.cabine] || "cartao-economica"]]
-        : [["Econômica", "cartao-economica"], ["Premium", "cartao-premium"], ["Executiva", "cartao-executiva"]];
+        : [["Econômica", "cartao-economica"], ["Premium", "cartao-premium"], ["Executiva", "cartao-executiva"], ["Primeira", "cartao-primeira"]];
   const grupoCabines = document.createElement("div");
   grupoCabines.className = "item-historico-cabines";
   for (const [texto, classe] of cabines) {
@@ -902,6 +903,7 @@ async function iniciarBuscaSeatspy(programa, origem, destino, idaEVolta) {
       { classe: "Econômica", secaoIda: secaoDe(pernas[0], "Econômica"), secaoVolta: secaoDe(pernas[1], "Econômica") },
       { classe: "Premium Economy", secaoIda: secaoDe(pernas[0], "Premium"), secaoVolta: secaoDe(pernas[1], "Premium") },
       { classe: "Executiva", secaoIda: secaoDe(pernas[0], "Executiva"), secaoVolta: secaoDe(pernas[1], "Executiva") },
+      { classe: "Primeira Classe", secaoIda: secaoDe(pernas[0], "Primeira Classe"), secaoVolta: secaoDe(pernas[1], "Primeira Classe") },
     ]);
   } catch (err) {
     card.definirStatus("Erro", "status-erro");

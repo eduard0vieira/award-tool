@@ -345,6 +345,7 @@ app.post("/api/buscar", (req: Request, res: Response) => {
         economica: tetoDe(tetos?.economica),
         premium: tetoDe(tetos?.premium),
         executiva: tetoDe(tetos?.executiva),
+        primeira: tetoDe(tetos?.primeira),
       },
     });
   } else if (ehAA) {

@@ -809,6 +809,12 @@ details[open] > .coluna-cabecalho .chevron {
   border: 1px solid rgba(255, 167, 38, 0.35);
 }
 
+.cartao-primeira {
+  background: rgba(103, 58, 183, 0.18);
+  color: #b79cf0;
+  border: 1px solid rgba(103, 58, 183, 0.4);
+}
+
 .linha-tetos {
   display: flex;
   gap: 12px;

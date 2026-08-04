@@ -31,6 +31,7 @@ export type DiaSeatspy = {
   economica: ValorCabine;
   premium: ValorCabine;
   executiva: ValorCabine;
+  primeira: ValorCabine;
 };
 
 export type SecaoSeatspy = {
@@ -50,6 +51,7 @@ export type TetosSeatspy = {
   economica?: number | null;
   premium?: number | null;
   executiva?: number | null;
+  primeira?: number | null;
 };
 
 // Todos os programas que o SeatSpy rastreia (chave = código usado no
@@ -153,7 +155,39 @@ type VooCru = {
   premiumMiles: number | null;
   business: number;
   businessMiles: number | null;
+  // Primeira classe existe só em algumas companhias (British, Cathay,
+  // Etihad, Qantas...). O nome do campo não aparece no JS do site, então
+  // aceitamos as duas grafias plausíveis e avisamos no log se vier outra
+  // — ver avisarCamposDeCabine.
+  first?: number;
+  firstMiles?: number | null;
+  firstClass?: number;
+  firstClassMiles?: number | null;
 };
+
+function assentosPrimeira(v: VooCru): number {
+  return v.first ?? v.firstClass ?? 0;
+}
+
+function milhasPrimeira(v: VooCru): number | null {
+  return v.firstMiles ?? v.firstClassMiles ?? null;
+}
+
+// Roda uma vez por processo: se a resposta não trouxer nenhum campo de
+// primeira classe conhecido, imprime as chaves que vieram, pra dar pra
+// corrigir o nome sem precisar gastar outra busca investigando.
+let jaAvisouCampos = false;
+function avisarCamposDeCabine(voo: VooCru | undefined, onLog: OnLog) {
+  if (jaAvisouCampos || !voo) return;
+  jaAvisouCampos = true;
+  const temPrimeira = ["first", "firstMiles", "firstClass", "firstClassMiles"].some((c) => c in voo);
+  if (!temPrimeira) {
+    onLog(
+      "Atenção: a resposta do SeatSpy não trouxe campo de primeira classe conhecido. " +
+        `Campos recebidos: ${Object.keys(voo).join(", ")}`,
+    );
+  }
+}
 
 function paraISO(dataGMT: string): string {
   return new Date(dataGMT).toISOString().slice(0, 10);
@@ -180,6 +214,7 @@ function extrairDias(datas: DataCrua[]): DiaSeatspy[] {
         economica: valorCabine(voos, (v) => v.economy, (v) => v.economyMiles),
         premium: valorCabine(voos, (v) => v.premium, (v) => v.premiumMiles),
         executiva: valorCabine(voos, (v) => v.business, (v) => v.businessMiles),
+        primeira: valorCabine(voos, assentosPrimeira, milhasPrimeira),
       };
     })
     .sort((a, b) => a.data.localeCompare(b.data));
@@ -243,6 +278,7 @@ export async function pesquisarSeatspy(
     else if (primeiroVoo?.originIATA === destino) direcao = "volta";
     else direcao = direcaoPelaOrdem();
 
+    avisarCamposDeCabine(primeiroVoo, onLog);
     porDirecao.set(direcao, extrairDias(datas));
     onLog(`Recebido ano completo da ${direcao} (${datas.length} dias).`);
   };
@@ -306,6 +342,7 @@ const CABINES = [
   { campo: "economica", rotulo: "Econômica", corClasse: "cartao-economica" },
   { campo: "premium", rotulo: "Premium", corClasse: "cartao-premium" },
   { campo: "executiva", rotulo: "Executiva", corClasse: "cartao-executiva" },
+  { campo: "primeira", rotulo: "Primeira Classe", corClasse: "cartao-primeira" },
 ] as const;
 
 export function construirRelatorioSeatspy(dias: DiaSeatspy[], tetos: TetosSeatspy = {}): RelatorioSeatspy {
