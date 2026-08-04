@@ -1,5 +1,5 @@
+import crypto, { randomUUID } from "node:crypto";
 import express, { type Request, type Response } from "express";
-import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -12,12 +12,23 @@ import {
 import {
   construirRelatorioSeatspy,
   iniciarSessaoSeatspy,
+  NOME_COMPANHIA,
   pesquisarSeatspy,
   type CompanhiaSeatspy,
   type SecaoSeatspy,
   type SessaoSeatspy,
   type TetosSeatspy,
 } from "./bot-seatspy.ts";
+import {
+  CABINE_AA_LABEL,
+  construirRelatorioAA,
+  iniciarSessaoAA,
+  pesquisarAnoAA,
+  type CabineAA,
+  type SessaoAA,
+} from "./bot-aa.ts";
+import type { SecaoRelatorio } from "./comum.ts";
+import { PoolSessoes } from "./pool-sessoes.ts";
 
 // A extração de preços lê as 4 cores (Economy/PremiumEconomy/Business/First)
 // de cada dia independente do valor de "cabins" mandado na URL — então o
@@ -32,53 +43,47 @@ type InfoJanela = { atual: number; total: number; inicio: string; fim: string };
 type PernaSeatspy = { rotulo: string; secoes: SecaoSeatspy[] };
 
 type Job = {
-  status: "running" | "done" | "erro";
+  status: "fila" | "running" | "done" | "erro";
   progresso: number; // 0..1
   janela?: InfoJanela;
+  avisoAtual?: string; // aviso transitório (ex.: cooldown de bloqueio) — "" = sem aviso
   relatorio?: Relatorio;
+  avisoParcial?: string; // preenchido quando alguma janela falhou e foi pulada
   pernas?: PernaSeatspy[]; // resultado das buscas via SeatSpy
+  secaoAA?: SecaoRelatorio & { rotulo: string }; // resultado das buscas na AA (uma cabine por busca)
   erro?: string;
   ouvintes: Set<Response>;
 };
 
 const jobs = new Map<string, Job>();
 
-// Reaproveita a mesma sessão (browser/página logada) entre buscas. Se a
-// janela do Chrome foi fechada (manualmente, crash, etc.) nesse meio tempo,
-// abre e loga numa nova em vez de continuar tentando usar uma sessão morta
-// (o que causaria "Target page, context or browser has been closed" em toda
-// busca seguinte).
-let sessaoPromise: Promise<Sessao> | null = null;
-async function getSessao(): Promise<Sessao> {
-  if (sessaoPromise) {
-    const sessao = await sessaoPromise;
-    if (sessao.browser.isConnected() && !sessao.page.isClosed()) {
-      return sessao;
-    }
-    console.log("Sessão anterior foi fechada, abrindo uma nova...");
-    sessaoPromise = null;
-  }
-  sessaoPromise = iniciarSessao(false);
-  return sessaoPromise;
-}
+// Quantas buscas de cada fonte podem rodar ao mesmo tempo (cada uma numa
+// janela do navegador própria, já logada). Buscas além disso ficam na fila
+// até um slot liberar — ver PoolSessoes.
+const CONCORRENCIA_AWARDTOOL = Number(process.env.CONCORRENCIA_AWARDTOOL) || 3;
+const CONCORRENCIA_SEATSPY = Number(process.env.CONCORRENCIA_SEATSPY) || 3;
+// AA: sem login, mas o Akamai olha o IP — começa mais conservador.
+const CONCORRENCIA_AA = Number(process.env.CONCORRENCIA_AA) || 2;
 
-// Mesma lógica de reaproveitamento, mas pra sessão do SeatSpy (site próprio,
-// login próprio — independente da sessão do AwardTool).
-let sessaoSeatspyPromise: Promise<SessaoSeatspy> | null = null;
-async function getSessaoSeatspy(): Promise<SessaoSeatspy> {
-  if (sessaoSeatspyPromise) {
-    const sessao = await sessaoSeatspyPromise;
-    if (sessao.browser.isConnected() && !sessao.page.isClosed()) {
-      return sessao;
-    }
-    console.log("Sessão SeatSpy anterior foi fechada, abrindo uma nova...");
-    sessaoSeatspyPromise = null;
-  }
-  sessaoSeatspyPromise = iniciarSessaoSeatspy(false);
-  return sessaoSeatspyPromise;
-}
+const poolAwardtool = new PoolSessoes<Sessao>(
+  CONCORRENCIA_AWARDTOOL,
+  (headless) => iniciarSessao(headless),
+  (s) => s.browser.isConnected() && !s.page.isClosed(),
+);
 
-let buscaEmAndamento = false;
+// Mesma ideia, mas pro SeatSpy (site próprio, login próprio — independente
+// das sessões do AwardTool).
+const poolSeatspy = new PoolSessoes<SessaoSeatspy>(
+  CONCORRENCIA_SEATSPY,
+  (headless) => iniciarSessaoSeatspy(headless),
+  (s) => s.browser.isConnected() && !s.page.isClosed(),
+);
+
+const poolAA = new PoolSessoes<SessaoAA>(
+  CONCORRENCIA_AA,
+  (headless) => iniciarSessaoAA(headless),
+  (s) => s.browser.isConnected() && !s.page.isClosed(),
+);
 
 function emitirEvento(jobId: string, dado: object) {
   const job = jobs.get(jobId);
@@ -103,15 +108,48 @@ function atualizarJanela(jobId: string, info: InfoJanela) {
   emitirEvento(jobId, { tipo: "janela", ...info });
 }
 
-async function executarJob(
+function atualizarAviso(jobId: string, mensagem: string) {
+  const job = jobs.get(jobId);
+  if (!job) return;
+  job.avisoAtual = mensagem;
+  emitirEvento(jobId, { tipo: "aviso", mensagem });
+}
+
+// Esqueleto comum dos jobs: espera um slot do pool, marca o job como rodando,
+// executa o trabalho da fonte e trata erro/limpeza — o que muda entre as
+// fontes é só o miolo (a função `trabalho`), que deve setar job.status "done"
+// e emitir o evento "done" com o payload próprio dela.
+async function executarComPool<S>(
+  pool: PoolSessoes<S>,
   jobId: string,
-  params: { origem: string; destino: string },
+  trabalho: (sessao: S) => Promise<void>,
 ) {
   const job = jobs.get(jobId)!;
+  let indiceSlot = -1;
   try {
-    const { page, baseUrl } = await getSessao();
+    const { sessao, indice } = await pool.adquirir();
+    indiceSlot = indice;
+    job.status = "running";
+    emitirEvento(jobId, { tipo: "iniciou" });
+    await trabalho(sessao);
+  } catch (err) {
+    const mensagemOriginal = err instanceof Error ? err.message : String(err);
+    const fechouNoMeio = /Target page, context or browser has been closed/i.test(mensagemOriginal);
+    job.status = "erro";
+    job.erro = fechouNoMeio
+      ? "A janela do navegador foi fechada durante a busca. Tente buscar de novo."
+      : mensagemOriginal;
+    emitirEvento(jobId, { tipo: "erro", mensagem: job.erro });
+  } finally {
+    if (indiceSlot !== -1) pool.liberar(indiceSlot);
+    for (const res of job.ouvintes) res.end();
+  }
+}
 
-    const todasAsDatas = await pesquisarAnoCompleto(
+function executarJob(jobId: string, params: { origem: string; destino: string }) {
+  return executarComPool(poolAwardtool, jobId, async ({ page, baseUrl }) => {
+    const job = jobs.get(jobId)!;
+    const { dias: todasAsDatas, janelasComFalha } = await pesquisarAnoCompleto(
       page,
       {
         baseUrl,
@@ -122,30 +160,25 @@ async function executarJob(
       (msg) => console.log(`[${jobId}] ${msg}`), // só no terminal do servidor, não vai pro front
       (fracao) => atualizarProgresso(jobId, fracao),
       (info) => atualizarJanela(jobId, info),
+      (mensagem) => atualizarAviso(jobId, mensagem),
     );
 
     const relatorio = construirRelatorio(todasAsDatas);
+    const avisoParcial =
+      janelasComFalha.length > 0
+        ? `${janelasComFalha.length} janela(s) não puderam ser buscadas (ver detalhes no terminal do servidor) — o resultado abaixo é parcial.`
+        : undefined;
     job.status = "done";
     job.relatorio = relatorio;
-    emitirEvento(jobId, { tipo: "done", relatorio });
-  } catch (err) {
-    const mensagemOriginal = err instanceof Error ? err.message : String(err);
-    const fechouNoMeio = /Target page, context or browser has been closed/i.test(mensagemOriginal);
-    job.status = "erro";
-    job.erro = fechouNoMeio
-      ? "A janela do navegador foi fechada durante a busca. Tente buscar de novo."
-      : mensagemOriginal;
-    emitirEvento(jobId, { tipo: "erro", mensagem: job.erro });
-  } finally {
-    buscaEmAndamento = false;
-    for (const res of job.ouvintes) res.end();
-  }
+    if (avisoParcial) job.avisoParcial = avisoParcial;
+    emitirEvento(jobId, { tipo: "done", relatorio, avisoParcial });
+  });
 }
 
 // Uma busca "Return" no SeatSpy já traz ida e volta juntas (e consome um
 // crédito só), então o job resolve as duas pernas de uma vez — diferente do
 // fluxo da TAP, em que o front pede uma perna por vez.
-async function executarJobSeatspy(
+function executarJobSeatspy(
   jobId: string,
   params: {
     companhia: CompanhiaSeatspy;
@@ -155,10 +188,8 @@ async function executarJobSeatspy(
     tetos: TetosSeatspy;
   },
 ) {
-  const job = jobs.get(jobId)!;
-  try {
-    const { page } = await getSessaoSeatspy();
-
+  return executarComPool(poolSeatspy, jobId, async ({ page }) => {
+    const job = jobs.get(jobId)!;
     const { ida, volta } = await pesquisarSeatspy(
       page,
       params,
@@ -184,21 +215,85 @@ async function executarJobSeatspy(
     job.status = "done";
     job.pernas = pernas;
     emitirEvento(jobId, { tipo: "done", pernas });
-  } catch (err) {
-    const mensagemOriginal = err instanceof Error ? err.message : String(err);
-    const fechouNoMeio = /Target page, context or browser has been closed/i.test(mensagemOriginal);
-    job.status = "erro";
-    job.erro = fechouNoMeio
-      ? "A janela do navegador foi fechada durante a busca. Tente buscar de novo."
-      : mensagemOriginal;
-    emitirEvento(jobId, { tipo: "erro", mensagem: job.erro });
-  } finally {
-    buscaEmAndamento = false;
-    for (const res of job.ouvintes) res.end();
-  }
+  });
+}
+
+// AA: uma cabine por busca (escolhida no form) e uma direção por job — o
+// front pede a volta como um segundo job, igual ao fluxo da TAP.
+function executarJobAA(
+  jobId: string,
+  params: {
+    origem: string;
+    destino: string;
+    cabine: CabineAA;
+    maxConexoes: number | null;
+    tetoMilhas: number | null;
+  },
+) {
+  return executarComPool(poolAA, jobId, async ({ page }) => {
+    const job = jobs.get(jobId)!;
+    const { dias, mesesComFalha } = await pesquisarAnoAA(
+      page,
+      {
+        origem: params.origem,
+        destino: params.destino,
+        cabine: params.cabine,
+        maxConexoes: params.maxConexoes,
+      },
+      (msg) => console.log(`[${jobId}] ${msg}`),
+      (fracao) => atualizarProgresso(jobId, fracao),
+      (mensagem) => atualizarAviso(jobId, mensagem),
+    );
+
+    const secao = {
+      rotulo: CABINE_AA_LABEL[params.cabine],
+      ...construirRelatorioAA(dias, params.tetoMilhas),
+    };
+    const avisoParcial =
+      mesesComFalha.length > 0
+        ? `${mesesComFalha.length} mês(es) não puderam ser buscados (ver detalhes no terminal do servidor) — o resultado abaixo é parcial.`
+        : undefined;
+    job.status = "done";
+    job.secaoAA = secao;
+    if (avisoParcial) job.avisoParcial = avisoParcial;
+    emitirEvento(jobId, { tipo: "done", secaoAA: secao, avisoParcial });
+  });
 }
 
 const app = express();
+
+// Protege o servidor inteiro (front + API) com usuário/senha quando exposto
+// publicamente (ex.: via ngrok, pra controlar do celular) — sem isso,
+// qualquer um que ache a URL consegue disparar buscas pagas na conta. Sem
+// BOT_AUTH_USER/BOT_AUTH_PASS no .env, roda sem senha (uso só local).
+const AUTH_USER = process.env.BOT_AUTH_USER;
+const AUTH_PASS = process.env.BOT_AUTH_PASS;
+if (AUTH_USER && AUTH_PASS) {
+  app.use((req: Request, res: Response, next) => {
+    const cabecalho = req.headers.authorization;
+    if (cabecalho?.startsWith("Basic ")) {
+      const [usuario = "", senha = ""] = Buffer.from(cabecalho.slice(6), "base64")
+        .toString()
+        .split(":");
+      const usuarioOk =
+        usuario.length === AUTH_USER.length && crypto.timingSafeEqual(Buffer.from(usuario), Buffer.from(AUTH_USER));
+      const senhaOk =
+        senha.length === AUTH_PASS.length && crypto.timingSafeEqual(Buffer.from(senha), Buffer.from(AUTH_PASS));
+      if (usuarioOk && senhaOk) {
+        next();
+        return;
+      }
+    }
+    res.set("WWW-Authenticate", 'Basic realm="Bot de Emissoes"');
+    res.status(401).send("Autenticação necessária.");
+  });
+} else {
+  console.warn(
+    "Aviso: BOT_AUTH_USER/BOT_AUTH_PASS não configurados no .env — o servidor fica sem senha. " +
+      "Defina os dois antes de expor essa porta publicamente (ex.: via ngrok).",
+  );
+}
+
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
@@ -208,7 +303,7 @@ function tetoDe(valor: unknown): number | null {
 }
 
 app.post("/api/buscar", (req: Request, res: Response) => {
-  const { fonte, origem, destino, companhia, idaEVolta, tetos } = req.body ?? {};
+  const { fonte, origem, destino, companhia, idaEVolta, tetos, cabine, maxConexoes, teto } = req.body ?? {};
 
   if (!origem || !destino) {
     res.status(400).json({ erro: "origem e destino são obrigatórios." });
@@ -216,19 +311,22 @@ app.post("/api/buscar", (req: Request, res: Response) => {
   }
 
   const ehSeatspy = fonte === "seatspy";
-  if (ehSeatspy && companhia !== "IB" && companhia !== "BA") {
-    res.status(400).json({ erro: "companhia deve ser IB ou BA para buscas no SeatSpy." });
+  const ehAA = fonte === "aa";
+  if (ehSeatspy && !Object.hasOwn(NOME_COMPANHIA, companhia)) {
+    res.status(400).json({
+      erro: `companhia deve ser uma destas para buscas no SeatSpy: ${Object.keys(NOME_COMPANHIA).join(", ")}.`,
+    });
+    return;
+  }
+  if (ehAA && !Object.hasOwn(CABINE_AA_LABEL, cabine)) {
+    res.status(400).json({
+      erro: `cabine deve ser uma destas para buscas na AA: ${Object.keys(CABINE_AA_LABEL).join(", ")}.`,
+    });
     return;
   }
 
-  if (buscaEmAndamento) {
-    res.status(409).json({ erro: "Já existe uma busca em andamento. Aguarde ela terminar." });
-    return;
-  }
-
-  buscaEmAndamento = true;
   const jobId = randomUUID();
-  jobs.set(jobId, { status: "running", progresso: 0, ouvintes: new Set() });
+  jobs.set(jobId, { status: "fila", progresso: 0, ouvintes: new Set() });
 
   if (ehSeatspy) {
     executarJobSeatspy(jobId, {
@@ -241,6 +339,14 @@ app.post("/api/buscar", (req: Request, res: Response) => {
         premium: tetoDe(tetos?.premium),
         executiva: tetoDe(tetos?.executiva),
       },
+    });
+  } else if (ehAA) {
+    executarJobAA(jobId, {
+      origem: String(origem).toUpperCase(),
+      destino: String(destino).toUpperCase(),
+      cabine,
+      maxConexoes: maxConexoes === 0 || maxConexoes === 1 ? maxConexoes : null,
+      tetoMilhas: tetoDe(teto),
     });
   } else {
     executarJob(jobId, {
@@ -266,13 +372,24 @@ app.get("/api/buscar/:jobId/eventos", (req: Request, res: Response) => {
     Connection: "keep-alive",
   });
 
-  // Reenvia o progresso/janela atuais, pra quem conectar atrasado.
+  // Reenvia o estado atual, pra quem conectar atrasado (ex.: busca ainda na
+  // fila esperando um slot do pool liberar).
+  if (job.status === "fila") {
+    res.write(`data: ${JSON.stringify({ tipo: "fila" })}\n\n`);
+  }
   res.write(`data: ${JSON.stringify({ tipo: "progresso", fracao: job.progresso })}\n\n`);
   if (job.janela) {
     res.write(`data: ${JSON.stringify({ tipo: "janela", ...job.janela })}\n\n`);
   }
+  if (job.avisoAtual) {
+    res.write(`data: ${JSON.stringify({ tipo: "aviso", mensagem: job.avisoAtual })}\n\n`);
+  }
   if (job.status === "done") {
-    const dado = job.pernas ? { tipo: "done", pernas: job.pernas } : { tipo: "done", relatorio: job.relatorio };
+    const dado = job.pernas
+      ? { tipo: "done", pernas: job.pernas }
+      : job.secaoAA
+        ? { tipo: "done", secaoAA: job.secaoAA, avisoParcial: job.avisoParcial }
+        : { tipo: "done", relatorio: job.relatorio, avisoParcial: job.avisoParcial };
     res.write(`data: ${JSON.stringify(dado)}\n\n`);
     res.end();
     return;

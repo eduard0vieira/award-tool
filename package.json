@@ -6,7 +6,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "tsx index.ts",
-    "server": "tsx server.ts"
+    "server": "tsx server.ts",
+    "tunnel": "ngrok http 5555"
   },
   "keywords": [],
   "author": "",

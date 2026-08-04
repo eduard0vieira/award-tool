@@ -53,11 +53,14 @@ async function buscarEmissoes() {
     console.log(`\nBuscando ${origem} -> ${destino}...`);
     const cabineParam = cabineParamDe(cabine);
 
-    const todasAsDatas = await pesquisarAnoCompleto(
+    const { dias: todasAsDatas, janelasComFalha } = await pesquisarAnoCompleto(
       page,
       { baseUrl, origem, destino, cabineParam },
       (msg) => console.log(msg),
     );
+    if (janelasComFalha.length > 0) {
+      console.log(`\n⚠️  ${janelasComFalha.length} janela(s) não puderam ser buscadas e foram puladas.`);
+    }
     const relatorio = construirRelatorio(todasAsDatas);
 
     console.log("\n--- RESULTADO ---\n");

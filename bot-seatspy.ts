@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
-import { formatarListaPorMes, type OnLog, type OnProgresso } from "./bot.ts";
+import { formatarListaPorMes, type OnLog, type OnProgresso } from "./comum.ts";
 
 export type SessaoSeatspy = {
   browser: Browser;
@@ -8,7 +8,7 @@ export type SessaoSeatspy = {
   page: Page;
 };
 
-export type CompanhiaSeatspy = "IB" | "BA";
+export type CompanhiaSeatspy = "AF" | "B6" | "BA" | "CX" | "EY" | "IB" | "KLM" | "QF" | "VIR";
 
 export type ParametrosSeatspy = {
   companhia: CompanhiaSeatspy;
@@ -17,21 +17,28 @@ export type ParametrosSeatspy = {
   idaEVolta: boolean;
 };
 
-// Milhas por cabine num dia (menor valor entre os voos com assento), ou null
-// se a cabine não tem disponibilidade nesse dia.
+// Disponibilidade de uma cabine num dia. O SeatSpy às vezes marca o dia como
+// disponível (bolinha verde no calendário) sem informar o valor em milhas do
+// voo (tarifas mistas/parceiras) — nesse caso `milhas` fica null mesmo com
+// `disponivel: true`, pra não perder o dia por falta desse dado.
+export type ValorCabine = {
+  disponivel: boolean;
+  milhas: number | null;
+};
+
 export type DiaSeatspy = {
   data: string; // YYYY-MM-DD
-  economica: number | null;
-  premium: number | null;
-  executiva: number | null;
+  economica: ValorCabine;
+  premium: ValorCabine;
+  executiva: ValorCabine;
 };
 
 export type SecaoSeatspy = {
   rotulo: string;
   corClasse: string;
-  menor: number | null; // em K (milhares de milhas)
+  menor: number | null; // em K (milhares de milhas), só considerando dias com preço
   maior: number | null;
-  dias: { data: string; valorK: number }[];
+  dias: { data: string; valorK: number | null }[];
   texto: string;
 };
 
@@ -45,9 +52,18 @@ export type TetosSeatspy = {
   executiva?: number | null;
 };
 
+// Todos os programas que o SeatSpy rastreia (chave = código usado no
+// #airline do próprio site, ver selecionarCompanhia).
 export const NOME_COMPANHIA: Record<CompanhiaSeatspy, string> = {
-  IB: "Iberia Airlines",
+  AF: "Air France",
+  B6: "JetBlue",
   BA: "British Airways",
+  CX: "Cathay Pacific",
+  EY: "Etihad Airways",
+  IB: "Iberia Airlines",
+  KLM: "KLM Royal Dutch Airlines",
+  QF: "Qantas Airways",
+  VIR: "Virgin Atlantic",
 };
 
 export async function iniciarSessaoSeatspy(headless = false): Promise<SessaoSeatspy> {
@@ -143,11 +159,16 @@ function paraISO(dataGMT: string): string {
   return new Date(dataGMT).toISOString().slice(0, 10);
 }
 
-function menorMilhas(voos: VooCru[], assentos: (v: VooCru) => number, milhas: (v: VooCru) => number | null): number | null {
-  const valores = voos
-    .filter((v) => assentos(v) > 0 && milhas(v) !== null)
-    .map((v) => milhas(v)!);
-  return valores.length > 0 ? Math.min(...valores) : null;
+function valorCabine(
+  voos: VooCru[],
+  assentos: (v: VooCru) => number,
+  milhas: (v: VooCru) => number | null,
+): ValorCabine {
+  const comAssento = voos.filter((v) => assentos(v) > 0);
+  if (comAssento.length === 0) return { disponivel: false, milhas: null };
+
+  const comPreco = comAssento.map((v) => milhas(v)).filter((m): m is number => m !== null);
+  return { disponivel: true, milhas: comPreco.length > 0 ? Math.min(...comPreco) : null };
 }
 
 function extrairDias(datas: DataCrua[]): DiaSeatspy[] {
@@ -156,9 +177,9 @@ function extrairDias(datas: DataCrua[]): DiaSeatspy[] {
       const voos = d.flights ?? [];
       return {
         data: paraISO(d.startDate),
-        economica: menorMilhas(voos, (v) => v.economy, (v) => v.economyMiles),
-        premium: menorMilhas(voos, (v) => v.premium, (v) => v.premiumMiles),
-        executiva: menorMilhas(voos, (v) => v.business, (v) => v.businessMiles),
+        economica: valorCabine(voos, (v) => v.economy, (v) => v.economyMiles),
+        premium: valorCabine(voos, (v) => v.premium, (v) => v.premiumMiles),
+        executiva: valorCabine(voos, (v) => v.business, (v) => v.businessMiles),
       };
     })
     .sort((a, b) => a.data.localeCompare(b.data));
@@ -184,22 +205,43 @@ export async function pesquisarSeatspy(
   // As respostas não dizem qual direção são; identifica pelo IATA de origem
   // dos voos, com fallback pra ordem de chegada (ida vem primeiro).
   const porDirecao = new Map<"ida" | "volta", DiaSeatspy[]>();
+  // Quando o trecho não é operado pela companhia escolhida, o SeatSpy costuma
+  // responder rápido com uma lista de dias vazia (ou um status de erro) em vez
+  // de nunca responder — sem isso, o código ficava esperando um dado que
+  // nunca chegaria até estourar o timeout de 2min lá embaixo.
+  const direcoesVazias = new Set<"ida" | "volta">();
+  const direcaoPelaOrdem = () => (porDirecao.has("ida") || direcoesVazias.has("ida") ? "volta" : "ida");
+
   const aoResponder = async (res: import("playwright").Response) => {
-    if (!res.url().includes("/api/retrieve-year-data") || res.status() !== 200) return;
+    if (!res.url().includes("/api/retrieve-year-data")) return;
+
+    if (res.status() !== 200) {
+      const direcao = direcaoPelaOrdem();
+      direcoesVazias.add(direcao);
+      onLog(`SeatSpy respondeu com erro (status ${res.status()}) pra ${direcao} — tratando como sem disponibilidade.`);
+      return;
+    }
+
     let corpo: RespostaAnoCru;
     try {
       corpo = (await res.json()) as RespostaAnoCru;
     } catch {
       return;
     }
-    const datas = corpo.data?.dates;
-    if (!datas || datas.length === 0) return;
+    const datas = corpo.data?.dates ?? [];
+
+    if (datas.length === 0) {
+      const direcao = direcaoPelaOrdem();
+      direcoesVazias.add(direcao);
+      onLog(`SeatSpy não encontrou disponibilidade pra ${direcao} (a companhia pode não operar esse trecho).`);
+      return;
+    }
 
     const primeiroVoo = datas.flatMap((d) => d.flights ?? [])[0];
     let direcao: "ida" | "volta";
     if (primeiroVoo?.originIATA === origem) direcao = "ida";
     else if (primeiroVoo?.originIATA === destino) direcao = "volta";
-    else direcao = porDirecao.has("ida") ? "volta" : "ida";
+    else direcao = direcaoPelaOrdem();
 
     porDirecao.set(direcao, extrairDias(datas));
     onLog(`Recebido ano completo da ${direcao} (${datas.length} dias).`);
@@ -223,19 +265,34 @@ export async function pesquisarSeatspy(
       document.querySelector<HTMLButtonElement>("#search-submit")?.click();
     });
 
-    // O site responde as direções de forma assíncrona; espera chegar tudo.
+    // O site responde as direções de forma assíncrona; espera chegar tudo —
+    // uma direção "vazia" (ver aoResponder) conta como resolvida também, pra
+    // não ficar esperando à toa até o timeout.
     const precisaDe = params.idaEVolta ? 2 : 1;
     const limite = Date.now() + 120000;
-    while (Date.now() < limite && porDirecao.size < precisaDe) {
+    while (Date.now() < limite && porDirecao.size + direcoesVazias.size < precisaDe) {
       await page.waitForTimeout(500);
-      onProgresso(Math.min(0.15 + porDirecao.size * 0.4, 0.95));
+      onProgresso(Math.min(0.15 + (porDirecao.size + direcoesVazias.size) * 0.4, 0.95));
     }
 
+    const nomeCompanhia = NOME_COMPANHIA[params.companhia];
+    if (direcoesVazias.has("ida")) {
+      throw new Error(
+        `Nenhuma disponibilidade encontrada para ${origem} → ${destino} — é possível que a ${nomeCompanhia} não opere esse trecho.`,
+      );
+    }
     if (!porDirecao.has("ida")) {
       throw new Error("A busca no SeatSpy não retornou dados (tempo esgotado). Tente de novo.");
     }
-    if (params.idaEVolta && !porDirecao.has("volta")) {
-      throw new Error("A busca retornou só a ida; a volta não chegou a tempo. Tente de novo.");
+    if (params.idaEVolta) {
+      if (direcoesVazias.has("volta")) {
+        throw new Error(
+          `Nenhuma disponibilidade encontrada para a volta (${destino} → ${origem}) — é possível que a ${nomeCompanhia} não opere esse trecho nessa direção.`,
+        );
+      }
+      if (!porDirecao.has("volta")) {
+        throw new Error("A busca retornou só a ida; a volta não chegou a tempo. Tente de novo.");
+      }
     }
 
     onProgresso(1);
@@ -255,8 +312,11 @@ export function construirRelatorioSeatspy(dias: DiaSeatspy[], tetos: TetosSeatsp
   const secoes = CABINES.map(({ campo, rotulo, corClasse }) => {
     const teto = tetos[campo];
     const disponiveis = dias.filter((d) => {
-      const milhas = d[campo];
-      return milhas !== null && (teto == null || milhas <= teto);
+      const v = d[campo];
+      if (!v.disponivel) return false;
+      // Sem preço informado não dá pra comparar com o teto — melhor mostrar
+      // o dia do que esconder uma disponibilidade real por falta desse dado.
+      return teto == null || v.milhas == null || v.milhas <= teto;
     });
 
     if (disponiveis.length === 0) {
@@ -270,17 +330,17 @@ export function construirRelatorioSeatspy(dias: DiaSeatspy[], tetos: TetosSeatsp
       };
     }
 
-    const diasFormatados = disponiveis.map((d) => ({
-      data: d.data,
-      valorK: Math.round(d[campo]! / 10) / 100,
-    }));
-    const valores = diasFormatados.map((d) => d.valorK);
+    const diasFormatados = disponiveis.map((d) => {
+      const milhas = d[campo].milhas;
+      return { data: d.data, valorK: milhas != null ? Math.round(milhas / 10) / 100 : null };
+    });
+    const valoresConhecidos = diasFormatados.map((d) => d.valorK).filter((v): v is number => v != null);
 
     return {
       rotulo,
       corClasse,
-      menor: Math.min(...valores),
-      maior: Math.max(...valores),
+      menor: valoresConhecidos.length > 0 ? Math.min(...valoresConhecidos) : null,
+      maior: valoresConhecidos.length > 0 ? Math.max(...valoresConhecidos) : null,
       dias: diasFormatados,
       texto: formatarListaPorMes(diasFormatados.map((d) => d.data)),
     };

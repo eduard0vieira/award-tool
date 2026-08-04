@@ -1,27 +1,41 @@
-const form = document.getElementById("form-busca");
-const btnBuscar = document.getElementById("btn-buscar");
-const selectPrograma = document.getElementById("programa");
-const inputOrigem = document.getElementById("origem");
-const inputDestino = document.getElementById("destino");
-const checkboxIdaVolta = document.getElementById("ida-volta");
-const linhaTetos = document.getElementById("linha-tetos");
-const inputTetoEconomica = document.getElementById("teto-economica");
-const inputTetoPremium = document.getElementById("teto-premium");
-const inputTetoExecutiva = document.getElementById("teto-executiva");
-const aviso = document.getElementById("aviso");
-const progresso = document.getElementById("progresso");
-const progressoLabel = document.getElementById("progresso-label");
-const progressoJanela = document.getElementById("progresso-janela");
-const barraPreenchida = document.getElementById("barra-preenchida");
-const resultado = document.getElementById("resultado");
+// Aba TAP (AwardTool).
+const formTap = document.getElementById("form-busca-tap");
+const inputTapOrigem = document.getElementById("tap-origem");
+const inputTapDestino = document.getElementById("tap-destino");
+const checkboxTapIdaVolta = document.getElementById("tap-ida-volta");
+const avisoTap = document.getElementById("tap-aviso");
+const filaTap = document.getElementById("tap-fila-buscas");
+
+// Aba SeatSpy (Iberia, British, Air France, JetBlue, Cathay, Etihad, KLM,
+// Qantas, Virgin Atlantic).
+const formSeatspy = document.getElementById("form-busca-seatspy");
+const selectSeatspyPrograma = document.getElementById("seatspy-programa");
+const inputSeatspyOrigem = document.getElementById("seatspy-origem");
+const inputSeatspyDestino = document.getElementById("seatspy-destino");
+const checkboxSeatspyIdaVolta = document.getElementById("seatspy-ida-volta");
+const inputSeatspyTetoEconomica = document.getElementById("seatspy-teto-economica");
+const inputSeatspyTetoPremium = document.getElementById("seatspy-teto-premium");
+const inputSeatspyTetoExecutiva = document.getElementById("seatspy-teto-executiva");
+const avisoSeatspy = document.getElementById("seatspy-aviso");
+const filaSeatspy = document.getElementById("seatspy-fila-buscas");
+
+// Aba American Airlines (uma cabine por busca).
+const formAa = document.getElementById("form-busca-aa");
+const inputAaOrigem = document.getElementById("aa-origem");
+const inputAaDestino = document.getElementById("aa-destino");
+const selectAaCabine = document.getElementById("aa-cabine");
+const selectAaConexoes = document.getElementById("aa-conexoes");
+const inputAaTeto = document.getElementById("aa-teto");
+const checkboxAaIdaVolta = document.getElementById("aa-ida-volta");
+const avisoAa = document.getElementById("aa-aviso");
+const filaAa = document.getElementById("aa-fila-buscas");
+
+const tplJob = document.getElementById("tpl-job");
 const tplPerna = document.getElementById("tpl-perna");
 const abasBtns = document.querySelectorAll(".aba-btn");
-const painelBuscar = document.getElementById("painel-buscar");
-const subAbasResultado = document.getElementById("sub-abas-resultado");
-const subAbaBtns = document.querySelectorAll(".sub-aba-btn");
-const subpainelUpgrade = document.getElementById("subpainel-upgrade");
-const listaUpgrade = document.getElementById("lista-upgrade");
-const upgradeVazio = document.getElementById("upgrade-vazio");
+const painelTap = document.getElementById("painel-tap");
+const painelSeatspy = document.getElementById("painel-seatspy");
+const painelAa = document.getElementById("painel-aa");
 const painelHistorico = document.getElementById("painel-historico");
 const listaHistorico = document.getElementById("lista-historico");
 const historicoVazio = document.getElementById("historico-vazio");
@@ -34,41 +48,44 @@ const HISTORICO_KEY = "awardtool_historico";
 const TOLERANCIA_DIAS = 5;
 const TOLERANCIA_MS = TOLERANCIA_DIAS * 24 * 60 * 60 * 1000;
 
-const PROGRAMA_LABEL = { tap: "TAP", IB: "Iberia", BA: "British Airways" };
+const PROGRAMA_LABEL = {
+  tap: "TAP",
+  AA: "American Airlines",
+  AF: "Air France",
+  B6: "JetBlue",
+  BA: "British Airways",
+  CX: "Cathay Pacific",
+  EY: "Etihad Airways",
+  IB: "Iberia",
+  KLM: "KLM",
+  QF: "Qantas Airways",
+  VIR: "Virgin Atlantic",
+};
+
+const CABINE_AA_LABEL = { economica: "Econômica", premium: "Premium Economy", executiva: "Executiva" };
+const CABINE_AA_COR = { economica: "cartao-economica", premium: "cartao-premium", executiva: "cartao-executiva" };
 // Registros antigos do histórico (antes do seletor de programa) eram sempre TAP.
 const programaDe = (item) => item.programa || "tap";
 
-// Datas de Executiva/Econômica da última busca, por perna, pra aba Upgrade
-// cruzar. Não persiste (some ao recarregar a página), igual à seção Resultado.
-let pernasParaUpgrade = [];
-
-selectPrograma.addEventListener("change", () => {
-  linhaTetos.hidden = selectPrograma.value === "tap";
-});
-
+// Cada aba (TAP/SeatSpy/Histórico) só troca de hidden — nada é destruído ou
+// recriado, então os cards de busca em andamento numa aba continuam rodando
+// e visíveis quando você volta pra ela, mesmo com outra aba aberta no meio.
 abasBtns.forEach((btn) => {
   btn.addEventListener("click", () => {
     abasBtns.forEach((b) => b.classList.remove("ativo"));
     btn.classList.add("ativo");
     const aba = btn.dataset.aba;
-    painelBuscar.hidden = aba !== "buscar";
+    painelTap.hidden = aba !== "tap";
+    painelSeatspy.hidden = aba !== "seatspy";
+    painelAa.hidden = aba !== "aa";
     painelHistorico.hidden = aba !== "historico";
     if (aba === "historico") renderizarHistorico();
   });
 });
 
-// Sub-abas dentro de Buscar: alternam entre as datas normais e o cruzamento
-// de upgrade, sem sair da tela de resultado.
-subAbaBtns.forEach((btn) => {
-  btn.addEventListener("click", () => {
-    subAbaBtns.forEach((b) => b.classList.remove("ativo"));
-    btn.classList.add("ativo");
-    const sub = btn.dataset.subaba;
-    resultado.hidden = sub !== "datas";
-    subpainelUpgrade.hidden = sub !== "upgrade";
-    if (sub === "upgrade") renderizarUpgrade();
-  });
-});
+function ativarAba(aba) {
+  document.querySelector(`.aba-btn[data-aba="${aba}"]`).click();
+}
 
 function carregarHistorico() {
   try {
@@ -78,9 +95,9 @@ function carregarHistorico() {
   }
 }
 
-function salvarNoHistorico(origem, destino, programa, idaEVolta = false) {
+function salvarNoHistorico(origem, destino, programa, idaEVolta = false, extras = {}) {
   const historico = carregarHistorico();
-  historico.push({ origem, destino, programa, idaEVolta, timestamp: Date.now() });
+  historico.push({ origem, destino, programa, idaEVolta, ...extras, timestamp: Date.now() });
   localStorage.setItem(HISTORICO_KEY, JSON.stringify(historico));
 }
 
@@ -146,16 +163,31 @@ function rotuloDoDia(timestamp) {
   return texto.charAt(0).toUpperCase() + texto.slice(1);
 }
 
-// Preenche o formulário da aba Buscar com o trecho do histórico e troca de aba.
+// Preenche o formulário da aba certa (TAP, SeatSpy ou AA) com o trecho do
+// histórico e troca pra ela.
 function repetirBusca(item) {
   const programa = programaDe(item);
-  selectPrograma.value = programa;
-  linhaTetos.hidden = programa === "tap";
-  inputOrigem.value = item.origem;
-  inputDestino.value = item.destino;
-  checkboxIdaVolta.checked = Boolean(item.idaEVolta);
-  document.querySelector('.aba-btn[data-aba="buscar"]').click();
-  inputOrigem.focus();
+  if (programa === "tap") {
+    inputTapOrigem.value = item.origem;
+    inputTapDestino.value = item.destino;
+    checkboxTapIdaVolta.checked = Boolean(item.idaEVolta);
+    ativarAba("tap");
+    inputTapOrigem.focus();
+  } else if (programa === "AA") {
+    inputAaOrigem.value = item.origem;
+    inputAaDestino.value = item.destino;
+    if (item.cabine) selectAaCabine.value = item.cabine;
+    checkboxAaIdaVolta.checked = Boolean(item.idaEVolta);
+    ativarAba("aa");
+    inputAaOrigem.focus();
+  } else {
+    selectSeatspyPrograma.value = programa;
+    inputSeatspyOrigem.value = item.origem;
+    inputSeatspyDestino.value = item.destino;
+    checkboxSeatspyIdaVolta.checked = Boolean(item.idaEVolta);
+    ativarAba("seatspy");
+    inputSeatspyOrigem.focus();
+  }
 }
 
 // Registros novos de ida e volta já vêm como um item só, mas o histórico
@@ -285,11 +317,14 @@ function criarItemHistorico(item) {
     principal.appendChild(ponto);
   }
 
-  // TAP traz Executiva + Econômica; SeatSpy (Iberia/British) traz Premium também.
+  // TAP traz Executiva + Econômica; SeatSpy traz Premium também; AA é uma
+  // cabine por busca (a que ficou registrada no item).
   const cabines =
     programa === "tap"
       ? [["Executiva", "cartao-executiva"], ["Econômica", "cartao-economica"]]
-      : [["Econômica", "cartao-economica"], ["Premium", "cartao-premium"], ["Executiva", "cartao-executiva"]];
+      : programa === "AA"
+        ? [[CABINE_AA_LABEL[item.cabine] || "Cabine n/d", CABINE_AA_COR[item.cabine] || "cartao-economica"]]
+        : [["Econômica", "cartao-economica"], ["Premium", "cartao-premium"], ["Executiva", "cartao-executiva"]];
   const grupoCabines = document.createElement("div");
   grupoCabines.className = "item-historico-cabines";
   for (const [texto, classe] of cabines) {
@@ -329,38 +364,78 @@ btnLimparHistorico.addEventListener("click", () => {
   renderizarHistorico();
 });
 
-function mostrarAviso(mensagem) {
-  aviso.textContent = mensagem;
-  aviso.hidden = false;
+function mostrarAviso(avisoEl, mensagem) {
+  avisoEl.textContent = mensagem;
+  avisoEl.hidden = false;
 }
 
-function limparAviso() {
-  aviso.hidden = true;
-  aviso.textContent = "";
+function limparAviso(avisoEl) {
+  avisoEl.hidden = true;
+  avisoEl.textContent = "";
 }
 
-function definirCarregando(carregando) {
-  btnBuscar.disabled = carregando;
-  selectPrograma.disabled = carregando;
-  inputOrigem.disabled = carregando;
-  inputDestino.disabled = carregando;
-  checkboxIdaVolta.disabled = carregando;
-  inputTetoEconomica.disabled = carregando;
-  inputTetoPremium.disabled = carregando;
-  inputTetoExecutiva.disabled = carregando;
+function atualizarBarra(barraEl, fracao) {
+  barraEl.style.width = `${Math.min(Math.round(fracao * 100), 100)}%`;
 }
 
-function atualizarBarra(fracao) {
-  barraPreenchida.style.width = `${Math.min(Math.round(fracao * 100), 100)}%`;
+// Monta um card de busca (ver tpl-job) e já pendura na fila visual da aba
+// (filaBuscasEl é a fila da aba TAP ou da aba SeatSpy). Cada busca tem seu
+// próprio card, então várias rodam em paralelo sem uma atrapalhar o
+// progresso/resultado da outra.
+function criarCardJob(filaBuscasEl, tituloRota) {
+  const fragmento = tplJob.content.cloneNode(true);
+  const raiz = fragmento.querySelector(".job-busca");
+
+  const card = {
+    raiz,
+    rotaEl: raiz.querySelector(".job-rota"),
+    statusEl: raiz.querySelector(".job-status"),
+    progressoEl: raiz.querySelector(".progresso"),
+    progressoLabelEl: raiz.querySelector(".progresso-label"),
+    progressoJanelaEl: raiz.querySelector(".progresso-janela"),
+    barraEl: raiz.querySelector(".barra-preenchida"),
+    avisoEl: raiz.querySelector(".aviso"),
+    subAbasEl: raiz.querySelector(".sub-abas"),
+    subAbaBtnsEl: raiz.querySelectorAll(".sub-aba-btn"),
+    resultadoEl: raiz.querySelector(".resultado"),
+    subpainelUpgradeEl: raiz.querySelector(".subpainel-upgrade"),
+    listaUpgradeEl: raiz.querySelector(".lista-upgrade"),
+    upgradeVazioEl: raiz.querySelector(".upgrade-vazio"),
+    pernasParaUpgrade: [],
+  };
+
+  card.rotaEl.textContent = tituloRota;
+
+  card.subAbaBtnsEl.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      card.subAbaBtnsEl.forEach((b) => b.classList.remove("ativo"));
+      btn.classList.add("ativo");
+      const sub = btn.dataset.subaba;
+      card.resultadoEl.hidden = sub !== "datas";
+      card.subpainelUpgradeEl.hidden = sub !== "upgrade";
+      if (sub === "upgrade") renderizarUpgrade(card);
+    });
+  });
+
+  function definirStatus(texto, classe) {
+    card.statusEl.textContent = texto;
+    card.statusEl.className = `job-status ${classe}`;
+  }
+  card.definirStatus = definirStatus;
+
+  filaBuscasEl.prepend(raiz);
+  return card;
 }
 
 // Roda uma busca via SSE e resolve com o resultado final: o relatório da
 // perna (TAP) ou a lista de pernas (SeatSpy, que traz ida e volta juntas).
-function buscarNoServidor(corpo, rotuloProgresso) {
+// Atualiza só o card dessa busca — outros cards em paralelo não são afetados.
+function buscarNoServidor(card, corpo, rotuloProgresso) {
   return new Promise(async (resolve, reject) => {
-    progressoLabel.textContent = rotuloProgresso;
-    progressoJanela.textContent = "";
-    atualizarBarra(0);
+    card.progressoLabelEl.textContent = rotuloProgresso;
+    card.progressoJanelaEl.textContent = "";
+    atualizarBarra(card.barraEl, 0);
+    card.definirStatus("Na fila", "status-fila");
 
     let resposta;
     try {
@@ -385,13 +460,23 @@ function buscarNoServidor(corpo, rotuloProgresso) {
 
     fonte.onmessage = (evento) => {
       const dado = JSON.parse(evento.data);
-      if (dado.tipo === "progresso") {
-        atualizarBarra(dado.fracao);
+      if (dado.tipo === "fila") {
+        card.definirStatus("Na fila", "status-fila");
+      } else if (dado.tipo === "iniciou") {
+        card.definirStatus("Buscando...", "status-buscando");
+      } else if (dado.tipo === "progresso") {
+        atualizarBarra(card.barraEl, dado.fracao);
       } else if (dado.tipo === "janela") {
-        progressoJanela.textContent = `Janela ${dado.atual} de ${dado.total} · ${dado.inicio} – ${dado.fim}`;
+        card.progressoJanelaEl.textContent = `Janela ${dado.atual} de ${dado.total} · ${dado.inicio} – ${dado.fim}`;
+        card.avisoEl.hidden = true;
+      } else if (dado.tipo === "aviso") {
+        // Aviso transitório (ex.: cooldown de bloqueio de frequência do
+        // AwardTool) — some sozinho quando a próxima janela/progresso chegar.
+        card.avisoEl.textContent = dado.mensagem;
+        card.avisoEl.hidden = !dado.mensagem;
       } else if (dado.tipo === "done") {
         fonte.close();
-        resolve(dado.pernas || dado.relatorio);
+        resolve({ resultado: dado.pernas || dado.secaoAA || dado.relatorio, avisoParcial: dado.avisoParcial });
       } else if (dado.tipo === "erro") {
         fonte.close();
         reject(new Error(dado.mensagem));
@@ -460,9 +545,10 @@ function extrairDiasPorRotulo(secoes, rotulo) {
   return secoes.find((s) => s.rotulo === rotulo)?.dias || [];
 }
 
-function renderizarUpgrade() {
-  listaUpgrade.innerHTML = "";
-  upgradeVazio.hidden = pernasParaUpgrade.length > 0;
+function renderizarUpgrade(card) {
+  const { listaUpgradeEl, upgradeVazioEl, pernasParaUpgrade } = card;
+  listaUpgradeEl.innerHTML = "";
+  upgradeVazioEl.hidden = pernasParaUpgrade.length > 0;
   if (pernasParaUpgrade.length === 0) return;
 
   for (const perna of pernasParaUpgrade) {
@@ -534,11 +620,11 @@ function renderizarUpgrade() {
 
           const exec = document.createElement("span");
           exec.className = "cartao cartao-executiva";
-          exec.textContent = `Exec ${item.execK}K`;
+          exec.textContent = item.execK != null ? `Exec ${item.execK}K` : "Exec (preço n/d)";
 
           const econ = document.createElement("span");
           econ.className = "cartao cartao-economica";
-          econ.textContent = `Econ ${item.econK}K`;
+          econ.textContent = item.econK != null ? `Econ ${item.econK}K` : "Econ (preço n/d)";
 
           linha.append(dia, exec, econ);
           linhas.appendChild(linha);
@@ -548,7 +634,7 @@ function renderizarUpgrade() {
       bloco.appendChild(lista);
     }
 
-    listaUpgrade.appendChild(bloco);
+    listaUpgradeEl.appendChild(bloco);
   }
 }
 
@@ -565,7 +651,12 @@ function renderizarColuna(colunaEl, secao, corClasse) {
   }
   colunaEl.open = true;
 
-  resumoEl.textContent = `${secao.menor}K–${secao.maior}K · ${secao.dias.length} dia(s)`;
+  // Quando o SeatSpy marca o dia como disponível mas não informa o valor em
+  // milhas (tarifa mista/parceira), menor/maior ficam null.
+  resumoEl.textContent =
+    secao.menor != null
+      ? `${secao.menor}K–${secao.maior}K · ${secao.dias.length} dia(s)`
+      : `Preço não informado · ${secao.dias.length} dia(s)`;
 
   const grupos = formatarPorMes(secao.dias);
   cartoesEl.innerHTML = "";
@@ -596,18 +687,18 @@ function renderizarColuna(colunaEl, secao, corClasse) {
   };
 }
 
-function renderizarPerna(rotulo, relatorio) {
+function renderizarPerna(destinoEl, rotulo, relatorio) {
   const fragmento = tplPerna.content.cloneNode(true);
   const raiz = fragmento.querySelector(".perna");
   raiz.querySelector(".perna-titulo").textContent = rotulo;
   renderizarColuna(raiz.querySelector(".coluna-executiva"), relatorio.executivas, "cartao-executiva");
   renderizarColuna(raiz.querySelector(".coluna-economica"), relatorio.economicas, "cartao-economica");
-  resultado.appendChild(raiz);
+  destinoEl.appendChild(raiz);
 }
 
 // Versão do SeatSpy: as cabines vêm do servidor (Econômica/Premium/Executiva),
 // então as colunas são montadas dinamicamente em vez de vir do template.
-function renderizarPernaSecoes(rotulo, secoes) {
+function renderizarPernaSecoes(destinoEl, rotulo, secoes) {
   const raiz = document.createElement("div");
   raiz.className = "perna";
 
@@ -634,7 +725,7 @@ function renderizarPernaSecoes(rotulo, secoes) {
     colunas.appendChild(col);
   }
   raiz.appendChild(colunas);
-  resultado.appendChild(raiz);
+  destinoEl.appendChild(raiz);
 }
 
 function tetoEmMilhas(input) {
@@ -642,77 +733,152 @@ function tetoEmMilhas(input) {
   return Number.isFinite(valor) && valor > 0 ? Math.round(valor * 1000) : null;
 }
 
-async function iniciarBusca(programa, origem, destino, idaEVolta) {
-  limparAviso();
-  definirCarregando(true);
-  resultado.hidden = true;
-  resultado.innerHTML = "";
-  subAbasResultado.hidden = true;
-  subpainelUpgrade.hidden = true;
-  subAbaBtns.forEach((b) => b.classList.remove("ativo"));
-  document.querySelector('.sub-aba-btn[data-subaba="datas"]').classList.add("ativo");
-  progresso.hidden = false;
-  pernasParaUpgrade = [];
+// Cada chamada cria seu próprio card (ver criarCardJob) e roda de forma
+// independente — várias buscas podem estar em andamento ao mesmo tempo
+// (modo agents), cada uma numa sessão própria do pool no servidor.
+async function iniciarBuscaTap(origem, destino, idaEVolta) {
+  const seta = idaEVolta ? "⇄" : "→";
+  const card = criarCardJob(filaTap, `TAP: ${origem} ${seta} ${destino}`);
+  const avisosParciais = [];
 
   try {
-    if (programa === "tap") {
-      const rotuloIda = idaEVolta ? "Buscando ida..." : "Buscando...";
-      const relatorioIda = await buscarNoServidor({ origem, destino }, rotuloIda);
-      const rotuloPernaIda = idaEVolta ? `Ida: ${origem} → ${destino}` : `${origem} → ${destino}`;
-      renderizarPerna(rotuloPernaIda, relatorioIda);
-      pernasParaUpgrade.push({
-        rotulo: rotuloPernaIda,
-        executiva: relatorioIda.executivas.dias,
-        economica: relatorioIda.economicas.dias,
-      });
-      salvarNoHistorico(origem, destino, "tap");
+    const rotuloIda = idaEVolta ? "Buscando ida..." : "Buscando...";
+    const { resultado: relatorioIda, avisoParcial: avisoIda } = await buscarNoServidor(card, { origem, destino }, rotuloIda);
+    if (avisoIda) avisosParciais.push(avisoIda);
+    const rotuloPernaIda = idaEVolta ? `Ida: ${origem} → ${destino}` : `${origem} → ${destino}`;
+    renderizarPerna(card.resultadoEl, rotuloPernaIda, relatorioIda);
+    card.pernasParaUpgrade.push({
+      rotulo: rotuloPernaIda,
+      executiva: relatorioIda.executivas.dias,
+      economica: relatorioIda.economicas.dias,
+    });
+    salvarNoHistorico(origem, destino, "tap");
 
-      if (idaEVolta) {
-        const relatorioVolta = await buscarNoServidor({ origem: destino, destino: origem }, "Buscando volta...");
-        const rotuloPernaVolta = `Volta: ${destino} → ${origem}`;
-        renderizarPerna(rotuloPernaVolta, relatorioVolta);
-        pernasParaUpgrade.push({
-          rotulo: rotuloPernaVolta,
-          executiva: relatorioVolta.executivas.dias,
-          economica: relatorioVolta.economicas.dias,
-        });
-        promoverUltimaParaIdaEVolta(origem, destino, "tap");
-      }
-    } else {
-      // SeatSpy: uma busca só já traz ida e volta (e consome um crédito só).
-      const pernas = await buscarNoServidor(
-        {
-          fonte: "seatspy",
-          companhia: programa,
-          origem,
-          destino,
-          idaEVolta,
-          tetos: {
-            economica: tetoEmMilhas(inputTetoEconomica),
-            premium: tetoEmMilhas(inputTetoPremium),
-            executiva: tetoEmMilhas(inputTetoExecutiva),
-          },
-        },
-        idaEVolta ? "Buscando ida e volta..." : "Buscando...",
+    if (idaEVolta) {
+      const { resultado: relatorioVolta, avisoParcial: avisoVolta } = await buscarNoServidor(
+        card,
+        { origem: destino, destino: origem },
+        "Buscando volta...",
       );
-      for (const perna of pernas) {
-        renderizarPernaSecoes(perna.rotulo, perna.secoes);
-        pernasParaUpgrade.push({
-          rotulo: perna.rotulo,
-          executiva: extrairDiasPorRotulo(perna.secoes, "Executiva"),
-          economica: extrairDiasPorRotulo(perna.secoes, "Econômica"),
-        });
-      }
-      salvarNoHistorico(origem, destino, programa, idaEVolta);
+      if (avisoVolta) avisosParciais.push(avisoVolta);
+      const rotuloPernaVolta = `Volta: ${destino} → ${origem}`;
+      renderizarPerna(card.resultadoEl, rotuloPernaVolta, relatorioVolta);
+      card.pernasParaUpgrade.push({
+        rotulo: rotuloPernaVolta,
+        executiva: relatorioVolta.executivas.dias,
+        economica: relatorioVolta.economicas.dias,
+      });
+      promoverUltimaParaIdaEVolta(origem, destino, "tap");
     }
 
-    resultado.hidden = false;
-    subAbasResultado.hidden = false;
+    card.definirStatus("Pronto", "status-pronto");
+    card.resultadoEl.hidden = false;
+    card.subAbasEl.hidden = false;
+    if (avisosParciais.length > 0) {
+      card.avisoEl.textContent = avisosParciais.join(" ");
+      card.avisoEl.hidden = false;
+    }
   } catch (err) {
-    mostrarAviso(err.message || "Erro inesperado.");
+    card.definirStatus("Erro", "status-erro");
+    card.avisoEl.textContent = err.message || "Erro inesperado.";
+    card.avisoEl.hidden = false;
   } finally {
-    progresso.hidden = true;
-    definirCarregando(false);
+    card.progressoEl.hidden = true;
+  }
+}
+
+// Idem, mas pro SeatSpy: uma busca só já traz ida e volta juntas (e consome
+// um crédito só), então não tem o passo separado de "buscar volta" da TAP.
+async function iniciarBuscaSeatspy(programa, origem, destino, idaEVolta) {
+  const rotuloPrograma = PROGRAMA_LABEL[programa] || programa;
+  const seta = idaEVolta ? "⇄" : "→";
+  const card = criarCardJob(filaSeatspy, `${rotuloPrograma}: ${origem} ${seta} ${destino}`);
+
+  try {
+    const { resultado: pernas } = await buscarNoServidor(
+      card,
+      {
+        fonte: "seatspy",
+        companhia: programa,
+        origem,
+        destino,
+        idaEVolta,
+        tetos: {
+          economica: tetoEmMilhas(inputSeatspyTetoEconomica),
+          premium: tetoEmMilhas(inputSeatspyTetoPremium),
+          executiva: tetoEmMilhas(inputSeatspyTetoExecutiva),
+        },
+      },
+      idaEVolta ? "Buscando ida e volta..." : "Buscando...",
+    );
+    for (const perna of pernas) {
+      renderizarPernaSecoes(card.resultadoEl, perna.rotulo, perna.secoes);
+      card.pernasParaUpgrade.push({
+        rotulo: perna.rotulo,
+        executiva: extrairDiasPorRotulo(perna.secoes, "Executiva"),
+        economica: extrairDiasPorRotulo(perna.secoes, "Econômica"),
+      });
+    }
+    salvarNoHistorico(origem, destino, programa, idaEVolta);
+
+    card.definirStatus("Pronto", "status-pronto");
+    card.resultadoEl.hidden = false;
+    card.subAbasEl.hidden = false;
+  } catch (err) {
+    card.definirStatus("Erro", "status-erro");
+    card.avisoEl.textContent = err.message || "Erro inesperado.";
+    card.avisoEl.hidden = false;
+  } finally {
+    card.progressoEl.hidden = true;
+  }
+}
+
+// AA: uma cabine por busca, cada direção é um job próprio (como na TAP).
+// Sem aba Upgrade (não há cruzamento de cabines numa busca de cabine única).
+async function iniciarBuscaAA(origem, destino, cabine, maxConexoes, tetoK, idaEVolta) {
+  const seta = idaEVolta ? "⇄" : "→";
+  const rotuloCabine = CABINE_AA_LABEL[cabine] || cabine;
+  const card = criarCardJob(filaAa, `American Airlines (${rotuloCabine}): ${origem} ${seta} ${destino}`);
+  const avisosParciais = [];
+  const corpoBase = { fonte: "aa", cabine, maxConexoes, teto: tetoK };
+
+  try {
+    const rotuloIda = idaEVolta ? "Buscando ida..." : "Buscando...";
+    const { resultado: secaoIda, avisoParcial: avisoIda } = await buscarNoServidor(
+      card,
+      { ...corpoBase, origem, destino },
+      rotuloIda,
+    );
+    if (avisoIda) avisosParciais.push(avisoIda);
+    const rotuloPernaIda = idaEVolta ? `Ida: ${origem} → ${destino}` : `${origem} → ${destino}`;
+    renderizarPernaSecoes(card.resultadoEl, rotuloPernaIda, [{ ...secaoIda, corClasse: CABINE_AA_COR[cabine] }]);
+    salvarNoHistorico(origem, destino, "AA", false, { cabine });
+
+    if (idaEVolta) {
+      const { resultado: secaoVolta, avisoParcial: avisoVolta } = await buscarNoServidor(
+        card,
+        { ...corpoBase, origem: destino, destino: origem },
+        "Buscando volta...",
+      );
+      if (avisoVolta) avisosParciais.push(avisoVolta);
+      renderizarPernaSecoes(card.resultadoEl, `Volta: ${destino} → ${origem}`, [
+        { ...secaoVolta, corClasse: CABINE_AA_COR[cabine] },
+      ]);
+      promoverUltimaParaIdaEVolta(origem, destino, "AA");
+    }
+
+    card.definirStatus("Pronto", "status-pronto");
+    card.resultadoEl.hidden = false;
+    if (avisosParciais.length > 0) {
+      card.avisoEl.textContent = avisosParciais.join(" ");
+      card.avisoEl.hidden = false;
+    }
+  } catch (err) {
+    card.definirStatus("Erro", "status-erro");
+    card.avisoEl.textContent = err.message || "Erro inesperado.";
+    card.avisoEl.hidden = false;
+  } finally {
+    card.progressoEl.hidden = true;
   }
 }
 
@@ -737,16 +903,48 @@ function avisoDeRepeticao(programa, origem, destino, idaEVolta) {
   return true;
 }
 
-form.addEventListener("submit", (evento) => {
+formTap.addEventListener("submit", (evento) => {
   evento.preventDefault();
-  const programa = selectPrograma.value;
-  const origem = inputOrigem.value.trim().toUpperCase();
-  const destino = inputDestino.value.trim().toUpperCase();
-  const idaEVolta = checkboxIdaVolta.checked;
+  limparAviso(avisoTap);
+  const origem = inputTapOrigem.value.trim().toUpperCase();
+  const destino = inputTapDestino.value.trim().toUpperCase();
+  const idaEVolta = checkboxTapIdaVolta.checked;
   if (!origem || !destino) {
-    mostrarAviso("Preencha origem e destino.");
+    mostrarAviso(avisoTap, "Preencha origem e destino.");
+    return;
+  }
+  if (!avisoDeRepeticao("tap", origem, destino, idaEVolta)) return;
+  iniciarBuscaTap(origem, destino, idaEVolta);
+});
+
+formAa.addEventListener("submit", (evento) => {
+  evento.preventDefault();
+  limparAviso(avisoAa);
+  const origem = inputAaOrigem.value.trim().toUpperCase();
+  const destino = inputAaDestino.value.trim().toUpperCase();
+  if (!origem || !destino) {
+    mostrarAviso(avisoAa, "Preencha origem e destino.");
+    return;
+  }
+  const cabine = selectAaCabine.value;
+  const maxConexoes = selectAaConexoes.value === "" ? null : Number(selectAaConexoes.value);
+  const tetoK = parseFloat(inputAaTeto.value);
+  // Buscar na AA é grátis, então não tem o aviso de repetição em N dias das
+  // fontes pagas.
+  iniciarBuscaAA(origem, destino, cabine, maxConexoes, Number.isFinite(tetoK) && tetoK > 0 ? tetoK * 1000 : null, checkboxAaIdaVolta.checked);
+});
+
+formSeatspy.addEventListener("submit", (evento) => {
+  evento.preventDefault();
+  limparAviso(avisoSeatspy);
+  const programa = selectSeatspyPrograma.value;
+  const origem = inputSeatspyOrigem.value.trim().toUpperCase();
+  const destino = inputSeatspyDestino.value.trim().toUpperCase();
+  const idaEVolta = checkboxSeatspyIdaVolta.checked;
+  if (!origem || !destino) {
+    mostrarAviso(avisoSeatspy, "Preencha origem e destino.");
     return;
   }
   if (!avisoDeRepeticao(programa, origem, destino, idaEVolta)) return;
-  iniciarBusca(programa, origem, destino, idaEVolta);
+  iniciarBuscaSeatspy(programa, origem, destino, idaEVolta);
 });

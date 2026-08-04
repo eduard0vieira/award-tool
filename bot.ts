@@ -1,5 +1,18 @@
 import "dotenv/config";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
+import {
+  LimitadorFrequencia,
+  formatarListaPorMes,
+  parseValorK,
+  type OnAviso,
+  type OnJanela,
+  type OnLog,
+  type OnProgresso,
+  type DiaFormatado,
+  type SecaoRelatorio,
+} from "./comum.ts";
+
+export type { OnAviso, OnJanela, OnLog, OnProgresso, SecaoRelatorio };
 
 export type DiaDisponibilidade = {
   date: string;
@@ -17,31 +30,13 @@ export type ParametrosBusca = {
   cabine: string; // "1" = Executiva, "2" = Econômica
 };
 
-export type DiaFormatado = {
-  data: string; // YYYY-MM-DD
-  valorK: number;
-};
-
-export type SecaoRelatorio = {
-  menor: number | null;
-  maior: number | null;
-  dias: DiaFormatado[]; // ordenados cronologicamente
-  texto: string; // "Mmm YYYY: DD, DD, ..." (pra copiar)
-};
-
 export type Relatorio = {
   executivas: SecaoRelatorio;
   economicas: SecaoRelatorio;
 };
 
-export type OnLog = (mensagem: string) => void;
-export type OnProgresso = (fracao: number) => void;
-export type OnJanela = (info: {
-  atual: number;
-  total: number;
-  inicio: string;
-  fim: string;
-}) => void;
+const INTERVALO_MIN_BUSCAS_MS = Number(process.env.AWARDTOOL_INTERVALO_BUSCAS_MS) || 15000;
+const limitadorAwardtool = new LimitadorFrequencia(INTERVALO_MIN_BUSCAS_MS);
 
 // Cada linha do popover "Date" tem um parágrafo "YYYY-MM-DD (achados/total)"
 // seguido de 4 valores de preço, um por cabine, identificados pela cor da
@@ -123,8 +118,14 @@ async function pesquisarJanela(
   onProgresso: OnProgresso,
   fracaoBase: number,
   fracaoPasso: number,
+  onAviso: OnAviso = () => {},
 ): Promise<DiaDisponibilidade[]> {
   const { baseUrl, origem, destino, cabineParam, dataInicio, dataFim } = opts;
+
+  // Espaça o início desta busca em relação a qualquer outra busca do
+  // AwardTool rodando em paralelo (outras sessões do pool) — é o que evita o
+  // bloqueio por "buscando com muita frequência".
+  await limitadorAwardtool.aguardarVez();
 
   const params = new URLSearchParams({
     flightWay: "oneway",
@@ -154,9 +155,35 @@ async function pesquisarJanela(
   // tamanho de sempre. Fechar o modal e repetir a mesma busca resolve — o
   // plano já é reconhecido normalmente da segunda tentativa em diante.
   const MAX_TENTATIVAS_MODAL = 3;
-  for (let tentativa = 1; ; tentativa++) {
+  // Bloqueio por excesso de frequência ("searching too frequently"): esperar
+  // um pouco resolve, mas o cooldown precisa ser bem maior que o do modal
+  // acima — insistir rápido só piora/prolonga o bloqueio.
+  const MAX_TENTATIVAS_LIMITE = 3;
+  for (let tentativa = 1, tentativaLimite = 1; ; tentativa++) {
+    if (tentativa > 1) await limitadorAwardtool.aguardarVez();
     await page.goto(resultsUrl);
     await page.waitForLoadState("domcontentloaded");
+
+    const apareceuLimiteFrequencia = await page
+      .getByText(/too (many|frequent(ly)?) (requests|searches)|rate.?limit|search(ing)? too (often|frequently)|please (wait|try again)/i)
+      .first()
+      .waitFor({ state: "visible", timeout: 5000 })
+      .then(() => true)
+      .catch(() => false);
+    if (apareceuLimiteFrequencia) {
+      if (tentativaLimite >= MAX_TENTATIVAS_LIMITE) {
+        throw new Error(
+          `O AwardTool bloqueou essa busca por excesso de frequência e continuou bloqueando mesmo depois de ${MAX_TENTATIVAS_LIMITE} tentativas espaçadas. Tente de novo mais tarde.`,
+        );
+      }
+      const esperaMs = 2 * 60 * 1000 * tentativaLimite; // 2min, 4min, 6min...
+      const mensagem = `AwardTool bloqueou por buscas muito frequentes — esperando ${Math.round(esperaMs / 60000)} min antes de tentar de novo [${tentativaLimite}/${MAX_TENTATIVAS_LIMITE}]...`;
+      onLog(`  (${mensagem})`);
+      onAviso(mensagem);
+      await page.waitForTimeout(esperaMs);
+      tentativaLimite++;
+      continue;
+    }
 
     const apareceuModal = await page
       .getByText(/search range is too broad/i)
@@ -178,6 +205,7 @@ async function pesquisarJanela(
     }
     await page.waitForTimeout(1500);
   }
+  onAviso("");
 
   // Os preços por dia só ficam corretos depois que o long polling de voos
   // termina de verdade. Isso demora pelo menos ~35s, e o aviso de "carregando"
@@ -233,39 +261,12 @@ async function pesquisarJanela(
   return dias;
 }
 
-const MESES_PT = [
-  "Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
-  "Jul", "Ago", "Set", "Out", "Nov", "Dez",
-];
+export { formatarListaPorMes };
 
-function parseValorK(valor: string): number | null {
-  if (!valor || valor === "-") return null;
-  const num = parseFloat(valor.replace(/K$/i, "").replace(",", "."));
-  return Number.isNaN(num) ? null : num;
-}
-
-export function formatarListaPorMes(datas: string[]): string {
-  const grupos = new Map<string, string[]>();
-  for (const d of datas) {
-    const [ano, mes, dia] = d.split("-") as [string, string, string];
-    const chave = `${ano}-${mes}`;
-    if (!grupos.has(chave)) grupos.set(chave, []);
-    grupos.get(chave)!.push(dia);
-  }
-  const chavesOrdenadas = Array.from(grupos.keys()).sort();
-  return chavesOrdenadas
-    .map((chave) => {
-      const [ano, mesNum] = chave.split("-") as [string, string];
-      const nomeMes = MESES_PT[parseInt(mesNum, 10) - 1];
-      return `${nomeMes} ${ano}: ${grupos.get(chave)!.join(", ")}`;
-    })
-    .join("\n");
-}
-
-// Valores de referência da tabela de milhas da TAP: só interessa a Executiva
-// na tarifa padrão (181K exato) e a Econômica na tarifa padrão OU melhor (53K
-// ou menos) — preços diferentes desses (ex.: 55K, 80K, alguma tarifa
-// "flex"/promocional fora da tabela) são ignorados.
+// Valores de referência da tabela de milhas da TAP: interessa a Executiva na
+// tarifa padrão OU melhor (181K ou menos) e a Econômica na tarifa padrão OU
+// melhor (53K ou menos) — preços acima desses (alguma tarifa "flex"/promocional
+// fora da tabela) são ignorados.
 const VALOR_EXECUTIVA_K = 181;
 const LIMIAR_ECONOMICA_K = 53;
 
@@ -302,7 +303,7 @@ export function construirRelatorio(todasAsDatas: DiaDisponibilidade[]): Relatori
       todasAsDatas,
       "Executivas",
       "business",
-      (v) => v === VALOR_EXECUTIVA_K,
+      (v) => v <= VALOR_EXECUTIVA_K,
     ),
     economicas: construirSecao(
       todasAsDatas,
@@ -314,6 +315,18 @@ export function construirRelatorio(todasAsDatas: DiaDisponibilidade[]): Relatori
 }
 
 const JANELA_DIAS = 36;
+// Se uma janela falhar mesmo depois dos retries internos (bloqueio de
+// frequência persistente, queda de rede, etc.), pula ela e segue pras
+// próximas em vez de jogar fora tudo que já foi capturado — mas desiste da
+// busca inteira se muitas janelas seguidas falharem (sinal de que o
+// problema não vai se resolver sozinho).
+const MAX_JANELAS_FALHAS_SEGUIDAS = 3;
+
+export type JanelaComFalha = { inicio: string; fim: string; erro: string };
+export type ResultadoAnoCompleto = {
+  dias: DiaDisponibilidade[];
+  janelasComFalha: JanelaComFalha[];
+};
 
 // Pesquisa o trecho inteiro por um ano rolante a partir de hoje (ex.: hoje
 // 14/jul/2026 -> vai até 14/jul/2027, que é até onde o calendário do
@@ -330,7 +343,8 @@ export async function pesquisarAnoCompleto(
   onLog: OnLog = () => {},
   onProgresso: OnProgresso = () => {},
   onJanela: OnJanela = () => {},
-): Promise<DiaDisponibilidade[]> {
+  onAviso: OnAviso = () => {},
+): Promise<ResultadoAnoCompleto> {
   const { baseUrl, origem, destino, cabineParam } = opts;
 
   const hoje = new Date();
@@ -341,6 +355,8 @@ export async function pesquisarAnoCompleto(
   );
 
   const todasAsDatas: DiaDisponibilidade[] = [];
+  const janelasComFalha: JanelaComFalha[] = [];
+  let falhasSeguidas = 0;
   let janelaInicio = new Date(
     hoje.getFullYear(),
     hoje.getMonth(),
@@ -370,15 +386,38 @@ export async function pesquisarAnoCompleto(
       inicio: janelaInicio.toLocaleDateString("pt-BR"),
       fim: janelaFim.toLocaleDateString("pt-BR"),
     });
-    const diasDaJanela = await pesquisarJanela(
-      page,
-      { baseUrl, origem, destino, cabineParam, dataInicio: janelaInicio, dataFim: janelaFim },
-      onLog,
-      onProgresso,
-      (numeroJanela - 1) / totalJanelas,
-      1 / totalJanelas,
-    );
-    todasAsDatas.push(...diasDaJanela);
+
+    try {
+      const diasDaJanela = await pesquisarJanela(
+        page,
+        { baseUrl, origem, destino, cabineParam, dataInicio: janelaInicio, dataFim: janelaFim },
+        onLog,
+        onProgresso,
+        (numeroJanela - 1) / totalJanelas,
+        1 / totalJanelas,
+        onAviso,
+      );
+      todasAsDatas.push(...diasDaJanela);
+      falhasSeguidas = 0;
+    } catch (err) {
+      const mensagemErro = err instanceof Error ? err.message : String(err);
+      onLog(`  (janela ${numeroJanela}/${totalJanelas} falhou, pulando: ${mensagemErro})`);
+      janelasComFalha.push({
+        inicio: janelaInicio.toLocaleDateString("pt-BR"),
+        fim: janelaFim.toLocaleDateString("pt-BR"),
+        erro: mensagemErro,
+      });
+      falhasSeguidas++;
+      if (falhasSeguidas >= MAX_JANELAS_FALHAS_SEGUIDAS) {
+        // Desiste de continuar (o problema não parece transitório), mas
+        // devolve o que já foi capturado em vez de jogar tudo fora.
+        onLog(
+          `${MAX_JANELAS_FALHAS_SEGUIDAS} janelas seguidas falharam — parando a busca aqui. ` +
+            `O que já foi capturado até agora (${todasAsDatas.length} data(s)) foi preservado.`,
+        );
+        break;
+      }
+    }
 
     janelaInicio = new Date(janelaFim);
     janelaInicio.setDate(janelaFim.getDate() + 1);
@@ -387,7 +426,10 @@ export async function pesquisarAnoCompleto(
 
   onProgresso(1);
   onLog(`Busca do ano completa! Total de ${todasAsDatas.length} datas capturadas.`);
-  return todasAsDatas;
+  if (janelasComFalha.length > 0) {
+    onLog(`${janelasComFalha.length} janela(s) falharam e foram puladas.`);
+  }
+  return { dias: todasAsDatas, janelasComFalha };
 }
 
 export type Sessao = {

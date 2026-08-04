@@ -2,101 +2,146 @@
 <html lang="pt-br">
 <head>
   <meta charset="utf-8" />
-  <title>Bot de Emissões TAP</title>
+  <title>Bot de Emissões</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
   <main>
-    <h1>✈️ Emissões TAP</h1>
+    <h1>✈️ Bot de Emissões</h1>
 
     <nav class="abas">
-      <button type="button" class="aba-btn ativo" data-aba="buscar">Buscar</button>
+      <button type="button" class="aba-btn ativo" data-aba="tap">TAP</button>
+      <button type="button" class="aba-btn" data-aba="seatspy">SeatSpy</button>
+      <button type="button" class="aba-btn" data-aba="aa">American</button>
       <button type="button" class="aba-btn" data-aba="historico">Histórico</button>
     </nav>
 
-    <section id="painel-buscar" class="painel">
-      <form id="form-busca">
+    <!-- Aba própria pro AwardTool (TAP): forma e fila de buscas independentes
+         da aba SeatSpy, pra rodar buscas simultâneas nos dois sites sem que
+         trocar de aba derrube o progresso da outra (só troca hidden). -->
+    <section id="painel-tap" class="painel">
+      <form id="form-busca-tap">
         <div class="campo">
-          <label for="programa">Programa</label>
-          <select id="programa" name="programa">
-            <option value="tap">TAP</option>
-            <option value="IB">Iberia</option>
-            <option value="BA">British Airways</option>
-          </select>
+          <label for="tap-origem">Origem</label>
+          <input id="tap-origem" placeholder="GRU" maxlength="3" required autocomplete="off" />
         </div>
         <div class="campo">
-          <label for="origem">Origem</label>
-          <input id="origem" name="origem" placeholder="GRU" maxlength="3" required autocomplete="off" />
+          <label for="tap-destino">Destino</label>
+          <input id="tap-destino" placeholder="LIS" maxlength="3" required autocomplete="off" />
         </div>
-        <div class="campo">
-          <label for="destino">Destino</label>
-          <input id="destino" name="destino" placeholder="LIS" maxlength="3" required autocomplete="off" />
-        </div>
-        <!--
-          Removido: a busca já traz executiva e econômica juntas na mesma
-          pesquisa (ver comentário em server.ts), então escolher cabine aqui
-          não muda nada no resultado.
-        <div class="campo">
-          <label for="cabine">Cabine</label>
-          <select id="cabine" name="cabine">
-            <option value="1">Executiva</option>
-            <option value="2">Econômica</option>
-          </select>
-        </div>
-        -->
         <label class="checkbox">
-          <input type="checkbox" id="ida-volta" checked />
+          <input type="checkbox" id="tap-ida-volta" checked />
           Ida e volta
         </label>
-        <button type="submit" id="btn-buscar">Buscar</button>
+        <button type="submit">Buscar</button>
+      </form>
 
-        <!-- Só para Iberia/British (SeatSpy): teto de milhas por cabine, em K.
-             Dias mais caros que o teto ficam fora do relatório. Vazio = sem filtro. -->
-        <div id="linha-tetos" class="linha-tetos" hidden>
+      <p id="tap-aviso" class="aviso" hidden></p>
+
+      <!-- Cada busca vira um card independente aqui dentro (ver tpl-job), então
+           várias podem rodar em paralelo (modo agents) sem uma travar a outra. -->
+      <div id="tap-fila-buscas" class="fila-buscas"></div>
+    </section>
+
+    <!-- Aba própria pro SeatSpy: cobre todos os programas que ele rastreia
+         (Air France, JetBlue, British, Cathay, Etihad, Iberia, KLM, Qantas,
+         Virgin Atlantic), com teto de milhas por cabine. -->
+    <section id="painel-seatspy" class="painel" hidden>
+      <form id="form-busca-seatspy">
+        <div class="campo">
+          <label for="seatspy-programa">Programa</label>
+          <select id="seatspy-programa">
+            <option value="AF">Air France</option>
+            <option value="B6">JetBlue</option>
+            <option value="BA">British Airways</option>
+            <option value="CX">Cathay Pacific</option>
+            <option value="EY">Etihad Airways</option>
+            <option value="IB">Iberia</option>
+            <option value="KLM">KLM</option>
+            <option value="QF">Qantas Airways</option>
+            <option value="VIR">Virgin Atlantic</option>
+          </select>
+        </div>
+        <div class="campo">
+          <label for="seatspy-origem">Origem</label>
+          <input id="seatspy-origem" placeholder="GRU" maxlength="3" required autocomplete="off" />
+        </div>
+        <div class="campo">
+          <label for="seatspy-destino">Destino</label>
+          <input id="seatspy-destino" placeholder="MAD" maxlength="3" required autocomplete="off" />
+        </div>
+        <label class="checkbox">
+          <input type="checkbox" id="seatspy-ida-volta" checked />
+          Ida e volta
+        </label>
+        <button type="submit">Buscar</button>
+
+        <!-- Teto de milhas por cabine, em K. Dias mais caros que o teto ficam
+             fora do relatório. Vazio = sem filtro. -->
+        <div class="linha-tetos">
           <div class="campo">
-            <label for="teto-economica">Teto Econômica (K)</label>
-            <input id="teto-economica" type="number" min="1" step="0.25" placeholder="ex.: 25" autocomplete="off" />
+            <label for="seatspy-teto-economica">Teto Econômica (K)</label>
+            <input id="seatspy-teto-economica" type="number" min="1" step="0.25" placeholder="ex.: 25" autocomplete="off" />
           </div>
           <div class="campo">
-            <label for="teto-premium">Teto Premium (K)</label>
-            <input id="teto-premium" type="number" min="1" step="0.25" placeholder="ex.: 51" autocomplete="off" />
+            <label for="seatspy-teto-premium">Teto Premium (K)</label>
+            <input id="seatspy-teto-premium" type="number" min="1" step="0.25" placeholder="ex.: 51" autocomplete="off" />
           </div>
           <div class="campo">
-            <label for="teto-executiva">Teto Executiva (K)</label>
-            <input id="teto-executiva" type="number" min="1" step="0.25" placeholder="ex.: 74" autocomplete="off" />
+            <label for="seatspy-teto-executiva">Teto Executiva (K)</label>
+            <input id="seatspy-teto-executiva" type="number" min="1" step="0.25" placeholder="ex.: 74" autocomplete="off" />
           </div>
         </div>
       </form>
 
-      <p id="aviso" class="aviso" hidden></p>
+      <p id="seatspy-aviso" class="aviso" hidden></p>
 
-      <section id="progresso" hidden>
-        <div class="progresso-linha">
-          <span id="progresso-label">Buscando...</span>
-          <span id="progresso-janela"></span>
+      <div id="seatspy-fila-buscas" class="fila-buscas"></div>
+    </section>
+
+    <!-- Aba da American Airlines (aa.com, busca de prêmios sem login).
+         Uma cabine por busca; filtro de conexões igual ao do site. -->
+    <section id="painel-aa" class="painel" hidden>
+      <form id="form-busca-aa">
+        <div class="campo">
+          <label for="aa-origem">Origem</label>
+          <input id="aa-origem" placeholder="GRU" maxlength="3" required autocomplete="off" />
         </div>
-        <div class="barra">
-          <div class="barra-preenchida" id="barra-preenchida"></div>
+        <div class="campo">
+          <label for="aa-destino">Destino</label>
+          <input id="aa-destino" placeholder="MIA" maxlength="3" required autocomplete="off" />
         </div>
-      </section>
+        <div class="campo">
+          <label for="aa-cabine">Cabine</label>
+          <select id="aa-cabine">
+            <option value="economica">Econômica</option>
+            <option value="premium">Premium Economy</option>
+            <option value="executiva">Executiva</option>
+          </select>
+        </div>
+        <div class="campo">
+          <label for="aa-conexoes">Conexões</label>
+          <select id="aa-conexoes">
+            <option value="">Todos os voos</option>
+            <option value="0">Só voo direto</option>
+            <option value="1">Até 1 conexão</option>
+          </select>
+        </div>
+        <div class="campo">
+          <label for="aa-teto">Teto de milhas (K)</label>
+          <input id="aa-teto" type="number" min="1" step="0.5" placeholder="ex.: 110" autocomplete="off" />
+        </div>
+        <label class="checkbox">
+          <input type="checkbox" id="aa-ida-volta" checked />
+          Ida e volta
+        </label>
+        <button type="submit">Buscar</button>
+      </form>
 
-      <nav id="sub-abas-resultado" class="sub-abas" hidden>
-        <button type="button" class="sub-aba-btn ativo" data-subaba="datas">Datas</button>
-        <button type="button" class="sub-aba-btn" data-subaba="upgrade">Upgrade</button>
-      </nav>
+      <p id="aa-aviso" class="aviso" hidden></p>
 
-      <section id="resultado" hidden></section>
-
-      <section id="subpainel-upgrade" hidden>
-        <p class="upgrade-explicacao">
-          Dias em que Econômica e Executiva têm disponibilidade juntas — nesses dias dá pra
-          emitir a passagem em Econômica e usar o upgrade da TAP pra ficar mais barato do que
-          emitir direto em Executiva.
-        </p>
-        <p id="upgrade-vazio" class="historico-vazio" hidden>Nenhum dia com as duas cabines disponíveis nesse período.</p>
-        <div id="lista-upgrade" class="lista-upgrade"></div>
-      </section>
+      <div id="aa-fila-buscas" class="fila-buscas"></div>
     </section>
 
     <section id="painel-historico" class="painel" hidden>
@@ -108,6 +153,45 @@
       <div id="lista-historico" class="lista-historico"></div>
     </section>
   </main>
+
+  <template id="tpl-job">
+    <section class="job-busca">
+      <div class="job-cabecalho">
+        <div class="job-info">
+          <span class="job-rota"></span>
+          <span class="job-status status-fila">Na fila</span>
+        </div>
+        <div class="progresso">
+          <div class="progresso-linha">
+            <span class="progresso-label">Buscando...</span>
+            <span class="progresso-janela"></span>
+          </div>
+          <div class="barra">
+            <div class="barra-preenchida"></div>
+          </div>
+        </div>
+      </div>
+
+      <p class="aviso" hidden></p>
+
+      <nav class="sub-abas" hidden>
+        <button type="button" class="sub-aba-btn ativo" data-subaba="datas">Datas</button>
+        <button type="button" class="sub-aba-btn" data-subaba="upgrade">Upgrade</button>
+      </nav>
+
+      <section class="resultado" hidden></section>
+
+      <section class="subpainel-upgrade" hidden>
+        <p class="upgrade-explicacao">
+          Dias em que Econômica e Executiva têm disponibilidade juntas — nesses dias dá pra
+          emitir a passagem em Econômica e usar o upgrade da TAP pra ficar mais barato do que
+          emitir direto em Executiva.
+        </p>
+        <p class="upgrade-vazio historico-vazio" hidden>Nenhum dia com as duas cabines disponíveis nesse período.</p>
+        <div class="lista-upgrade"></div>
+      </section>
+    </section>
+  </template>
 
   <template id="tpl-perna">
     <div class="perna">
