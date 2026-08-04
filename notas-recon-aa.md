@@ -4,6 +4,21 @@
 > comentários no bot-aa.ts quando ele for implementado (e este arquivo pode
 > ser apagado depois).
 
+## Como rodar buscas na AA (procedimento)
+
+1. `npm run chrome` — abre uma janela do Chrome com um perfil separado
+   (`~/.chrome-bot-aa`). Deixe aberta; seu Chrome normal segue funcionando ao
+   lado. Precisa ser perfil separado: desde o Chrome 136 a porta de depuração
+   é ignorada no perfil padrão.
+2. Se der "Access Denied": feche essa janela, rode
+   `bash scripts/importar-cookies-aa.sh` e reabra com `npm run chrome`.
+3. Buscar normalmente pela aba American do bot.
+
+O passo 2 é o que destrava: a Akamai barra qualquer navegador sem os cookies
+dela (`_abck`, `bm_s`) — inclusive um Chrome comum, sem automação, com perfil
+novo. O script leva SÓ os cookies de aa.com do seu Chrome de todo dia pro
+perfil do bot. Refaça quando esses cookies expirarem e o bloqueio voltar.
+
 ## Anti-bot (Akamai)
 
 - Chromium empacotado do Playwright: **403 imediato** em qualquer URL de /booking.

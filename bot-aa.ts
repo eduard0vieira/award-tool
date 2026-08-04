@@ -1,6 +1,6 @@
 import "dotenv/config";
+import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import {
   LimitadorFrequencia,
@@ -25,8 +25,6 @@ import {
 //   porque o TLS não é o do Chrome.
 // - O request aceita cabine e maxStops (0 = só direto, 1 = até 1 conexão)
 //   server-side, então o filtro de conexões é o mesmo do site.
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export type SessaoAA = {
   browser: Browser | null; // null em contexto persistente (ver iniciarSessaoAA)
@@ -75,13 +73,14 @@ const limitadorAA = new LimitadorFrequencia(INTERVALO_MIN_AA_MS);
 const MAX_MESES_FALHAS_SEGUIDAS = 3;
 const MESES_A_VARRER = 12;
 
-// Onde o Chrome do usuário expõe o DevTools Protocol (ver scripts/chrome-aa.sh,
+// Onde o Chrome do bot expõe o DevTools Protocol (ver scripts/chrome-aa.sh,
 // rodado por `npm run chrome`).
 const AA_CDP_URL = process.env.AA_CDP_URL || `http://localhost:${process.env.AA_CDP_PORTA || 9222}`;
-// Perfil próprio do bot, usado no modo avulso. Diferente de um contexto novo
-// a cada busca, ele acumula cookies/histórico entre execuções — o Akamai
-// confia mais num perfil com passado do que num recém-criado.
-const DIR_PERFIL_AA = path.join(__dirname, ".perfil-aa");
+// Perfil do bot — o MESMO usado pelo scripts/chrome-aa.sh, de propósito: a
+// reputação (cookies, histórico) que a janela aberta manualmente acumula
+// vale também quando o bot abre o Chrome sozinho, e vice-versa. Fora do
+// repositório porque é dado de navegador, não código.
+const DIR_PERFIL_AA = process.env.AA_CHROME_PERFIL || path.join(os.homedir(), ".chrome-bot-aa");
 
 // Duas formas de sessão, nessa ordem:
 //
@@ -116,16 +115,18 @@ export async function iniciarSessaoAA(headless = false): Promise<SessaoAA> {
 async function conectarNoChromeDoUsuario(): Promise<SessaoAA | null> {
   try {
     const browser = await chromium.connectOverCDP(AA_CDP_URL, { timeout: 3000 });
-    // contexts()[0] é o perfil já aberto do usuário (com os cookies dele);
+    // contexts()[0] é o perfil já aberto na janela (com os cookies dele);
     // newContext() criaria um anônimo, sem nenhuma dessa reputação.
     const context = browser.contexts()[0];
     if (!context) {
       await browser.close();
       return null;
     }
-    console.log(`[AA] usando uma aba do seu Chrome (${AA_CDP_URL}).`);
+    console.log(`[AA] usando uma aba da janela do bot (${AA_CDP_URL}).`);
     return { browser, context, page: await context.newPage(), viaCdp: true };
   } catch {
+    // Sem janela aberta (todas as abas fechadas) o Chrome recusa a conexão —
+    // aí vale mais abrir um navegador próprio do que insistir.
     return null;
   }
 }

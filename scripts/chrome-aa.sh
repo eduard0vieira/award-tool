@@ -1,17 +1,28 @@
 #!/bin/bash
-# Abre o Chrome com a porta de depuração ligada, pro bot poder buscar na AA
-# numa aba do seu navegador de sempre (ver iniciarSessaoAA em bot-aa.ts).
+# Abre uma janela do Chrome que o bot consegue usar pra buscar na AA
+# (ver iniciarSessaoAA em bot-aa.ts).
 #
-# Pega pulo do gato: a flag só vale quando o Chrome INICIA. Se ele já estiver
-# aberto, o macOS entrega o pedido pra instância existente e a porta nunca
-# abre — por isso aqui a gente fecha o Chrome antes (ele restaura as abas ao
-# voltar) em vez de deixar o comando falhar silenciosamente.
+# Dois detalhes do Chrome que ditam o formato disso aqui:
+#
+# 1. A flag --remote-debugging-port só vale quando o Chrome INICIA. Com ele
+#    já aberto, o macOS entrega o pedido pra instância existente e a porta
+#    nunca sobe.
+# 2. Desde o Chrome 136 a porta é IGNORADA quando o perfil é o padrão (foi a
+#    resposta deles a ataques de roubo de cookie). Por isso aqui usamos um
+#    perfil separado — que, de quebra, roda ao lado do seu Chrome normal, sem
+#    precisar fechar nada.
+#
+# Esse perfil é persistente: o histórico/cookies que ele acumular ficam pra
+# próxima. Se a AA reclamar nas primeiras vezes, navegue um pouco em aa.com
+# nessa janela (buscar um voo qualquer já ajuda) — ela ganha reputação e
+# passa a ser tratada como navegação normal.
 
 PORTA="${AA_CDP_PORTA:-9222}"
+PERFIL="${AA_CHROME_PERFIL:-$HOME/.chrome-bot-aa}"
 CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
 if curl -s --max-time 2 "http://localhost:$PORTA/json/version" > /dev/null 2>&1; then
-  echo "✅ Chrome já está aberto com a porta $PORTA. Pode usar o bot."
+  echo "✅ A janela do bot já está aberta (porta $PORTA). Pode buscar na AA."
   exit 0
 fi
 
@@ -20,36 +31,23 @@ if [ ! -x "$CHROME" ]; then
   exit 1
 fi
 
-if pgrep -x "Google Chrome" > /dev/null; then
-  echo "O Chrome está aberto sem a porta de depuração — precisa reiniciar ele."
-  echo "Suas abas são restauradas quando ele voltar."
-  read -r -p "Fechar e reabrir o Chrome agora? [s/N] " resposta
-  case "$resposta" in
-    s|S|sim|SIM) ;;
-    *) echo "Cancelado. Feche o Chrome manualmente (Cmd+Q) e rode de novo."; exit 1 ;;
-  esac
+mkdir -p "$PERFIL"
+echo "Abrindo a janela do Chrome do bot (perfil: $PERFIL)..."
+"$CHROME" \
+  --remote-debugging-port="$PORTA" \
+  --user-data-dir="$PERFIL" \
+  --no-first-run \
+  --no-default-browser-check \
+  "https://www.aa.com/" > /dev/null 2>&1 &
 
-  osascript -e 'quit app "Google Chrome"' > /dev/null 2>&1
-  for _ in $(seq 1 20); do
-    pgrep -x "Google Chrome" > /dev/null || break
-    sleep 0.5
-  done
-  if pgrep -x "Google Chrome" > /dev/null; then
-    echo "❌ O Chrome não fechou (alguma janela pedindo confirmação?). Feche com Cmd+Q e rode de novo."
-    exit 1
-  fi
-fi
-
-echo "Abrindo o Chrome com a porta $PORTA..."
-"$CHROME" --remote-debugging-port="$PORTA" > /dev/null 2>&1 &
-
-for _ in $(seq 1 20); do
+for _ in $(seq 1 30); do
   if curl -s --max-time 2 "http://localhost:$PORTA/json/version" > /dev/null 2>&1; then
-    echo "✅ Pronto. O bot já pode buscar na AA usando este Chrome."
+    echo "✅ Pronto. Deixe essa janela aberta — é nela que o bot vai buscar."
+    echo "   Seu Chrome normal continua funcionando do lado, sem interferência."
     exit 0
   fi
   sleep 0.5
 done
 
-echo "❌ O Chrome abriu, mas a porta $PORTA não respondeu. Tente de novo."
+echo "❌ A janela abriu, mas a porta $PORTA não respondeu. Tente de novo."
 exit 1
