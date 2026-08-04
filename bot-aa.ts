@@ -75,8 +75,9 @@ const limitadorAA = new LimitadorFrequencia(INTERVALO_MIN_AA_MS);
 const MAX_MESES_FALHAS_SEGUIDAS = 3;
 const MESES_A_VARRER = 12;
 
-// Onde o Chrome do usuário expõe o DevTools Protocol (ver `npm run chrome`).
-const AA_CDP_URL = process.env.AA_CDP_URL || "http://localhost:9222";
+// Onde o Chrome do usuário expõe o DevTools Protocol (ver scripts/chrome-aa.sh,
+// rodado por `npm run chrome`).
+const AA_CDP_URL = process.env.AA_CDP_URL || `http://localhost:${process.env.AA_CDP_PORTA || 9222}`;
 // Perfil próprio do bot, usado no modo avulso. Diferente de um contexto novo
 // a cada busca, ele acumula cookies/histórico entre execuções — o Akamai
 // confia mais num perfil com passado do que num recém-criado.
@@ -104,8 +105,8 @@ export async function iniciarSessaoAA(headless = false): Promise<SessaoAA> {
     throw new Error(
       sessao.viaCdp
         ? "A AA bloqueou o acesso mesmo pelo seu Chrome. Espere alguns minutos antes de tentar de novo."
-        : "A AA bloqueou o acesso ao navegador do bot. Rode `npm run chrome` (com o Chrome fechado antes) " +
-          "pra o bot buscar numa aba do seu próprio navegador, que costuma passar.",
+        : "A AA bloqueou o acesso ao navegador do bot. Rode `npm run chrome` no terminal pra o bot buscar " +
+          "numa aba do seu próprio navegador, que costuma passar.",
     );
   }
 
@@ -132,7 +133,7 @@ async function conectarNoChromeDoUsuario(): Promise<SessaoAA | null> {
 async function abrirChromePróprio(headless: boolean): Promise<SessaoAA> {
   console.log(
     "[AA] Chrome do usuário indisponível — abrindo navegador próprio. " +
-      "Pra usar o seu (menos bloqueios), feche o Chrome e rode `npm run chrome`.",
+      "Pra usar o seu (menos bloqueios), rode `npm run chrome`.",
   );
   const context = await chromium.launchPersistentContext(DIR_PERFIL_AA, {
     headless,
