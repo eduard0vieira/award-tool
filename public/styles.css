@@ -816,6 +816,28 @@ details[open] > .coluna-cabecalho .chevron {
   width: 100%;
 }
 
+/* Ações do cabeçalho do card: copiar ida/volta e minimizar. */
+.job-acoes {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.btn-acao {
+  background: transparent;
+  border: 1px solid #2e3440;
+  color: #cfd3da;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.btn-acao:hover:not(:disabled) {
+  background: #1d212b;
+  border-color: #4c8bf5;
+  color: #7bb0ff;
+}
+
 /* ─── Geração de alertas (conexão com o vcc-alertas-portal) ─── */
 
 .alerta-acoes {

@@ -401,7 +401,14 @@ function criarCardJob(filaBuscasEl, tituloRota) {
     subpainelUpgradeEl: raiz.querySelector(".subpainel-upgrade"),
     listaUpgradeEl: raiz.querySelector(".lista-upgrade"),
     upgradeVazioEl: raiz.querySelector(".upgrade-vazio"),
+    acoesEl: raiz.querySelector(".job-acoes"),
+    btnCopiarIdaEl: raiz.querySelector(".btn-copiar-ida"),
+    btnCopiarVoltaEl: raiz.querySelector(".btn-copiar-volta"),
+    btnMinimizarEl: raiz.querySelector(".btn-minimizar"),
     pernasParaUpgrade: [],
+    // Datas por perna na ordem em que chegam (ida primeiro), pros botões de
+    // copiar do cabeçalho — ver registrarPernaCopia.
+    pernasCopia: [],
   };
 
   card.rotaEl.textContent = tituloRota;
@@ -423,8 +430,55 @@ function criarCardJob(filaBuscasEl, tituloRota) {
   }
   card.definirStatus = definirStatus;
 
+  card.btnCopiarIdaEl.addEventListener("click", () => copiarPerna(card, 0, card.btnCopiarIdaEl, "Copiar ida"));
+  card.btnCopiarVoltaEl.addEventListener("click", () => copiarPerna(card, 1, card.btnCopiarVoltaEl, "Copiar volta"));
+
+  // Minimizar recolhe tudo abaixo do cabeçalho — com várias buscas na fila,
+  // dá pra fechar as prontas e continuar vendo as outras sem rolar tanto.
+  card.minimizado = false;
+  card.btnMinimizarEl.addEventListener("click", () => {
+    card.minimizado = !card.minimizado;
+    const abaAtiva = raiz.querySelector(".sub-aba-btn.ativo")?.dataset.subaba || "datas";
+    card.resultadoEl.hidden = card.minimizado || abaAtiva !== "datas";
+    card.subpainelUpgradeEl.hidden = card.minimizado || abaAtiva !== "upgrade";
+    card.subAbasEl.hidden = card.minimizado;
+    card.btnMinimizarEl.textContent = card.minimizado ? "Expandir" : "Minimizar";
+  });
+
   filaBuscasEl.prepend(raiz);
   return card;
+}
+
+// Guarda as datas de uma perna (ida ou volta) pros botões de copiar do
+// cabeçalho. `secoes` é sempre [{ rotulo, dias, texto }] — o mesmo formato
+// que o SeatSpy já devolve e no qual TAP/AA são normalizados.
+function registrarPernaCopia(card, secoes) {
+  card.pernasCopia.push(secoes.filter((s) => s && s.dias?.length > 0));
+}
+
+// Texto no formato "Mmm YYYY: DD, DD" — o mesmo que o gerador de alertas
+// espera colado nos campos de datas. Com mais de uma cabine, cada bloco vai
+// rotulado pra não misturar.
+function textoDaPerna(secoes) {
+  if (!secoes || secoes.length === 0) return "";
+  if (secoes.length === 1) return secoes[0].texto;
+  return secoes.map((s) => `${s.rotulo}\n${s.texto}`).join("\n\n");
+}
+
+async function copiarPerna(card, indice, botao, rotuloOriginal) {
+  const texto = textoDaPerna(card.pernasCopia[indice]);
+  if (!texto) return;
+  await navigator.clipboard.writeText(texto);
+  botao.textContent = "Copiado!";
+  setTimeout(() => (botao.textContent = rotuloOriginal), 1500);
+}
+
+// Mostra a barra de ações do cabeçalho: "Copiar volta" só aparece quando a
+// busca tem duas pernas, e ambos os copiar só quando há datas de fato.
+function atualizarAcoesCard(card) {
+  card.acoesEl.hidden = false;
+  card.btnCopiarIdaEl.hidden = !textoDaPerna(card.pernasCopia[0]);
+  card.btnCopiarVoltaEl.hidden = !textoDaPerna(card.pernasCopia[1]);
 }
 
 // Roda uma busca via SSE e resolve com o resultado final: o relatório da
@@ -752,6 +806,10 @@ async function iniciarBuscaTap(origem, destino, idaEVolta) {
       executiva: relatorioIda.executivas.dias,
       economica: relatorioIda.economicas.dias,
     });
+    registrarPernaCopia(card, [
+      { rotulo: "Executiva", ...relatorioIda.executivas },
+      { rotulo: "Econômica", ...relatorioIda.economicas },
+    ]);
     salvarNoHistorico(origem, destino, "tap");
 
     let relatorioVolta = null;
@@ -770,6 +828,10 @@ async function iniciarBuscaTap(origem, destino, idaEVolta) {
         executiva: relatorioVolta.executivas.dias,
         economica: relatorioVolta.economicas.dias,
       });
+      registrarPernaCopia(card, [
+        { rotulo: "Executiva", ...relatorioVolta.executivas },
+        { rotulo: "Econômica", ...relatorioVolta.economicas },
+      ]);
       promoverUltimaParaIdaEVolta(origem, destino, "tap");
     }
 
@@ -780,6 +842,7 @@ async function iniciarBuscaTap(origem, destino, idaEVolta) {
       card.avisoEl.textContent = avisosParciais.join(" ");
       card.avisoEl.hidden = false;
     }
+    atualizarAcoesCard(card);
     mostrarBotoesAlerta(card, "tap", origem, destino, [
       { classe: "Executiva", secaoIda: relatorioIda.executivas, secaoVolta: relatorioVolta?.executivas },
       { classe: "Econômica", secaoIda: relatorioIda.economicas, secaoVolta: relatorioVolta?.economicas },
@@ -819,6 +882,7 @@ async function iniciarBuscaSeatspy(programa, origem, destino, idaEVolta) {
     );
     for (const perna of pernas) {
       renderizarPernaSecoes(card.resultadoEl, perna.rotulo, perna.secoes);
+      registrarPernaCopia(card, perna.secoes);
       card.pernasParaUpgrade.push({
         rotulo: perna.rotulo,
         executiva: extrairDiasPorRotulo(perna.secoes, "Executiva"),
@@ -832,6 +896,7 @@ async function iniciarBuscaSeatspy(programa, origem, destino, idaEVolta) {
     card.subAbasEl.hidden = false;
     // pernas[0] = ida, pernas[1] = volta (quando ida e volta). O rótulo
     // "Premium" do SeatSpy vira "Premium Economy" na nomenclatura do portal.
+    atualizarAcoesCard(card);
     const secaoDe = (perna, rotulo) => perna?.secoes.find((s) => s.rotulo === rotulo);
     mostrarBotoesAlerta(card, programa, origem, destino, [
       { classe: "Econômica", secaoIda: secaoDe(pernas[0], "Econômica"), secaoVolta: secaoDe(pernas[1], "Econômica") },
@@ -975,6 +1040,7 @@ async function iniciarBuscaAA(origem, destino, cabine, maxConexoes, tetoK, idaEV
     if (avisoIda) avisosParciais.push(avisoIda);
     const rotuloPernaIda = idaEVolta ? `Ida: ${origem} → ${destino}` : `${origem} → ${destino}`;
     renderizarPernaSecoes(card.resultadoEl, rotuloPernaIda, [{ ...secaoIda, corClasse: CABINE_AA_COR[cabine] }]);
+    registrarPernaCopia(card, [secaoIda]);
     salvarNoHistorico(origem, destino, "AA", false, { cabine });
 
     let secaoVolta = null;
@@ -989,6 +1055,7 @@ async function iniciarBuscaAA(origem, destino, cabine, maxConexoes, tetoK, idaEV
       renderizarPernaSecoes(card.resultadoEl, `Volta: ${destino} → ${origem}`, [
         { ...secaoVolta, corClasse: CABINE_AA_COR[cabine] },
       ]);
+      registrarPernaCopia(card, [secaoVolta]);
       promoverUltimaParaIdaEVolta(origem, destino, "AA");
     }
 
@@ -998,6 +1065,7 @@ async function iniciarBuscaAA(origem, destino, cabine, maxConexoes, tetoK, idaEV
       card.avisoEl.textContent = avisosParciais.join(" ");
       card.avisoEl.hidden = false;
     }
+    atualizarAcoesCard(card);
     mostrarBotoesAlerta(card, "aa", origem, destino, [
       { classe: CABINE_AA_LABEL[cabine] || cabine, secaoIda, secaoVolta },
     ]);
