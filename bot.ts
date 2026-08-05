@@ -263,12 +263,19 @@ async function pesquisarJanela(
 
 export { formatarListaPorMes };
 
-// Valores de referência da tabela de milhas da TAP: interessa a Executiva na
-// tarifa padrão OU melhor (181K ou menos) e a Econômica na tarifa padrão OU
-// melhor (53K ou menos) — preços acima desses (alguma tarifa "flex"/promocional
-// fora da tabela) são ignorados.
-const VALOR_EXECUTIVA_K = 181;
-const LIMIAR_ECONOMICA_K = 53;
+// Tetos padrão, vindos da tabela de milhas da TAP: Executiva na tarifa padrão
+// OU melhor (181K ou menos) e Econômica na tarifa padrão OU melhor (53K ou
+// menos). Preços acima disso são alguma tarifa "flex"/promocional fora da
+// tabela — mas dá pra pedir outros tetos por busca (ver TetosTap), pra
+// explorar faixas diferentes.
+export const TETO_EXECUTIVA_K_PADRAO = 181;
+export const TETO_ECONOMICA_K_PADRAO = 53;
+
+// Teto em K por cabine. Campo ausente ou null = usa o padrão acima.
+export type TetosTap = {
+  executivaK?: number | null;
+  economicaK?: number | null;
+};
 
 function construirSecao(
   todasAsDatas: DiaDisponibilidade[],
@@ -297,19 +304,24 @@ function construirSecao(
   return { menor, maior, dias, texto };
 }
 
-export function construirRelatorio(todasAsDatas: DiaDisponibilidade[]): Relatorio {
+export function construirRelatorio(
+  todasAsDatas: DiaDisponibilidade[],
+  tetos: TetosTap = {},
+): Relatorio {
+  const tetoExecutiva = tetos.executivaK ?? TETO_EXECUTIVA_K_PADRAO;
+  const tetoEconomica = tetos.economicaK ?? TETO_ECONOMICA_K_PADRAO;
   return {
     executivas: construirSecao(
       todasAsDatas,
       "Executivas",
       "business",
-      (v) => v <= VALOR_EXECUTIVA_K,
+      (v) => v <= tetoExecutiva,
     ),
     economicas: construirSecao(
       todasAsDatas,
       "Economicas",
       "economy",
-      (v) => v <= LIMIAR_ECONOMICA_K,
+      (v) => v <= tetoEconomica,
     ),
   };
 }

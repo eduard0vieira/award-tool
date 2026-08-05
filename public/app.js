@@ -4,6 +4,8 @@ const inputTapOrigem = document.getElementById("tap-origem");
 const inputTapDestino = document.getElementById("tap-destino");
 const checkboxTapIdaVolta = document.getElementById("tap-ida-volta");
 const avisoTap = document.getElementById("tap-aviso");
+const inputTapTetoExecutiva = document.getElementById("tap-teto-executiva");
+const inputTapTetoEconomica = document.getElementById("tap-teto-economica");
 const filaTap = document.getElementById("tap-fila-buscas");
 
 // Aba SeatSpy (Iberia, British, Air France, JetBlue, Cathay, Etihad, KLM,
@@ -791,14 +793,14 @@ function tetoEmMilhas(input) {
 // Cada chamada cria seu próprio card (ver criarCardJob) e roda de forma
 // independente — várias buscas podem estar em andamento ao mesmo tempo
 // (modo agents), cada uma numa sessão própria do pool no servidor.
-async function iniciarBuscaTap(origem, destino, idaEVolta) {
+async function iniciarBuscaTap(origem, destino, idaEVolta, tetos) {
   const seta = idaEVolta ? "⇄" : "→";
   const card = criarCardJob(filaTap, `TAP: ${origem} ${seta} ${destino}`);
   const avisosParciais = [];
 
   try {
     const rotuloIda = idaEVolta ? "Buscando ida..." : "Buscando...";
-    const { resultado: relatorioIda, avisoParcial: avisoIda } = await buscarNoServidor(card, { origem, destino }, rotuloIda);
+    const { resultado: relatorioIda, avisoParcial: avisoIda } = await buscarNoServidor(card, { origem, destino, tetos }, rotuloIda);
     if (avisoIda) avisosParciais.push(avisoIda);
     const rotuloPernaIda = idaEVolta ? `Ida: ${origem} → ${destino}` : `${origem} → ${destino}`;
     renderizarPerna(card.resultadoEl, rotuloPernaIda, relatorioIda);
@@ -817,7 +819,7 @@ async function iniciarBuscaTap(origem, destino, idaEVolta) {
     if (idaEVolta) {
       const { resultado, avisoParcial: avisoVolta } = await buscarNoServidor(
         card,
-        { origem: destino, destino: origem },
+        { origem: destino, destino: origem, tetos },
         "Buscando volta...",
       );
       relatorioVolta = resultado;
@@ -1131,7 +1133,14 @@ formTap.addEventListener("submit", (evento) => {
     return;
   }
   if (!avisoDeRepeticao("tap", origem, destino, idaEVolta)) return;
-  iniciarBuscaTap(origem, destino, idaEVolta);
+  const emK = (input) => {
+    const v = parseFloat(input.value);
+    return Number.isFinite(v) && v > 0 ? v : null;
+  };
+  iniciarBuscaTap(origem, destino, idaEVolta, {
+    executiva: emK(inputTapTetoExecutiva),
+    economica: emK(inputTapTetoEconomica),
+  });
 });
 
 formAa.addEventListener("submit", (evento) => {

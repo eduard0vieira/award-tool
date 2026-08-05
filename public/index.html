@@ -35,6 +35,20 @@
           Ida e volta
         </label>
         <button type="submit">Buscar</button>
+
+        <!-- Teto de milhas por cabine, em K. Vazio = tabela padrão da TAP
+             (181K executiva / 53K econômica); preencha pra explorar outras
+             faixas de valor. -->
+        <div class="linha-tetos">
+          <div class="campo">
+            <label for="tap-teto-executiva">Teto Executiva (K)</label>
+            <input id="tap-teto-executiva" type="number" min="1" step="0.5" placeholder="padrão: 181" autocomplete="off" />
+          </div>
+          <div class="campo">
+            <label for="tap-teto-economica">Teto Econômica (K)</label>
+            <input id="tap-teto-economica" type="number" min="1" step="0.5" placeholder="padrão: 53" autocomplete="off" />
+          </div>
+        </div>
       </form>
 
       <p id="tap-aviso" class="aviso" hidden></p>

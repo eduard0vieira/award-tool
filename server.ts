@@ -8,6 +8,7 @@ import {
   pesquisarAnoCompleto,
   type Relatorio,
   type Sessao,
+  type TetosTap,
 } from "./bot.ts";
 import {
   construirRelatorioSeatspy,
@@ -149,7 +150,7 @@ async function executarComPool<S>(
   }
 }
 
-function executarJob(jobId: string, params: { origem: string; destino: string }) {
+function executarJob(jobId: string, params: { origem: string; destino: string; tetos: TetosTap }) {
   return executarComPool(poolAwardtool, jobId, async ({ page, baseUrl }) => {
     const job = jobs.get(jobId)!;
     const { dias: todasAsDatas, janelasComFalha } = await pesquisarAnoCompleto(
@@ -166,7 +167,7 @@ function executarJob(jobId: string, params: { origem: string; destino: string })
       (mensagem) => atualizarAviso(jobId, mensagem),
     );
 
-    const relatorio = construirRelatorio(todasAsDatas);
+    const relatorio = construirRelatorio(todasAsDatas, params.tetos);
     const avisoParcial =
       janelasComFalha.length > 0
         ? `${janelasComFalha.length} janela(s) não puderam ser buscadas (ver detalhes no terminal do servidor) — o resultado abaixo é parcial.`
@@ -304,6 +305,12 @@ app.use(express.static(path.join(__dirname, "public")));
 app.use("/portal", express.static(DIR_PORTAL_DIST));
 app.use("/alertas", express.static(DIR_ALERTAS));
 
+// Teto em K (ex.: 181 = 181.000 milhas). Vazio/invalido = usa o padrao.
+function tetoKDe(valor: unknown): number | null {
+  const num = Number(valor);
+  return Number.isFinite(num) && num > 0 ? num : null;
+}
+
 function tetoDe(valor: unknown): number | null {
   const num = Number(valor);
   return Number.isFinite(num) && num > 0 ? num : null;
@@ -360,6 +367,9 @@ app.post("/api/buscar", (req: Request, res: Response) => {
     executarJob(jobId, {
       origem: String(origem).toUpperCase(),
       destino: String(destino).toUpperCase(),
+      // Tetos em K aqui (a tabela da TAP é falada em K), diferente do SeatSpy
+      // e da AA, que trabalham com milhas absolutas.
+      tetos: { executivaK: tetoKDe(tetos?.executiva), economicaK: tetoKDe(tetos?.economica) },
     });
   }
 
