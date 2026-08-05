@@ -835,6 +835,12 @@ details[open] > .coluna-cabecalho .chevron {
   width: 100%;
 }
 
+.job-tetos {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: #9aa0aa;
+}
+
 /* Ações do cabeçalho do card: copiar ida/volta e minimizar. */
 .job-acoes {
   display: flex;

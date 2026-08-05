@@ -398,6 +398,7 @@ function criarCardJob(filaBuscasEl, tituloRota) {
     progressoJanelaEl: raiz.querySelector(".progresso-janela"),
     barraEl: raiz.querySelector(".barra-preenchida"),
     avisoEl: raiz.querySelector(".aviso"),
+    tetosEl: raiz.querySelector(".job-tetos"),
     subAbasEl: raiz.querySelector(".sub-abas"),
     subAbaBtnsEl: raiz.querySelectorAll(".sub-aba-btn"),
     resultadoEl: raiz.querySelector(".resultado"),
@@ -533,7 +534,11 @@ function buscarNoServidor(card, corpo, rotuloProgresso) {
         card.avisoEl.hidden = !dado.mensagem;
       } else if (dado.tipo === "done") {
         fonte.close();
-        resolve({ resultado: dado.pernas || dado.secaoAA || dado.relatorio, avisoParcial: dado.avisoParcial });
+        resolve({
+          resultado: dado.pernas || dado.secaoAA || dado.relatorio,
+          avisoParcial: dado.avisoParcial,
+          tetosAplicados: dado.tetosAplicados,
+        });
       } else if (dado.tipo === "erro") {
         fonte.close();
         reject(new Error(dado.mensagem));
@@ -800,7 +805,12 @@ async function iniciarBuscaTap(origem, destino, idaEVolta, tetos) {
 
   try {
     const rotuloIda = idaEVolta ? "Buscando ida..." : "Buscando...";
-    const { resultado: relatorioIda, avisoParcial: avisoIda } = await buscarNoServidor(card, { origem, destino, tetos }, rotuloIda);
+    const { resultado: relatorioIda, avisoParcial: avisoIda, tetosAplicados } = await buscarNoServidor(card, { origem, destino, tetos }, rotuloIda);
+    if (tetosAplicados) {
+      card.tetosEl.textContent =
+        `Teto aplicado: Executiva ${tetosAplicados.executivaK}K · Econômica ${tetosAplicados.economicaK}K`;
+      card.tetosEl.hidden = false;
+    }
     if (avisoIda) avisosParciais.push(avisoIda);
     const rotuloPernaIda = idaEVolta ? `Ida: ${origem} → ${destino}` : `${origem} → ${destino}`;
     renderizarPerna(card.resultadoEl, rotuloPernaIda, relatorioIda);

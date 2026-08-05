@@ -6,6 +6,8 @@ import {
   construirRelatorio,
   iniciarSessao,
   pesquisarAnoCompleto,
+  TETO_ECONOMICA_K_PADRAO,
+  TETO_EXECUTIVA_K_PADRAO,
   type Relatorio,
   type Sessao,
   type TetosTap,
@@ -168,6 +170,12 @@ function executarJob(jobId: string, params: { origem: string; destino: string; t
     );
 
     const relatorio = construirRelatorio(todasAsDatas, params.tetos);
+    // Vai pro front pra deixar explícito qual teto valeu de fato — sem isso,
+    // um servidor rodando código antigo aplicaria o padrão silenciosamente.
+    const tetosAplicados = {
+      executivaK: params.tetos.executivaK ?? TETO_EXECUTIVA_K_PADRAO,
+      economicaK: params.tetos.economicaK ?? TETO_ECONOMICA_K_PADRAO,
+    };
     const avisoParcial =
       janelasComFalha.length > 0
         ? `${janelasComFalha.length} janela(s) não puderam ser buscadas (ver detalhes no terminal do servidor) — o resultado abaixo é parcial.`
@@ -175,7 +183,7 @@ function executarJob(jobId: string, params: { origem: string; destino: string; t
     job.status = "done";
     job.relatorio = relatorio;
     if (avisoParcial) job.avisoParcial = avisoParcial;
-    emitirEvento(jobId, { tipo: "done", relatorio, avisoParcial });
+    emitirEvento(jobId, { tipo: "done", relatorio, avisoParcial, tetosAplicados });
   });
 }
 
