@@ -11,7 +11,7 @@
    lado. Precisa ser perfil separado: desde o Chrome 136 a porta de depuração
    é ignorada no perfil padrão.
 2. Se der "Access Denied": feche essa janela, rode
-   `bash scripts/importar-cookies-aa.sh` e reabra com `npm run chrome`.
+   `bash scripts/importar-cookies.sh aa.com` e reabra com `npm run chrome`.
 3. Buscar normalmente pela aba American do bot.
 
 O passo 2 é o que destrava: a Akamai barra qualquer navegador sem os cookies
