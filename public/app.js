@@ -1148,20 +1148,19 @@ function mostrarConfirmacaoMilhas(card, c) {
     ` &middot; ida ${c.ida.data} &middot; volta ${c.volta.data}`;
   bloco.appendChild(resumo);
 
+  // Um print só, com ida e volta juntas — é ele que vai pro grupo.
   const galeria = document.createElement("div");
   galeria.className = "alerta-galeria confirmacao-galeria";
-  for (const perna of [c.ida, c.volta]) {
-    const link = document.createElement("a");
-    link.href = perna.imagem;
-    link.target = "_blank";
-    link.download = perna.imagem.split("/").pop();
-    link.title = `${perna.voo} — ${fmt(perna.milhas)} milhas + R$ ${perna.taxas}`;
-    const img = document.createElement("img");
-    img.src = perna.imagem;
-    img.alt = perna.voo;
-    link.appendChild(img);
-    galeria.appendChild(link);
-  }
+  const link = document.createElement("a");
+  link.href = c.imagem;
+  link.target = "_blank";
+  link.download = c.imagem.split("/").pop();
+  link.title = `${c.ida.voo} | ${c.volta.voo}`;
+  const img = document.createElement("img");
+  img.src = c.imagem;
+  img.alt = "Ida e volta confirmadas em milhas";
+  link.appendChild(img);
+  galeria.appendChild(link);
   bloco.appendChild(galeria);
 
   const btn = document.createElement("button");

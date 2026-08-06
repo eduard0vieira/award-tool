@@ -34,6 +34,7 @@ import {
 import {
   confirmarEmMilhas,
   construirRelatorioLatam,
+  montarPrintCombinado,
   escolherMelhorPar,
   iniciarSessaoLatam,
   pesquisarAnoLatam,
@@ -64,6 +65,7 @@ type ConfirmacaoLatam = {
   volta: ConfirmacaoMilhas;
   totalMilhas: number;
   totalTaxas: number;
+  imagem: string; // print único com as duas pernas — é o que vai pro grupo
 };
 
 type Job = {
@@ -307,7 +309,7 @@ function executarJobLatam(
   jobId: string,
   params: { origem: string; destino: string; tetos: TetosLatam; confirmarMilhas: boolean; margemReais: number },
 ) {
-  return executarComPool(poolLatam, jobId, async ({ page }) => {
+  return executarComPool(poolLatam, jobId, async ({ page, context }) => {
     const job = jobs.get(jobId)!;
     const { ida, volta, mesesComFalha } = await pesquisarAnoLatam(
       page,
@@ -351,11 +353,23 @@ function executarJobLatam(
         );
 
         if (cIda && cVolta) {
+          const totalMilhas = cIda.milhas + cVolta.milhas;
+          const totalTaxas = Math.round((cIda.taxas + cVolta.taxas) * 100) / 100;
+          await montarPrintCombinado(context, {
+            origem: params.origem,
+            destino: params.destino,
+            ida: cIda,
+            volta: cVolta,
+            totalMilhas,
+            totalTaxas,
+            caminhoImagem: caminho("ida-e-volta.png"),
+          });
           confirmacao = {
             ida: { ...cIda, imagem: `/alertas/${pasta}/ida.png` },
             volta: { ...cVolta, imagem: `/alertas/${pasta}/volta.png` },
-            totalMilhas: cIda.milhas + cVolta.milhas,
-            totalTaxas: Math.round((cIda.taxas + cVolta.taxas) * 100) / 100,
+            totalMilhas,
+            totalTaxas,
+            imagem: `/alertas/${pasta}/ida-e-volta.png`,
           };
         } else {
           atualizarAviso(jobId, "As datas mais baratas não tinham oferta em milhas.");

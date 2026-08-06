@@ -1,5 +1,6 @@
 import "dotenv/config";
-import type { Page } from "playwright";
+import fs from "node:fs";
+import type { BrowserContext, Page } from "playwright";
 import { abrirSessaoChrome, type SessaoChrome } from "./sessao-chrome.ts";
 import {
   LimitadorFrequencia,
@@ -380,4 +381,72 @@ export function escolherMelhorPar(
     if (v) return { ida: i, volta: v };
   }
   return null;
+}
+
+
+// Junta os prints das duas pernas num só — é assim que o alerta vai pro
+// grupo. Monta uma página simples com as duas capturas e fotografa ela; usar
+// o próprio navegador evita depender de biblioteca de imagem.
+export async function montarPrintCombinado(
+  context: BrowserContext,
+  dados: {
+    origem: string;
+    destino: string;
+    ida: ConfirmacaoMilhas;
+    volta: ConfirmacaoMilhas;
+    totalMilhas: number;
+    totalTaxas: number;
+    caminhoImagem: string;
+  },
+): Promise<string> {
+  const { origem, destino, ida, volta, totalMilhas, totalTaxas, caminhoImagem } = dados;
+  const base64 = (caminho: string) => `data:image/png;base64,${fs.readFileSync(caminho).toString("base64")}`;
+  const nBR = (n: number) => n.toLocaleString("pt-BR");
+  const dataBR = (iso: string) => iso.split("-").reverse().join("/");
+
+  const perna = (rotulo: string, de: string, para: string, c: ConfirmacaoMilhas) => `
+    <section>
+      <h2><span class="tag">${rotulo}</span> ${de} → ${para} · ${dataBR(c.data)}</h2>
+      <img src="${base64(c.imagem)}" alt="${rotulo}" />
+      <p class="valor">${nBR(c.milhas)} milhas + R$ ${c.taxas.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>
+    </section>`;
+
+  const html = `<!doctype html><meta charset="utf-8" />
+  <style>
+    body { margin:0; background:#fff; }
+    #cartao { padding:28px 30px; width:1080px; box-sizing:border-box;
+              background:#fff; color:#1b0088;
+              font-family:-apple-system,"Segoe UI",system-ui,sans-serif; }
+    h1 { font-size:26px; margin:0 0 4px; }
+    .sub { font-size:13px; color:#6b7280; margin:0 0 22px; }
+    section { margin-bottom:22px; }
+    h2 { font-size:15px; font-weight:700; margin:0 0 10px; color:#1b0088; }
+    .tag { background:#1b0088; color:#fff; border-radius:5px; padding:2px 9px;
+           font-size:12px; letter-spacing:.06em; margin-right:8px; }
+    img { width:100%; display:block; border:1px solid #e5e7eb; border-radius:10px; }
+    .valor { font-size:14px; font-weight:700; margin:8px 0 0; }
+    .total { border-top:2px solid #1b0088; padding-top:14px; font-size:20px; font-weight:800; }
+    .total small { display:block; font-size:12px; font-weight:500; color:#6b7280; margin-top:4px; }
+  </style>
+  <div id="cartao">
+  <h1>${origem} ⇄ ${destino} · Econômica</h1>
+  <p class="sub">LATAM · valores por passageiro, taxas incluídas</p>
+  ${perna("IDA", origem, destino, ida)}
+  ${perna("VOLTA", destino, origem, volta)}
+  <div class="total">Total: ${nBR(totalMilhas)} milhas + R$ ${totalTaxas.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+    <small>Ida e volta para 1 passageiro</small>
+  </div>
+  </div>`;
+
+  const pagina = await context.newPage();
+  try {
+    await pagina.setViewportSize({ width: 1080, height: 800 });
+    await pagina.setContent(html, { waitUntil: "load" });
+    // Fotografa o cartão, não a página: assim a imagem termina no conteúdo,
+    // sem a sobra branca do viewport.
+    await pagina.locator("#cartao").screenshot({ path: caminhoImagem });
+    return caminhoImagem;
+  } finally {
+    await pagina.close();
+  }
 }
