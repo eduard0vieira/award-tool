@@ -46,6 +46,15 @@ export type ResultadoAnoLatam = {
   mesesComFalha: MesComFalha[];
 };
 
+// Confirmação em milhas de um dia específico (ver confirmarEmMilhas).
+export type ConfirmacaoMilhas = {
+  data: string;
+  milhas: number;
+  taxas: number; // em reais
+  voo: string; // ex.: "LA8060 · 06:30 GRU → 09:40 LIM · Direto"
+  imagem: string; // caminho do print
+};
+
 export type TetosLatam = {
   tetoReais?: number | null; // dias mais caros que isso ficam de fora
   somenteMenorTarifa?: boolean; // só os dias que o site marca como menor tarifa
@@ -242,4 +251,133 @@ export function construirRelatorioLatam(dias: DiaLatam[], tetos: TetosLatam = {}
     texto: formatarListaPorMes(diasFormatados.map((d) => d.data)),
     unidade: "BRL",
   };
+}
+
+
+// ─── Confirmação em milhas ────────────────────────────────────────────────
+//
+// O calendário só existe em reais, então o valor em milhas de um dia só sai
+// fazendo a busca daquele dia. Aqui é uma busca de IDA SIMPLES por perna (em
+// vez de ida e volta): assim as duas pernas aparecem em telas próprias, cada
+// uma com seu print, sem precisar selecionar voo nenhum — nada de avançar em
+// fluxo de reserva.
+//
+// Exige sessão logada (anônimo, a LATAM manda pro login em modo milhas):
+// `bash scripts/importar-cookies.sh latamairlines.com`.
+
+type OfertaCrua = {
+  content?: {
+    summary?: {
+      flightCode?: string;
+      stopOvers?: number;
+      lowestPrice?: { currency?: string; amount?: number };
+      origin?: { departure?: string; iataCode?: string };
+      destination?: { arrival?: string; iataCode?: string };
+    };
+    newPrices?: { total?: number; taxes?: number }[];
+  }[];
+};
+
+export async function confirmarEmMilhas(
+  page: Page,
+  params: { origem: string; destino: string; data: string; caminhoImagem: string },
+  onLog: OnLog = () => {},
+): Promise<ConfirmacaoMilhas | null> {
+  const { origem, destino, data, caminhoImagem } = params;
+
+  let resposta: OfertaCrua | undefined;
+  const capturar = async (res: import("playwright").Response) => {
+    if (!res.url().includes("/offers/search/redemption") || res.status() !== 200) return;
+    try {
+      resposta = (await res.json()) as OfertaCrua;
+    } catch {
+      /* ignora */
+    }
+  };
+  page.on("response", capturar);
+
+  try {
+    await limitadorLatam.aguardarVez();
+    const url =
+      "https://www.latamairlines.com/br/pt/oferta-voos?" +
+      new URLSearchParams({
+        origin: origem,
+        destination: destino,
+        outbound: `${data}T12:00:00.000Z`,
+        adt: "1",
+        chd: "0",
+        inf: "0",
+        trip: "OW",
+        cabin: "Economy",
+        redemption: "true",
+        sort: "RECOMMENDED",
+      }).toString();
+
+    onLog(`Confirmando em milhas: ${origem} → ${destino} em ${data}...`);
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
+
+    if (/login|iniciar sesi|entrar/i.test(new URL(page.url()).hostname)) {
+      throw new Error(
+        "A LATAM pediu login pra busca em milhas. Rode `bash scripts/importar-cookies.sh latamairlines.com` " +
+          "com a janela do bot fechada e tente de novo.",
+      );
+    }
+
+    // Espera os voos aparecerem (é o mesmo sinal que o JSON chegou).
+    await page.locator('[data-testid^="wrapper-card-flight-"]').first().waitFor({ timeout: 60000 });
+    await page.waitForTimeout(2500);
+
+    const voos: NonNullable<OfertaCrua["content"]> = resposta?.content ?? [];
+    if (voos.length === 0) {
+      onLog(`Sem oferta em milhas para ${data}.`);
+      return null;
+    }
+
+    // O mais barato em milhas do dia.
+    const melhor = voos.reduce((a, b) =>
+      (a.summary?.lowestPrice?.amount ?? Infinity) <= (b.summary?.lowestPrice?.amount ?? Infinity) ? a : b,
+    );
+    const milhas = melhor.summary?.lowestPrice?.amount ?? 0;
+    const taxas = melhor.newPrices?.[0]?.taxes ?? melhor.newPrices?.[0]?.total ?? 0;
+    const hora = (iso?: string) => (iso ? iso.slice(11, 16) : "--:--");
+    const paradas = melhor.summary?.stopOvers ?? 0;
+    const voo =
+      `${melhor.summary?.flightCode ?? ""} · ${hora(melhor.summary?.origin?.departure)} ${origem}` +
+      ` → ${hora(melhor.summary?.destination?.arrival)} ${destino}` +
+      ` · ${paradas === 0 ? "Direto" : `${paradas} parada(s)`}`;
+
+    // Print só do primeiro cartão de voo — é o que interessa pro alerta.
+    const cartao = page.locator('[data-testid^="wrapper-card-flight-"]').first();
+    await cartao.screenshot({ path: caminhoImagem });
+
+    onLog(`${data}: ${milhas.toLocaleString("pt-BR")} milhas + R$ ${taxas} (${voo}).`);
+    return { data, milhas, taxas, voo, imagem: caminhoImagem };
+  } finally {
+    page.off("response", capturar);
+  }
+}
+
+// A partir dos dias do calendário, escolhe o melhor par ida/volta dentro da
+// faixa "menor + margem" (padrão R$ 100, como combinado): o dia mais barato de
+// cada direção, com a volta caindo depois da ida.
+export function escolherMelhorPar(
+  ida: DiaLatam[],
+  volta: DiaLatam[],
+  margemReais = 100,
+): { ida: DiaLatam; volta: DiaLatam } | null {
+  if (ida.length === 0 || volta.length === 0) return null;
+
+  const naFaixa = (dias: DiaLatam[]) => {
+    const menor = Math.min(...dias.map((d) => d.valor));
+    return dias.filter((d) => d.valor <= menor + margemReais);
+  };
+
+  const idaCandidatos = naFaixa(ida).sort((a, b) => a.valor - b.valor || a.data.localeCompare(b.data));
+  const voltaCandidatos = naFaixa(volta).sort((a, b) => a.valor - b.valor || a.data.localeCompare(b.data));
+
+  for (const i of idaCandidatos) {
+    const v = voltaCandidatos.find((x) => x.data > i.data);
+    if (v) return { ida: i, volta: v };
+  }
+  return null;
 }
