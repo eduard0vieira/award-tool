@@ -39,6 +39,7 @@ const inputLatamOrigem = document.getElementById("latam-origem");
 const inputLatamDestino = document.getElementById("latam-destino");
 const inputLatamTeto = document.getElementById("latam-teto");
 const checkboxLatamMenorTarifa = document.getElementById("latam-menor-tarifa");
+const checkboxLatamConfirmarMilhas = document.getElementById("latam-confirmar-milhas");
 const avisoLatam = document.getElementById("latam-aviso");
 const filaLatam = document.getElementById("latam-fila-buscas");
 
@@ -552,6 +553,7 @@ function buscarNoServidor(card, corpo, rotuloProgresso) {
           resultado: dado.pernas || dado.secaoAA || dado.relatorio,
           avisoParcial: dado.avisoParcial,
           tetosAplicados: dado.tetosAplicados,
+          confirmacao: dado.confirmacao,
         });
       } else if (dado.tipo === "erro") {
         fonte.close();
@@ -1127,22 +1129,79 @@ async function iniciarBuscaAA(origem, destino, cabine, maxConexoes, tetoK, idaEV
   }
 }
 
+// Mostra o resultado da confirmação em milhas: o par de datas mais barato,
+// o total e o print de cada perna (o mesmo enquadramento do alerta).
+function mostrarConfirmacaoMilhas(card, c) {
+  const bloco = document.createElement("div");
+  bloco.className = "alerta-resultado";
+
+  const titulo = document.createElement("div");
+  titulo.className = "alerta-titulo";
+  titulo.textContent = "Confirmado em milhas";
+  bloco.appendChild(titulo);
+
+  const resumo = document.createElement("p");
+  resumo.className = "confirmacao-resumo";
+  const fmt = (n) => n.toLocaleString("pt-BR");
+  resumo.innerHTML =
+    `<strong>${fmt(c.totalMilhas)} milhas + R$ ${c.totalTaxas.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</strong>` +
+    ` &middot; ida ${c.ida.data} &middot; volta ${c.volta.data}`;
+  bloco.appendChild(resumo);
+
+  const galeria = document.createElement("div");
+  galeria.className = "alerta-galeria confirmacao-galeria";
+  for (const perna of [c.ida, c.volta]) {
+    const link = document.createElement("a");
+    link.href = perna.imagem;
+    link.target = "_blank";
+    link.download = perna.imagem.split("/").pop();
+    link.title = `${perna.voo} — ${fmt(perna.milhas)} milhas + R$ ${perna.taxas}`;
+    const img = document.createElement("img");
+    img.src = perna.imagem;
+    img.alt = perna.voo;
+    link.appendChild(img);
+    galeria.appendChild(link);
+  }
+  bloco.appendChild(galeria);
+
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "btn-copiar";
+  btn.textContent = "Copiar resumo";
+  const texto =
+    `${origemDestinoDe(card)}\n` +
+    `Ida ${c.ida.data}: ${fmt(c.ida.milhas)} milhas + R$ ${c.ida.taxas} (${c.ida.voo})\n` +
+    `Volta ${c.volta.data}: ${fmt(c.volta.milhas)} milhas + R$ ${c.volta.taxas} (${c.volta.voo})\n` +
+    `Total: ${fmt(c.totalMilhas)} milhas + R$ ${c.totalTaxas}`;
+  btn.addEventListener("click", () => {
+    navigator.clipboard.writeText(texto);
+    btn.textContent = "Copiado!";
+    setTimeout(() => (btn.textContent = "Copiar resumo"), 1500);
+  });
+  bloco.appendChild(btn);
+
+  card.raiz.appendChild(bloco);
+}
+
+const origemDestinoDe = (card) => card.rotaEl.textContent || "";
+
 // LATAM: uma busca só devolve ida e volta (o calendário traz as duas
 // direções). Sem botão de alerta: o card do portal fala em milhas e ainda não
 // sabe exibir tarifa em reais.
-async function iniciarBuscaLatam(origem, destino, tetos) {
+async function iniciarBuscaLatam(origem, destino, tetos, confirmarMilhas) {
   const card = criarCardJob(filaLatam, `LATAM: ${origem} ⇄ ${destino}`);
 
   try {
-    const { resultado: pernas, avisoParcial } = await buscarNoServidor(
+    const { resultado: pernas, avisoParcial, confirmacao } = await buscarNoServidor(
       card,
-      { fonte: "latam", origem, destino, tetos },
+      { fonte: "latam", origem, destino, tetos, confirmarMilhas, margemReais: 100 },
       "Buscando ida e volta...",
     );
     for (const perna of pernas) {
       renderizarPernaSecoes(card.resultadoEl, perna.rotulo, perna.secoes);
       registrarPernaCopia(card, perna.secoes);
     }
+    if (confirmacao) mostrarConfirmacaoMilhas(card, confirmacao);
     salvarNoHistorico(origem, destino, "LATAM", true);
 
     card.definirStatus("Pronto", "status-pronto");
@@ -1214,10 +1273,15 @@ formLatam.addEventListener("submit", (evento) => {
   }
   const teto = parseFloat(inputLatamTeto.value);
   // Buscar na LATAM é grátis, então não tem o aviso de repetição das fontes pagas.
-  iniciarBuscaLatam(origem, destino, {
-    reais: Number.isFinite(teto) && teto > 0 ? teto : null,
-    somenteMenorTarifa: checkboxLatamMenorTarifa.checked,
-  });
+  iniciarBuscaLatam(
+    origem,
+    destino,
+    {
+      reais: Number.isFinite(teto) && teto > 0 ? teto : null,
+      somenteMenorTarifa: checkboxLatamMenorTarifa.checked,
+    },
+    checkboxLatamConfirmarMilhas.checked,
+  );
 });
 
 formAa.addEventListener("submit", (evento) => {

@@ -1,5 +1,6 @@
 import crypto, { randomUUID } from "node:crypto";
 import express, { type Request, type Response } from "express";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -31,9 +32,12 @@ import {
   type SessaoAA,
 } from "./bot-aa.ts";
 import {
+  confirmarEmMilhas,
   construirRelatorioLatam,
+  escolherMelhorPar,
   iniciarSessaoLatam,
   pesquisarAnoLatam,
+  type ConfirmacaoMilhas,
   type SessaoLatam,
   type TetosLatam,
 } from "./bot-latam.ts";
@@ -54,6 +58,14 @@ type InfoJanela = { atual: number; total: number; inicio: string; fim: string };
 
 type PernaSeatspy = { rotulo: string; secoes: SecaoSeatspy[] };
 
+// Resultado da fase 2 da LATAM: o melhor par de datas confirmado em milhas.
+type ConfirmacaoLatam = {
+  ida: ConfirmacaoMilhas;
+  volta: ConfirmacaoMilhas;
+  totalMilhas: number;
+  totalTaxas: number;
+};
+
 type Job = {
   status: "fila" | "running" | "done" | "erro";
   progresso: number; // 0..1
@@ -63,6 +75,7 @@ type Job = {
   avisoParcial?: string; // preenchido quando alguma janela falhou e foi pulada
   pernas?: PernaSeatspy[]; // resultado das buscas via SeatSpy
   secaoAA?: SecaoRelatorio & { rotulo: string }; // resultado das buscas na AA (uma cabine por busca)
+  confirmacao?: ConfirmacaoLatam; // confirmação em milhas do melhor par (LATAM)
   erro?: string;
   ouvintes: Set<Response>;
 };
@@ -292,7 +305,7 @@ function executarJobAA(
 // resolve as duas pernas de uma vez (como o SeatSpy, e diferente da TAP/AA).
 function executarJobLatam(
   jobId: string,
-  params: { origem: string; destino: string; tetos: TetosLatam },
+  params: { origem: string; destino: string; tetos: TetosLatam; confirmarMilhas: boolean; margemReais: number },
 ) {
   return executarComPool(poolLatam, jobId, async ({ page }) => {
     const job = jobs.get(jobId)!;
@@ -313,10 +326,49 @@ function executarJobLatam(
         ? `${mesesComFalha.length} período(s) não puderam ser buscados — o resultado abaixo é parcial.`
         : undefined;
 
+    // Fase 2: confirma em milhas o melhor par de datas dentro da faixa
+    // "menor + margem". Os prints vão pra mesma pasta servida em /alertas.
+    let confirmacao: ConfirmacaoLatam | undefined;
+    if (params.confirmarMilhas) {
+      const par = escolherMelhorPar(ida, volta, params.margemReais);
+      if (!par) {
+        atualizarAviso(jobId, "Não achei par de ida e volta dentro da faixa pra confirmar em milhas.");
+      } else {
+        atualizarAviso(jobId, `Confirmando em milhas ${par.ida.data} → ${par.volta.data}...`);
+        const pasta = `latam-${params.origem}-${params.destino}-${Date.now()}`;
+        fs.mkdirSync(path.join(DIR_ALERTAS, pasta), { recursive: true });
+        const caminho = (n: string) => path.join(DIR_ALERTAS, pasta, n);
+
+        const cIda = await confirmarEmMilhas(
+          page,
+          { origem: params.origem, destino: params.destino, data: par.ida.data, caminhoImagem: caminho("ida.png") },
+          (msg) => console.log(`[${jobId}] ${msg}`),
+        );
+        const cVolta = await confirmarEmMilhas(
+          page,
+          { origem: params.destino, destino: params.origem, data: par.volta.data, caminhoImagem: caminho("volta.png") },
+          (msg) => console.log(`[${jobId}] ${msg}`),
+        );
+
+        if (cIda && cVolta) {
+          confirmacao = {
+            ida: { ...cIda, imagem: `/alertas/${pasta}/ida.png` },
+            volta: { ...cVolta, imagem: `/alertas/${pasta}/volta.png` },
+            totalMilhas: cIda.milhas + cVolta.milhas,
+            totalTaxas: Math.round((cIda.taxas + cVolta.taxas) * 100) / 100,
+          };
+        } else {
+          atualizarAviso(jobId, "As datas mais baratas não tinham oferta em milhas.");
+        }
+      }
+      atualizarAviso(jobId, "");
+    }
+
     job.status = "done";
     job.pernas = pernas;
     if (avisoParcial) job.avisoParcial = avisoParcial;
-    emitirEvento(jobId, { tipo: "done", pernas, avisoParcial });
+    if (confirmacao) job.confirmacao = confirmacao;
+    emitirEvento(jobId, { tipo: "done", pernas, avisoParcial, confirmacao });
   });
 }
 
@@ -420,6 +472,8 @@ app.post("/api/buscar", (req: Request, res: Response) => {
         tetoReais: tetoDe(tetos?.reais),
         somenteMenorTarifa: Boolean(tetos?.somenteMenorTarifa),
       },
+      confirmarMilhas: Boolean(req.body?.confirmarMilhas),
+      margemReais: tetoDe(req.body?.margemReais) ?? 100,
     });
   } else if (ehAA) {
     executarJobAA(jobId, {
@@ -503,7 +557,7 @@ app.get("/api/buscar/:jobId/eventos", (req: Request, res: Response) => {
   }
   if (job.status === "done") {
     const dado = job.pernas
-      ? { tipo: "done", pernas: job.pernas }
+      ? { tipo: "done", pernas: job.pernas, confirmacao: job.confirmacao }
       : job.secaoAA
         ? { tipo: "done", secaoAA: job.secaoAA, avisoParcial: job.avisoParcial }
         : { tipo: "done", relatorio: job.relatorio, avisoParcial: job.avisoParcial };

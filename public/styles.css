@@ -932,6 +932,17 @@ details[open] > .coluna-cabecalho .chevron {
   flex-wrap: wrap;
 }
 
+.confirmacao-resumo {
+  font-size: 13px;
+  color: #cfd3da;
+  margin: 0;
+}
+
+.confirmacao-galeria img {
+  width: 340px;
+  background: #fff;
+}
+
 .alerta-galeria img {
   width: 180px;
   border-radius: 8px;

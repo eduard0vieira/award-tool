@@ -185,6 +185,13 @@
           <input type="checkbox" id="latam-menor-tarifa" checked />
           Só as datas de menor tarifa
         </label>
+        <!-- Fase 2: pega o dia mais barato de cada direção (dentro de
+             "menor + margem") e faz uma busca real em milhas, com print.
+             Precisa da sessão logada — ver scripts/importar-cookies.sh. -->
+        <label class="checkbox">
+          <input type="checkbox" id="latam-confirmar-milhas" checked />
+          Confirmar em milhas
+        </label>
         <button type="submit">Buscar</button>
       </form>
 
