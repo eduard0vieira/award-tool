@@ -278,6 +278,10 @@ h3 {
   border-left-color: #b0b7c3;
 }
 
+.accent-LATAM {
+  border-left-color: #1b0088;
+}
+
 .accent-AF {
   border-left-color: #a06cf5;
 }
@@ -386,6 +390,12 @@ h3 {
   background: rgba(176, 183, 195, 0.14);
   color: #ccd3de;
   border: 1px solid rgba(176, 183, 195, 0.32);
+}
+
+.tag-LATAM {
+  background: rgba(90, 80, 200, 0.18);
+  color: #a9a2f0;
+  border: 1px solid rgba(90, 80, 200, 0.4);
 }
 
 .tag-AF {

@@ -33,12 +33,22 @@ const checkboxAaIdaVolta = document.getElementById("aa-ida-volta");
 const avisoAa = document.getElementById("aa-aviso");
 const filaAa = document.getElementById("aa-fila-buscas");
 
+// Aba LATAM (tarifas em dinheiro; ida e volta vêm na mesma busca).
+const formLatam = document.getElementById("form-busca-latam");
+const inputLatamOrigem = document.getElementById("latam-origem");
+const inputLatamDestino = document.getElementById("latam-destino");
+const inputLatamTeto = document.getElementById("latam-teto");
+const checkboxLatamMenorTarifa = document.getElementById("latam-menor-tarifa");
+const avisoLatam = document.getElementById("latam-aviso");
+const filaLatam = document.getElementById("latam-fila-buscas");
+
 const tplJob = document.getElementById("tpl-job");
 const tplPerna = document.getElementById("tpl-perna");
 const abasBtns = document.querySelectorAll(".aba-btn");
 const painelTap = document.getElementById("painel-tap");
 const painelSeatspy = document.getElementById("painel-seatspy");
 const painelAa = document.getElementById("painel-aa");
+const painelLatam = document.getElementById("painel-latam");
 const painelHistorico = document.getElementById("painel-historico");
 const listaHistorico = document.getElementById("lista-historico");
 const historicoVazio = document.getElementById("historico-vazio");
@@ -54,6 +64,7 @@ const TOLERANCIA_MS = TOLERANCIA_DIAS * 24 * 60 * 60 * 1000;
 const PROGRAMA_LABEL = {
   tap: "TAP",
   AA: "American Airlines",
+  LATAM: "LATAM",
   AF: "Air France",
   B6: "JetBlue",
   BA: "British Airways",
@@ -81,6 +92,7 @@ abasBtns.forEach((btn) => {
     painelTap.hidden = aba !== "tap";
     painelSeatspy.hidden = aba !== "seatspy";
     painelAa.hidden = aba !== "aa";
+    painelLatam.hidden = aba !== "latam";
     painelHistorico.hidden = aba !== "historico";
     if (aba === "historico") renderizarHistorico();
   });
@@ -325,6 +337,8 @@ function criarItemHistorico(item) {
   const cabines =
     programa === "tap"
       ? [["Executiva", "cartao-executiva"], ["Econômica", "cartao-economica"]]
+      : programa === "LATAM"
+        ? [["Econômica", "cartao-economica"]]
       : programa === "AA"
         ? [[CABINE_AA_LABEL[item.cabine] || "Cabine n/d", CABINE_AA_COR[item.cabine] || "cartao-economica"]]
         : [["Econômica", "cartao-economica"], ["Premium", "cartao-premium"], ["Executiva", "cartao-executiva"], ["Primeira", "cartao-primeira"]];
@@ -713,11 +727,13 @@ function renderizarColuna(colunaEl, secao, corClasse) {
   }
   colunaEl.open = true;
 
-  // Quando o SeatSpy marca o dia como disponível mas não informa o valor em
-  // milhas (tarifa mista/parceira), menor/maior ficam null.
+  // Fontes de milhas mostram "123K"; a LATAM manda unidade "BRL" e vira
+  // "R$ 909". Quando o SeatSpy marca o dia como disponível sem informar o
+  // valor (tarifa mista/parceira), menor/maior ficam null.
+  const fmt = (v) => (secao.unidade === "BRL" ? `R$ ${v.toLocaleString("pt-BR")}` : `${v}K`);
   resumoEl.textContent =
     secao.menor != null
-      ? `${secao.menor}K–${secao.maior}K · ${secao.dias.length} dia(s)`
+      ? `${fmt(secao.menor)}–${fmt(secao.maior)} · ${secao.dias.length} dia(s)`
       : `Preço não informado · ${secao.dias.length} dia(s)`;
 
   const grupos = formatarPorMes(secao.dias);
@@ -1111,6 +1127,40 @@ async function iniciarBuscaAA(origem, destino, cabine, maxConexoes, tetoK, idaEV
   }
 }
 
+// LATAM: uma busca só devolve ida e volta (o calendário traz as duas
+// direções). Sem botão de alerta: o card do portal fala em milhas e ainda não
+// sabe exibir tarifa em reais.
+async function iniciarBuscaLatam(origem, destino, tetos) {
+  const card = criarCardJob(filaLatam, `LATAM: ${origem} ⇄ ${destino}`);
+
+  try {
+    const { resultado: pernas, avisoParcial } = await buscarNoServidor(
+      card,
+      { fonte: "latam", origem, destino, tetos },
+      "Buscando ida e volta...",
+    );
+    for (const perna of pernas) {
+      renderizarPernaSecoes(card.resultadoEl, perna.rotulo, perna.secoes);
+      registrarPernaCopia(card, perna.secoes);
+    }
+    salvarNoHistorico(origem, destino, "LATAM", true);
+
+    card.definirStatus("Pronto", "status-pronto");
+    card.resultadoEl.hidden = false;
+    if (avisoParcial) {
+      card.avisoEl.textContent = avisoParcial;
+      card.avisoEl.hidden = false;
+    }
+    atualizarAcoesCard(card);
+  } catch (err) {
+    card.definirStatus("Erro", "status-erro");
+    card.avisoEl.textContent = err.message || "Erro inesperado.";
+    card.avisoEl.hidden = false;
+  } finally {
+    card.progressoEl.hidden = true;
+  }
+}
+
 function avisoDeRepeticao(programa, origem, destino, idaEVolta) {
   const trechos = idaEVolta
     ? [
@@ -1150,6 +1200,23 @@ formTap.addEventListener("submit", (evento) => {
   iniciarBuscaTap(origem, destino, idaEVolta, {
     executiva: emK(inputTapTetoExecutiva),
     economica: emK(inputTapTetoEconomica),
+  });
+});
+
+formLatam.addEventListener("submit", (evento) => {
+  evento.preventDefault();
+  limparAviso(avisoLatam);
+  const origem = inputLatamOrigem.value.trim().toUpperCase();
+  const destino = inputLatamDestino.value.trim().toUpperCase();
+  if (!origem || !destino) {
+    mostrarAviso(avisoLatam, "Preencha origem e destino.");
+    return;
+  }
+  const teto = parseFloat(inputLatamTeto.value);
+  // Buscar na LATAM é grátis, então não tem o aviso de repetição das fontes pagas.
+  iniciarBuscaLatam(origem, destino, {
+    reais: Number.isFinite(teto) && teto > 0 ? teto : null,
+    somenteMenorTarifa: checkboxLatamMenorTarifa.checked,
   });
 });
 

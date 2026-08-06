@@ -1,7 +1,6 @@
 import "dotenv/config";
-import os from "node:os";
-import path from "node:path";
-import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
+import type { Page } from "playwright";
+import { abrirSessaoChrome, type SessaoChrome } from "./sessao-chrome.ts";
 import {
   LimitadorFrequencia,
   formatarListaPorMes,
@@ -26,12 +25,7 @@ import {
 // - O request aceita cabine e maxStops (0 = só direto, 1 = até 1 conexão)
 //   server-side, então o filtro de conexões é o mesmo do site.
 
-export type SessaoAA = {
-  browser: Browser | null; // null em contexto persistente (ver iniciarSessaoAA)
-  context: BrowserContext;
-  page: Page;
-  viaCdp: boolean; // true = aba no Chrome do usuário (não fechar o navegador!)
-};
+export type SessaoAA = SessaoChrome;
 
 export type CabineAA = "economica" | "premium" | "executiva" | "primeira";
 
@@ -78,27 +72,9 @@ const limitadorAA = new LimitadorFrequencia(INTERVALO_MIN_AA_MS);
 const MAX_MESES_FALHAS_SEGUIDAS = 3;
 const MESES_A_VARRER = 12;
 
-// Onde o Chrome do bot expõe o DevTools Protocol (ver scripts/chrome-aa.sh,
-// rodado por `npm run chrome`).
-const AA_CDP_URL = process.env.AA_CDP_URL || `http://localhost:${process.env.AA_CDP_PORTA || 9222}`;
-// Perfil do bot — o MESMO usado pelo scripts/chrome-aa.sh, de propósito: a
-// reputação (cookies, histórico) que a janela aberta manualmente acumula
-// vale também quando o bot abre o Chrome sozinho, e vice-versa. Fora do
-// repositório porque é dado de navegador, não código.
-const DIR_PERFIL_AA = process.env.AA_CHROME_PERFIL || path.join(os.homedir(), ".chrome-bot-aa");
 
-// Duas formas de sessão, nessa ordem:
-//
-// 1. Aba no SEU Chrome (preferida): se o Chrome estiver rodando com a porta
-//    de depuração aberta (`npm run chrome`), o bot abre só mais uma aba nele
-//    e herda seu perfil real — mesmos cookies, mesmo histórico, mesma
-//    reputação de sempre. É o que resolve o "Access Denied" que só acontece
-//    no navegador automatizado, já que pro Akamai é a sua navegação normal.
-// 2. Chrome próprio com perfil persistente (fallback automático): funciona
-//    sem preparo nenhum, mas parte de uma reputação zerada e pode apanhar do
-//    anti-bot até o perfil "esquentar".
 export async function iniciarSessaoAA(headless = false): Promise<SessaoAA> {
-  const sessao = (await conectarNoChromeDoUsuario()) ?? (await abrirChromePróprio(headless));
+  const sessao = await abrirSessaoChrome(headless, "AA");
 
   // Aquecimento: sem passar pela home primeiro, o Akamai devolve 403 nas
   // URLs de /booking.
@@ -117,39 +93,6 @@ export async function iniciarSessaoAA(headless = false): Promise<SessaoAA> {
   return sessao;
 }
 
-async function conectarNoChromeDoUsuario(): Promise<SessaoAA | null> {
-  try {
-    const browser = await chromium.connectOverCDP(AA_CDP_URL, { timeout: 3000 });
-    // contexts()[0] é o perfil já aberto na janela (com os cookies dele);
-    // newContext() criaria um anônimo, sem nenhuma dessa reputação.
-    const context = browser.contexts()[0];
-    if (!context) {
-      await browser.close();
-      return null;
-    }
-    console.log(`[AA] usando uma aba da janela do bot (${AA_CDP_URL}).`);
-    return { browser, context, page: await context.newPage(), viaCdp: true };
-  } catch {
-    // Sem janela aberta (todas as abas fechadas) o Chrome recusa a conexão —
-    // aí vale mais abrir um navegador próprio do que insistir.
-    return null;
-  }
-}
-
-async function abrirChromePróprio(headless: boolean): Promise<SessaoAA> {
-  console.log(
-    "[AA] Chrome do usuário indisponível — abrindo navegador próprio. " +
-      "Pra usar o seu (menos bloqueios), rode `npm run chrome`.",
-  );
-  const context = await chromium.launchPersistentContext(DIR_PERFIL_AA, {
-    headless,
-    channel: "chrome",
-    args: ["--disable-blink-features=AutomationControlled"],
-    viewport: null,
-  });
-  const page = context.pages()[0] ?? (await context.newPage());
-  return { browser: context.browser(), context, page, viaCdp: false };
-}
 
 function dataISO(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;

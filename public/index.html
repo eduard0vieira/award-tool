@@ -14,6 +14,7 @@
       <button type="button" class="aba-btn ativo" data-aba="tap">AwardTool</button>
       <button type="button" class="aba-btn" data-aba="seatspy">SeatSpy</button>
       <button type="button" class="aba-btn" data-aba="aa">American</button>
+      <button type="button" class="aba-btn" data-aba="latam">LATAM</button>
       <button type="button" class="aba-btn" data-aba="historico">Histórico</button>
     </nav>
 
@@ -161,6 +162,35 @@
       <p id="aa-aviso" class="aviso" hidden></p>
 
       <div id="aa-fila-buscas" class="fila-buscas"></div>
+    </section>
+
+    <!-- Aba LATAM (latamairlines.com, tarifas em dinheiro, Econômica, sem
+         login). O calendário devolve ida e volta juntas, então uma busca só
+         já traz as duas pernas. -->
+    <section id="painel-latam" class="painel" hidden>
+      <form id="form-busca-latam">
+        <div class="campo">
+          <label for="latam-origem">Origem</label>
+          <input id="latam-origem" placeholder="GRU" maxlength="3" required autocomplete="off" />
+        </div>
+        <div class="campo">
+          <label for="latam-destino">Destino</label>
+          <input id="latam-destino" placeholder="SCL" maxlength="3" required autocomplete="off" />
+        </div>
+        <div class="campo">
+          <label for="latam-teto">Teto por trecho (R$)</label>
+          <input id="latam-teto" type="number" min="1" step="1" placeholder="ex.: 950" autocomplete="off" />
+        </div>
+        <label class="checkbox">
+          <input type="checkbox" id="latam-menor-tarifa" checked />
+          Só as datas de menor tarifa
+        </label>
+        <button type="submit">Buscar</button>
+      </form>
+
+      <p id="latam-aviso" class="aviso" hidden></p>
+
+      <div id="latam-fila-buscas" class="fila-buscas"></div>
     </section>
 
     <section id="painel-historico" class="painel" hidden>

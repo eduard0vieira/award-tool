@@ -30,8 +30,16 @@ import {
   type CabineAA,
   type SessaoAA,
 } from "./bot-aa.ts";
+import {
+  construirRelatorioLatam,
+  iniciarSessaoLatam,
+  pesquisarAnoLatam,
+  type SessaoLatam,
+  type TetosLatam,
+} from "./bot-latam.ts";
 import type { SecaoRelatorio } from "./comum.ts";
 import { PoolSessoes } from "./pool-sessoes.ts";
+import { sessaoViva } from "./sessao-chrome.ts";
 import { DIR_ALERTAS, DIR_PORTAL_DIST, gerarAlerta, type PedidoAlerta } from "./alertas.ts";
 
 // A extração de preços lê as 4 cores (Economy/PremiumEconomy/Business/First)
@@ -68,6 +76,8 @@ const CONCORRENCIA_AWARDTOOL = Number(process.env.CONCORRENCIA_AWARDTOOL) || 3;
 const CONCORRENCIA_SEATSPY = Number(process.env.CONCORRENCIA_SEATSPY) || 3;
 // AA: sem login, mas o Akamai olha o IP — começa mais conservador.
 const CONCORRENCIA_AA = Number(process.env.CONCORRENCIA_AA) || 2;
+// LATAM também depende da janela do bot (Chrome real) — mesma prudência.
+const CONCORRENCIA_LATAM = Number(process.env.CONCORRENCIA_LATAM) || 2;
 
 const poolAwardtool = new PoolSessoes<Sessao>(
   CONCORRENCIA_AWARDTOOL,
@@ -88,7 +98,13 @@ const poolSeatspy = new PoolSessoes<SessaoSeatspy>(
 const poolAA = new PoolSessoes<SessaoAA>(
   CONCORRENCIA_AA,
   (headless) => iniciarSessaoAA(headless),
-  (s) => !s.page.isClosed() && (s.browser?.isConnected() ?? true),
+  sessaoViva,
+);
+
+const poolLatam = new PoolSessoes<SessaoLatam>(
+  CONCORRENCIA_LATAM,
+  (headless) => iniciarSessaoLatam(headless),
+  sessaoViva,
 );
 
 function emitirEvento(jobId: string, dado: object) {
@@ -272,6 +288,38 @@ function executarJobAA(
   });
 }
 
+// A LATAM devolve ida e volta na mesma resposta do calendário, então o job
+// resolve as duas pernas de uma vez (como o SeatSpy, e diferente da TAP/AA).
+function executarJobLatam(
+  jobId: string,
+  params: { origem: string; destino: string; tetos: TetosLatam },
+) {
+  return executarComPool(poolLatam, jobId, async ({ page }) => {
+    const job = jobs.get(jobId)!;
+    const { ida, volta, mesesComFalha } = await pesquisarAnoLatam(
+      page,
+      { origem: params.origem, destino: params.destino },
+      (msg) => console.log(`[${jobId}] ${msg}`),
+      (fracao) => atualizarProgresso(jobId, fracao),
+      (mensagem) => atualizarAviso(jobId, mensagem),
+    );
+
+    const pernas: PernaSeatspy[] = [
+      { rotulo: `Ida: ${params.origem} → ${params.destino}`, secoes: [{ rotulo: "Econômica", corClasse: "cartao-economica", ...construirRelatorioLatam(ida, params.tetos) }] },
+      { rotulo: `Volta: ${params.destino} → ${params.origem}`, secoes: [{ rotulo: "Econômica", corClasse: "cartao-economica", ...construirRelatorioLatam(volta, params.tetos) }] },
+    ];
+    const avisoParcial =
+      mesesComFalha.length > 0
+        ? `${mesesComFalha.length} período(s) não puderam ser buscados — o resultado abaixo é parcial.`
+        : undefined;
+
+    job.status = "done";
+    job.pernas = pernas;
+    if (avisoParcial) job.avisoParcial = avisoParcial;
+    emitirEvento(jobId, { tipo: "done", pernas, avisoParcial });
+  });
+}
+
 const app = express();
 
 // Protege o servidor inteiro (front + API) com usuário/senha quando exposto
@@ -334,6 +382,7 @@ app.post("/api/buscar", (req: Request, res: Response) => {
 
   const ehSeatspy = fonte === "seatspy";
   const ehAA = fonte === "aa";
+  const ehLatam = fonte === "latam";
   if (ehSeatspy && !Object.hasOwn(NOME_COMPANHIA, companhia)) {
     res.status(400).json({
       erro: `companhia deve ser uma destas para buscas no SeatSpy: ${Object.keys(NOME_COMPANHIA).join(", ")}.`,
@@ -361,6 +410,15 @@ app.post("/api/buscar", (req: Request, res: Response) => {
         premium: tetoDe(tetos?.premium),
         executiva: tetoDe(tetos?.executiva),
         primeira: tetoDe(tetos?.primeira),
+      },
+    });
+  } else if (ehLatam) {
+    executarJobLatam(jobId, {
+      origem: String(origem).toUpperCase(),
+      destino: String(destino).toUpperCase(),
+      tetos: {
+        tetoReais: tetoDe(tetos?.reais),
+        somenteMenorTarifa: Boolean(tetos?.somenteMenorTarifa),
       },
     });
   } else if (ehAA) {

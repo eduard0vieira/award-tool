@@ -22,6 +22,10 @@ export type SecaoRelatorio = {
   maior: number | null;
   dias: DiaFormatado[]; // ordenados cronologicamente
   texto: string; // "Mmm YYYY: DD, DD, ..." (pra copiar)
+  // Como o front formata menor/maior e os valores. Ausente = "K" (milhares de
+  // milhas), que é o caso das fontes de milhas. "BRL" é usado pela LATAM, que
+  // trabalha com tarifa em reais.
+  unidade?: "K" | "BRL";
 };
 
 export const MESES_PT = [
