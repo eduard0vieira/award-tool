@@ -65,7 +65,7 @@ type ConfirmacaoLatam = {
   volta: ConfirmacaoMilhas;
   totalMilhas: number;
   totalTaxas: number;
-  imagem: string; // print único com as duas pernas — é o que vai pro grupo
+  imagem: string; // print único com as duas pernas ("" se a captura falhou)
 };
 
 type Job = {
@@ -323,7 +323,7 @@ function executarJobLatam(
       { rotulo: `Ida: ${params.origem} → ${params.destino}`, secoes: [{ rotulo: "Econômica", corClasse: "cartao-economica", ...construirRelatorioLatam(ida, params.tetos) }] },
       { rotulo: `Volta: ${params.destino} → ${params.origem}`, secoes: [{ rotulo: "Econômica", corClasse: "cartao-economica", ...construirRelatorioLatam(volta, params.tetos) }] },
     ];
-    const avisoParcial =
+    let avisoParcial =
       mesesComFalha.length > 0
         ? `${mesesComFalha.length} período(s) não puderam ser buscados — o resultado abaixo é parcial.`
         : undefined;
@@ -331,10 +331,12 @@ function executarJobLatam(
     // Fase 2: confirma em milhas o melhor par de datas dentro da faixa
     // "menor + margem". Os prints vão pra mesma pasta servida em /alertas.
     let confirmacao: ConfirmacaoLatam | undefined;
+    let avisoConfirmacao: string | undefined;
     if (params.confirmarMilhas) {
+      try {
       const par = escolherMelhorPar(ida, volta, params.margemReais);
       if (!par) {
-        atualizarAviso(jobId, "Não achei par de ida e volta dentro da faixa pra confirmar em milhas.");
+        avisoConfirmacao = "Não achei par de ida e volta dentro da faixa pra confirmar em milhas.";
       } else {
         atualizarAviso(jobId, `Confirmando em milhas ${par.ida.data} → ${par.volta.data}...`);
         const pasta = `latam-${params.origem}-${params.destino}-${Date.now()}`;
@@ -355,28 +357,53 @@ function executarJobLatam(
         if (cIda && cVolta) {
           const totalMilhas = cIda.milhas + cVolta.milhas;
           const totalTaxas = Math.round((cIda.taxas + cVolta.taxas) * 100) / 100;
-          await montarPrintCombinado(context, {
-            origem: params.origem,
-            destino: params.destino,
-            ida: cIda,
-            volta: cVolta,
-            totalMilhas,
-            totalTaxas,
-            caminhoImagem: caminho("ida-e-volta.png"),
-          });
+
+          // O print é o último passo e o mais frágil (depende da página estar
+          // renderizada). Se falhar, os valores em milhas — que é o que
+          // interessa — continuam valendo, só sem imagem.
+          let imagem = "";
+          try {
+            if (cIda.imagem && cVolta.imagem) {
+              await montarPrintCombinado(context, {
+                origem: params.origem,
+                destino: params.destino,
+                ida: cIda,
+                volta: cVolta,
+                totalMilhas,
+                totalTaxas,
+                caminhoImagem: caminho("ida-e-volta.png"),
+              });
+              imagem = `/alertas/${pasta}/ida-e-volta.png`;
+            } else {
+              avisoConfirmacao = "Não consegui capturar o print de um dos trechos — os valores em milhas abaixo continuam válidos.";
+            }
+          } catch (err) {
+            console.error(`[${jobId}] falha ao montar o print: ${err instanceof Error ? err.message : String(err)}`);
+            avisoConfirmacao = "Não consegui montar o print da confirmação — os valores em milhas abaixo continuam válidos.";
+          }
+
           confirmacao = {
-            ida: { ...cIda, imagem: `/alertas/${pasta}/ida.png` },
-            volta: { ...cVolta, imagem: `/alertas/${pasta}/volta.png` },
+            ida: { ...cIda, imagem: cIda.imagem ? `/alertas/${pasta}/ida.png` : "" },
+            volta: { ...cVolta, imagem: cVolta.imagem ? `/alertas/${pasta}/volta.png` : "" },
             totalMilhas,
             totalTaxas,
-            imagem: `/alertas/${pasta}/ida-e-volta.png`,
+            imagem,
           };
         } else {
-          atualizarAviso(jobId, "As datas mais baratas não tinham oferta em milhas.");
+          avisoConfirmacao = "As datas mais baratas não tinham oferta em milhas.";
         }
+      }
+      } catch (err) {
+        // Nada aqui pode derrubar o resultado do calendário: as datas em reais
+        // já custaram a varredura inteira e são úteis por si só.
+        const mensagem = err instanceof Error ? err.message : String(err);
+        console.error(`[${jobId}] confirmação em milhas falhou: ${mensagem}`);
+        avisoConfirmacao = `A confirmação em milhas falhou (${mensagem}). As datas abaixo continuam válidas.`;
       }
       atualizarAviso(jobId, "");
     }
+
+    if (avisoConfirmacao) avisoParcial = [avisoParcial, avisoConfirmacao].filter(Boolean).join(" ");
 
     job.status = "done";
     job.pernas = pernas;

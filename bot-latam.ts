@@ -53,7 +53,7 @@ export type ConfirmacaoMilhas = {
   milhas: number;
   taxas: number; // em reais
   voo: string; // ex.: "LA8060 · 06:30 GRU → 09:40 LIM · Direto"
-  imagem: string; // caminho do print
+  imagem: string; // caminho do print ("" se a captura falhou)
 };
 
 export type TetosLatam = {
@@ -347,12 +347,19 @@ export async function confirmarEmMilhas(
       ` → ${hora(melhor.summary?.destination?.arrival)} ${destino}` +
       ` · ${paradas === 0 ? "Direto" : `${paradas} parada(s)`}`;
 
-    // Print só do primeiro cartão de voo — é o que interessa pro alerta.
-    const cartao = page.locator('[data-testid^="wrapper-card-flight-"]').first();
-    await cartao.screenshot({ path: caminhoImagem });
+    // Print só do primeiro cartão de voo — é o que interessa pro alerta. Se
+    // falhar, o valor em milhas (que é o dado essencial) não se perde: volta
+    // sem imagem e quem chamou decide o que fazer.
+    let imagem = "";
+    try {
+      await page.locator('[data-testid^="wrapper-card-flight-"]').first().screenshot({ path: caminhoImagem });
+      imagem = caminhoImagem;
+    } catch (err) {
+      onLog(`Não consegui tirar o print de ${data}: ${err instanceof Error ? err.message : String(err)}`);
+    }
 
     onLog(`${data}: ${milhas.toLocaleString("pt-BR")} milhas + R$ ${taxas} (${voo}).`);
-    return { data, milhas, taxas, voo, imagem: caminhoImagem };
+    return { data, milhas, taxas, voo, imagem };
   } finally {
     page.off("response", capturar);
   }

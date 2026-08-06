@@ -1148,20 +1148,36 @@ function mostrarConfirmacaoMilhas(card, c) {
     ` &middot; ida ${c.ida.data} &middot; volta ${c.volta.data}`;
   bloco.appendChild(resumo);
 
-  // Um print só, com ida e volta juntas — é ele que vai pro grupo.
-  const galeria = document.createElement("div");
-  galeria.className = "alerta-galeria confirmacao-galeria";
-  const link = document.createElement("a");
-  link.href = c.imagem;
-  link.target = "_blank";
-  link.download = c.imagem.split("/").pop();
-  link.title = `${c.ida.voo} | ${c.volta.voo}`;
-  const img = document.createElement("img");
-  img.src = c.imagem;
-  img.alt = "Ida e volta confirmadas em milhas";
-  link.appendChild(img);
-  galeria.appendChild(link);
-  bloco.appendChild(galeria);
+  // Detalhe de cada perna em texto — é o que garante o alerta mesmo quando o
+  // print falha (a imagem é o passo mais frágil do fluxo).
+  const detalhe = document.createElement("p");
+  detalhe.className = "confirmacao-detalhe";
+  detalhe.textContent =
+    `Ida ${c.ida.data}: ${fmt(c.ida.milhas)} milhas + R$ ${c.ida.taxas} · ${c.ida.voo}\n` +
+    `Volta ${c.volta.data}: ${fmt(c.volta.milhas)} milhas + R$ ${c.volta.taxas} · ${c.volta.voo}`;
+  bloco.appendChild(detalhe);
+
+  // Um print só, com ida e volta juntas — é ele que vai pro grupo. Pode não
+  // existir se a captura falhou; nesse caso mostra as imagens por perna que
+  // tenham sobrado, e se nem essas houver, fica só o texto acima.
+  const imagens = c.imagem ? [c.imagem] : [c.ida.imagem, c.volta.imagem].filter(Boolean);
+  if (imagens.length > 0) {
+    const galeria = document.createElement("div");
+    galeria.className = "alerta-galeria confirmacao-galeria";
+    for (const src of imagens) {
+      const link = document.createElement("a");
+      link.href = src;
+      link.target = "_blank";
+      link.download = src.split("/").pop();
+      link.title = `${c.ida.voo} | ${c.volta.voo}`;
+      const img = document.createElement("img");
+      img.src = src;
+      img.alt = "Ida e volta confirmadas em milhas";
+      link.appendChild(img);
+      galeria.appendChild(link);
+    }
+    bloco.appendChild(galeria);
+  }
 
   const btn = document.createElement("button");
   btn.type = "button";

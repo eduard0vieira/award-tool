@@ -938,6 +938,14 @@ details[open] > .coluna-cabecalho .chevron {
   margin: 0;
 }
 
+.confirmacao-detalhe {
+  font-size: 12px;
+  line-height: 1.6;
+  color: #9aa0aa;
+  margin: 0;
+  white-space: pre-wrap;
+}
+
 .confirmacao-galeria img {
   width: 420px;
   background: #fff;
