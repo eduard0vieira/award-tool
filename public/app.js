@@ -570,11 +570,12 @@ function buscarNoServidor(card, corpo, rotuloProgresso) {
 
 function formatarPorMes(dias) {
   const grupos = new Map();
-  for (const { data } of dias) {
+  for (const { data, assentos } of dias) {
     const [ano, mes, dia] = data.split("-");
     const chave = `${ano}-${mes}`;
     if (!grupos.has(chave)) grupos.set(chave, []);
-    grupos.get(chave).push(dia);
+    // assentos só existe no SeatSpy (vagas do voo cotado, como no hover deles).
+    grupos.get(chave).push({ dia, assentos });
   }
   return Array.from(grupos.keys())
     .sort()
@@ -748,10 +749,17 @@ function renderizarColuna(colunaEl, secao, corClasse) {
 
     const linha = document.createElement("div");
     linha.className = "linha-cartoes";
-    for (const dia of grupo.dias) {
+    for (const { dia, assentos } of grupo.dias) {
       const cartao = document.createElement("span");
       cartao.className = `cartao ${corClasse}`;
       cartao.textContent = dia;
+      if (assentos > 0) {
+        const vagas = document.createElement("small");
+        vagas.className = "cartao-vagas";
+        vagas.textContent = assentos;
+        vagas.title = `${assentos} vaga(s)`;
+        cartao.appendChild(vagas);
+      }
       linha.appendChild(cartao);
     }
     cartoesEl.appendChild(linha);

@@ -39,13 +39,19 @@ export function parseValorK(valor: string): number | null {
   return Number.isNaN(num) ? null : num;
 }
 
-export function formatarListaPorMes(datas: string[]): string {
+// `sufixoDe` permite anexar algo ao dia — o SeatSpy usa pra mostrar as vagas,
+// saindo "Mai 2026: 01 (2), 05 (4)". Esse é o mesmo formato que o gerador de
+// alertas já entende ao colar (ver parseDates no vcc-alertas-portal).
+export function formatarListaPorMes(
+  datas: string[],
+  sufixoDe?: (data: string) => string,
+): string {
   const grupos = new Map<string, string[]>();
   for (const d of datas) {
     const [ano, mes, dia] = d.split("-") as [string, string, string];
     const chave = `${ano}-${mes}`;
     if (!grupos.has(chave)) grupos.set(chave, []);
-    grupos.get(chave)!.push(dia);
+    grupos.get(chave)!.push(`${dia}${sufixoDe ? sufixoDe(d) : ""}`);
   }
   const chavesOrdenadas = Array.from(grupos.keys()).sort();
   return chavesOrdenadas

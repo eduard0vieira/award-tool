@@ -24,6 +24,9 @@ export type ParametrosSeatspy = {
 export type ValorCabine = {
   disponivel: boolean;
   milhas: number | null;
+  // Vagas do voo cotado (o mais barato do dia naquela cabine) — é o mesmo
+  // número que o SeatSpy mostra no hover do calendário. 0 = sem disponibilidade.
+  assentos: number;
 };
 
 export type DiaSeatspy = {
@@ -39,7 +42,8 @@ export type SecaoSeatspy = {
   corClasse: string;
   menor: number | null; // em K (milhares de milhas), só considerando dias com preço
   maior: number | null;
-  dias: { data: string; valorK: number | null }[];
+  // `assentos` só vem do SeatSpy; LATAM e AA reusam esse tipo sem ele.
+  dias: { data: string; valorK: number | null; assentos?: number }[];
   texto: string;
 };
 
@@ -199,10 +203,19 @@ function valorCabine(
   milhas: (v: VooCru) => number | null,
 ): ValorCabine {
   const comAssento = voos.filter((v) => assentos(v) > 0);
-  if (comAssento.length === 0) return { disponivel: false, milhas: null };
+  if (comAssento.length === 0) return { disponivel: false, milhas: null, assentos: 0 };
 
-  const comPreco = comAssento.map((v) => milhas(v)).filter((m): m is number => m !== null);
-  return { disponivel: true, milhas: comPreco.length > 0 ? Math.min(...comPreco) : null };
+  const comPreco = comAssento.filter((v) => milhas(v) !== null);
+  if (comPreco.length === 0) {
+    // Dia disponível sem preço informado (tarifa mista/parceira): reporta a
+    // maior oferta de vagas do dia.
+    return { disponivel: true, milhas: null, assentos: Math.max(...comAssento.map(assentos)) };
+  }
+
+  // As vagas têm que ser as DO VOO COTADO, não o máximo do dia — senão a gente
+  // anunciaria "9 vagas" num preço que só existe num voo com 2.
+  const melhor = comPreco.reduce((a, b) => (milhas(a)! <= milhas(b)! ? a : b));
+  return { disponivel: true, milhas: milhas(melhor), assentos: assentos(melhor) };
 }
 
 function extrairDias(datas: DataCrua[]): DiaSeatspy[] {
@@ -368,9 +381,10 @@ export function construirRelatorioSeatspy(dias: DiaSeatspy[], tetos: TetosSeatsp
     }
 
     const diasFormatados = disponiveis.map((d) => {
-      const milhas = d[campo].milhas;
-      return { data: d.data, valorK: milhas != null ? Math.round(milhas / 10) / 100 : null };
+      const { milhas, assentos } = d[campo];
+      return { data: d.data, valorK: milhas != null ? Math.round(milhas / 10) / 100 : null, assentos };
     });
+    const assentosPorData = new Map(diasFormatados.map((d) => [d.data, d.assentos]));
     const valoresConhecidos = diasFormatados.map((d) => d.valorK).filter((v): v is number => v != null);
 
     return {
@@ -379,7 +393,13 @@ export function construirRelatorioSeatspy(dias: DiaSeatspy[], tetos: TetosSeatsp
       menor: valoresConhecidos.length > 0 ? Math.min(...valoresConhecidos) : null,
       maior: valoresConhecidos.length > 0 ? Math.max(...valoresConhecidos) : null,
       dias: diasFormatados,
-      texto: formatarListaPorMes(diasFormatados.map((d) => d.data)),
+      texto: formatarListaPorMes(
+        diasFormatados.map((d) => d.data),
+        (data) => {
+          const n = assentosPorData.get(data) ?? 0;
+          return n > 0 ? ` (${n})` : "";
+        },
+      ),
     };
   });
 

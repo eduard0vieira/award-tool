@@ -814,6 +814,21 @@ details[open] > .coluna-cabecalho .chevron {
   font-weight: 600;
 }
 
+.cartao-vagas {
+  margin-left: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  opacity: 0.75;
+}
+
+.cartao-vagas::before {
+  content: "(";
+}
+
+.cartao-vagas::after {
+  content: ")";
+}
+
 .cartao-executiva {
   background: rgba(0, 145, 234, 0.15);
   color: #6cb6f5;
