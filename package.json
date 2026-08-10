@@ -8,7 +8,8 @@
     "start": "tsx index.ts",
     "server": "tsx watch server.ts",
     "tunnel": "ngrok http 5555",
-    "chrome": "bash scripts/chrome-aa.sh"
+    "chrome": "bash scripts/chrome-aa.sh",
+    "chrome:parar": "bash scripts/parar-chrome.sh"
   },
   "keywords": [],
   "author": "",
