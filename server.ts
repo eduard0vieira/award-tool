@@ -295,9 +295,13 @@ function executarJobAA(
       rotulo: CABINE_AA_LABEL[params.cabine],
       ...construirRelatorioAA(dias, params.tetoMilhas),
     };
+    // O motivo da primeira falha vai junto: sem ele o usuário via só "parcial"
+    // e teria que abrir o terminal do servidor pra saber se foi bloqueio, rota
+    // errada ou pedido recusado.
     const avisoParcial =
       mesesComFalha.length > 0
-        ? `${mesesComFalha.length} mês(es) não puderam ser buscados (ver detalhes no terminal do servidor) — o resultado abaixo é parcial.`
+        ? `${mesesComFalha.length} mês(es) não puderam ser buscados — o resultado abaixo é parcial. ` +
+          `Primeira falha (${mesesComFalha[0]!.mes}): ${mesesComFalha[0]!.erro}`
         : undefined;
     job.status = "done";
     job.secaoAA = secao;
