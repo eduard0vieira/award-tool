@@ -25,6 +25,7 @@ import {
 } from "./bot-seatspy.ts";
 import {
   CABINE_AA_LABEL,
+  MAX_PASSAGEIROS_AA,
   construirRelatorioAA,
   iniciarSessaoAA,
   pesquisarAnoAA,
@@ -271,6 +272,7 @@ function executarJobAA(
     cabine: CabineAA;
     maxConexoes: number | null;
     tetoMilhas: number | null;
+    passageiros: number;
   },
 ) {
   return executarComPool(poolAA, jobId, async ({ page }) => {
@@ -282,6 +284,7 @@ function executarJobAA(
         destino: params.destino,
         cabine: params.cabine,
         maxConexoes: params.maxConexoes,
+        passageiros: params.passageiros,
       },
       (msg) => console.log(`[${jobId}] ${msg}`),
       (fracao) => atualizarProgresso(jobId, fracao),
@@ -307,7 +310,14 @@ function executarJobAA(
 // resolve as duas pernas de uma vez (como o SeatSpy, e diferente da TAP/AA).
 function executarJobLatam(
   jobId: string,
-  params: { origem: string; destino: string; tetos: TetosLatam; confirmarMilhas: boolean; margemReais: number },
+  params: {
+    origem: string;
+    destino: string;
+    tetos: TetosLatam;
+    confirmarMilhas: boolean;
+    margemIdaReais: number;
+    margemVoltaReais: number;
+  },
 ) {
   return executarComPool(poolLatam, jobId, async ({ page, context }) => {
     const job = jobs.get(jobId)!;
@@ -334,7 +344,7 @@ function executarJobLatam(
     let avisoConfirmacao: string | undefined;
     if (params.confirmarMilhas) {
       try {
-      const par = escolherMelhorPar(ida, volta, params.margemReais);
+      const par = escolherMelhorPar(ida, volta, params.margemIdaReais, params.margemVoltaReais);
       if (!par) {
         avisoConfirmacao = "Não achei par de ida e volta dentro da faixa pra confirmar em milhas.";
       } else {
@@ -465,6 +475,14 @@ function tetoDe(valor: unknown): number | null {
   return Number.isFinite(num) && num > 0 ? num : null;
 }
 
+// Passageiros é contagem, não teto: precisa ser inteiro e dentro do que a AA
+// aceita (1 a 9). Qualquer coisa fora disso vira 1 em vez de derrubar a busca.
+function passageirosDe(valor: unknown): number {
+  const num = Math.trunc(Number(valor));
+  if (!Number.isFinite(num) || num < 1) return 1;
+  return Math.min(num, MAX_PASSAGEIROS_AA);
+}
+
 app.post("/api/buscar", (req: Request, res: Response) => {
   const { fonte, origem, destino, companhia, idaEVolta, tetos, cabine, maxConexoes, teto } = req.body ?? {};
 
@@ -514,7 +532,8 @@ app.post("/api/buscar", (req: Request, res: Response) => {
         somenteMenorTarifa: Boolean(tetos?.somenteMenorTarifa),
       },
       confirmarMilhas: Boolean(req.body?.confirmarMilhas),
-      margemReais: tetoDe(req.body?.margemReais) ?? 100,
+      margemIdaReais: tetoDe(req.body?.margemIdaReais) ?? 100,
+      margemVoltaReais: tetoDe(req.body?.margemVoltaReais) ?? 300,
     });
   } else if (ehAA) {
     executarJobAA(jobId, {
@@ -523,6 +542,7 @@ app.post("/api/buscar", (req: Request, res: Response) => {
       cabine,
       maxConexoes: maxConexoes === 0 || maxConexoes === 1 ? maxConexoes : null,
       tetoMilhas: tetoDe(teto),
+      passageiros: passageirosDe(req.body?.passageiros),
     });
   } else {
     executarJob(jobId, {

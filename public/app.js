@@ -28,6 +28,7 @@ const inputAaOrigem = document.getElementById("aa-origem");
 const inputAaDestino = document.getElementById("aa-destino");
 const selectAaCabine = document.getElementById("aa-cabine");
 const selectAaConexoes = document.getElementById("aa-conexoes");
+const selectAaPassageiros = document.getElementById("aa-passageiros");
 const inputAaTeto = document.getElementById("aa-teto");
 const checkboxAaIdaVolta = document.getElementById("aa-ida-volta");
 const avisoAa = document.getElementById("aa-aviso");
@@ -193,6 +194,8 @@ function repetirBusca(item) {
     inputAaOrigem.value = item.origem;
     inputAaDestino.value = item.destino;
     if (item.cabine) selectAaCabine.value = item.cabine;
+    // Buscas antigas não têm o campo — sem o padrão, o select ficaria em branco.
+    selectAaPassageiros.value = String(item.passageiros || 1);
     checkboxAaIdaVolta.checked = Boolean(item.idaEVolta);
     ativarAba("aa");
     inputAaOrigem.focus();
@@ -341,7 +344,15 @@ function criarItemHistorico(item) {
       : programa === "LATAM"
         ? [["Econômica", "cartao-economica"]]
       : programa === "AA"
-        ? [[CABINE_AA_LABEL[item.cabine] || "Cabine n/d", CABINE_AA_COR[item.cabine] || "cartao-economica"]]
+        ? [
+            [
+              // Passageiros só aparece quando é mais de um, pra distinguir do
+              // registro normal do mesmo trecho.
+              (CABINE_AA_LABEL[item.cabine] || "Cabine n/d") +
+                (item.passageiros > 1 ? ` · ${item.passageiros} pax` : ""),
+              CABINE_AA_COR[item.cabine] || "cartao-economica",
+            ],
+          ]
         : [["Econômica", "cartao-economica"], ["Premium", "cartao-premium"], ["Executiva", "cartao-executiva"], ["Primeira", "cartao-primeira"]];
   const grupoCabines = document.createElement("div");
   grupoCabines.className = "item-historico-cabines";
@@ -1082,12 +1093,17 @@ function mostrarAlertaGerado(card, { imagens, legenda, imagemCombo, legendaCombo
 
 // AA: uma cabine por busca, cada direção é um job próprio (como na TAP).
 // Sem aba Upgrade (não há cruzamento de cabines numa busca de cabine única).
-async function iniciarBuscaAA(origem, destino, cabine, maxConexoes, tetoK, idaEVolta) {
+async function iniciarBuscaAA(origem, destino, cabine, maxConexoes, tetoK, idaEVolta, passageiros = 1) {
   const seta = idaEVolta ? "⇄" : "→";
   const rotuloCabine = CABINE_AA_LABEL[cabine] || cabine;
-  const card = criarCardJob(filaAa, `American Airlines (${rotuloCabine}): ${origem} ${seta} ${destino}`);
+  // O caso comum é 1 passageiro; só polui o título do card quando for mais.
+  const rotuloPax = passageiros > 1 ? `, ${passageiros} passageiros` : "";
+  const card = criarCardJob(
+    filaAa,
+    `American Airlines (${rotuloCabine}${rotuloPax}): ${origem} ${seta} ${destino}`,
+  );
   const avisosParciais = [];
-  const corpoBase = { fonte: "aa", cabine, maxConexoes, teto: tetoK };
+  const corpoBase = { fonte: "aa", cabine, maxConexoes, teto: tetoK, passageiros };
 
   try {
     const rotuloIda = idaEVolta ? "Buscando ida..." : "Buscando...";
@@ -1100,7 +1116,7 @@ async function iniciarBuscaAA(origem, destino, cabine, maxConexoes, tetoK, idaEV
     const rotuloPernaIda = idaEVolta ? `Ida: ${origem} → ${destino}` : `${origem} → ${destino}`;
     renderizarPernaSecoes(card.resultadoEl, rotuloPernaIda, [{ ...secaoIda, corClasse: CABINE_AA_COR[cabine] }]);
     registrarPernaCopia(card, [secaoIda]);
-    salvarNoHistorico(origem, destino, "AA", false, { cabine });
+    salvarNoHistorico(origem, destino, "AA", false, { cabine, passageiros });
 
     let secaoVolta = null;
     if (idaEVolta) {
@@ -1217,7 +1233,7 @@ async function iniciarBuscaLatam(origem, destino, tetos, confirmarMilhas) {
   try {
     const { resultado: pernas, avisoParcial, confirmacao } = await buscarNoServidor(
       card,
-      { fonte: "latam", origem, destino, tetos, confirmarMilhas, margemReais: 100 },
+      { fonte: "latam", origem, destino, tetos, confirmarMilhas, margemIdaReais: 100, margemVoltaReais: 300 },
       "Buscando ida e volta...",
     );
     for (const perna of pernas) {
@@ -1319,9 +1335,18 @@ formAa.addEventListener("submit", (evento) => {
   const cabine = selectAaCabine.value;
   const maxConexoes = selectAaConexoes.value === "" ? null : Number(selectAaConexoes.value);
   const tetoK = parseFloat(inputAaTeto.value);
+  const passageiros = Number(selectAaPassageiros.value) || 1;
   // Buscar na AA é grátis, então não tem o aviso de repetição em N dias das
   // fontes pagas.
-  iniciarBuscaAA(origem, destino, cabine, maxConexoes, Number.isFinite(tetoK) && tetoK > 0 ? tetoK * 1000 : null, checkboxAaIdaVolta.checked);
+  iniciarBuscaAA(
+    origem,
+    destino,
+    cabine,
+    maxConexoes,
+    Number.isFinite(tetoK) && tetoK > 0 ? tetoK * 1000 : null,
+    checkboxAaIdaVolta.checked,
+    passageiros,
+  );
 });
 
 formSeatspy.addEventListener("submit", (evento) => {

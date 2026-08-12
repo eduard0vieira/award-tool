@@ -80,6 +80,33 @@ Resposta: `calendarMonths[0] = { month, year, weeks[] }`; cada
 `solution: null` = sem disponibilidade). `calendarDetails.lowestMonthlyPrice`
 = menor do mês.
 
+## Passageiros (validado)
+
+`passengers[0].count` é respeitado pelo calendário: mesma rota/mês/cabine com
+count 1, 2, 4 e 9 devolve valores diferentes por dia (GRU–MIA econômica,
+out/2026: dia 05 saiu 48000 → 48500 → 48500 → 49000; dia 03, 43500 → 45000 com
+9). Em rota folgada a quantidade de dias não muda; em rota apertada é o dia
+inteiro que some, porque a AA só cota se houver assento-prêmio pra todo mundo
+no mesmo voo. **`perPassengerAwardPoints` é por pessoa**, então o teto de
+milhas não muda de significado com mais passageiros.
+
+Máximo: **9**. Com 10 responde 400 com
+`"Total number of passengers must be between 1 and 9."` (reasonCode 27).
+
+## Os dois significados do 400
+
+O mesmo status cobre duas coisas muito diferentes, e a distinção só existe no
+corpo (`details[].reason`):
+
+- fim do calendário de vendas → `field: "slices[0].departureDate"`,
+  `"Search date is outside of available schedule."` (reasonCode 1356);
+- pedido inválido (ex.: passageiros demais) → o campo problemático em
+  `details[].field`.
+
+Confundir os dois faz a varredura parar no primeiro mês e devolver "nenhuma
+disponibilidade" em vez de erro — por isso `buscarMes` classifica pelo motivo,
+não pelo status.
+
 ## Varredura de ano (validada)
 
 1. Aquecer home → deep-link (1 navegação; estabelece cookies Akamai).

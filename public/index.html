@@ -148,8 +148,28 @@
             <option value="1">Até 1 conexão</option>
           </select>
         </div>
+        <!-- Quantos adultos na mesma reserva (a AA aceita até 9). Com mais de
+             um, o dia só entra no resultado se o voo tiver assentos-prêmio pra
+             todo mundo junto — busca mais seletiva, e é o que o cliente
+             realmente precisa quando viaja em família. -->
         <div class="campo">
-          <label for="aa-teto">Teto de milhas (K)</label>
+          <label for="aa-passageiros">Passageiros</label>
+          <select id="aa-passageiros">
+            <option value="1" selected>1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+            <option value="6">6</option>
+            <option value="7">7</option>
+            <option value="8">8</option>
+            <option value="9">9</option>
+          </select>
+        </div>
+        <div class="campo">
+          <!-- Por passageiro: a AA cota o prêmio por pessoa, então o teto não
+               muda de significado quando a busca é pra mais de um. -->
+          <label for="aa-teto">Teto de milhas (K) por passageiro</label>
           <input id="aa-teto" type="number" min="1" step="0.5" placeholder="ex.: 110" autocomplete="off" />
         </div>
         <label class="checkbox">
@@ -186,7 +206,8 @@
           Só as datas de menor tarifa
         </label>
         <!-- Fase 2: pega o dia mais barato de cada direção (dentro de
-             "menor + margem") e faz uma busca real em milhas, com print.
+             "menor + margem": R$ 100 na ida, R$ 300 na volta, que costuma ser
+             mais cara) e faz uma busca real em milhas, com print.
              Precisa da sessão logada — ver scripts/importar-cookies.sh. -->
         <label class="checkbox">
           <input type="checkbox" id="latam-confirmar-milhas" checked />

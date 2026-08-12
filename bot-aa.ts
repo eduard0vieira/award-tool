@@ -48,11 +48,19 @@ const CABINE_AA_REQUEST: Record<CabineAA, string> = {
   primeira: "FIRST",
 };
 
+// A AA aceita no máximo 9 passageiros por busca (conferido: com 10 ela
+// responde 400 dizendo "Total number of passengers must be between 1 and 9").
+export const MAX_PASSAGEIROS_AA = 9;
+
 export type ParametrosAA = {
   origem: string; // IATA
   destino: string; // IATA
   cabine: CabineAA;
   maxConexoes: number | null; // null = qualquer, 0 = só direto, 1 = até 1 conexão
+  // Quantos adultos na mesma reserva. Pedir mais gente deixa a busca mais
+  // seletiva: o dia só aparece se houver essa quantidade de assentos-prêmio no
+  // mesmo voo, e o valor mostrado é o de cada passageiro (não o total).
+  passageiros: number;
 };
 
 export type DiaAA = {
@@ -121,7 +129,7 @@ function datasDosMeses(): string[] {
 function corpoCalendario(params: ParametrosAA, departureDate: string) {
   return {
     metadata: { selectedProducts: [], tripType: "OneWay", udo: {} },
-    passengers: [{ type: "adult", count: 1 }],
+    passengers: [{ type: "adult", count: params.passageiros }],
     requestHeader: { clientId: "AAcom" },
     slices: [
       {
@@ -155,6 +163,11 @@ class ErroForaDoHorizonte extends Error {
   }
 }
 
+type Resposta400 = {
+  message?: string;
+  details?: { field?: string; reason?: string }[];
+};
+
 type RespostaCalendario = {
   error?: string;
   calendarMonths?: {
@@ -171,7 +184,8 @@ async function abrirPaginaDeResultados(page: Page, params: ParametrosAA, dataIni
     { orig: params.origem, origNearby: false, dest: params.destino, destNearby: false, date: dataInicial },
   ]);
   const url =
-    "https://www.aa.com/booking/search?locale=en_US&pax=1&adult=1&type=OneWay&searchType=Award&cabin=&carriers=ALL&slices=" +
+    `https://www.aa.com/booking/search?locale=en_US&pax=${params.passageiros}&adult=${params.passageiros}` +
+    "&type=OneWay&searchType=Award&cabin=&carriers=ALL&slices=" +
     encodeURIComponent(slices);
 
   onLog(`Abrindo busca de prêmios ${params.origem} → ${params.destino}...`);
@@ -209,8 +223,25 @@ async function buscarMes(page: Page, params: ParametrosAA, departureDate: string
   );
 
   if (resultado.status === 400) {
-    // A AA só vende até ~331 dias no futuro; meses além disso respondem 400.
-    throw new ErroForaDoHorizonte(departureDate);
+    // 400 tem dois significados bem diferentes, e confundir os dois sai caro:
+    // a AA só vende até ~331 dias no futuro (fim natural da varredura), mas
+    // ela também devolve 400 quando o pedido em si está errado — passageiros
+    // demais, por exemplo. Tratar o segundo caso como fim de calendário faria
+    // a varredura parar no primeiro mês e entregar "nenhuma disponibilidade"
+    // em vez de um erro. Por isso a distinção vem do motivo, não do status.
+    let corpo400: Resposta400 = {};
+    try {
+      corpo400 = JSON.parse(resultado.texto) as Resposta400;
+    } catch {
+      /* sem corpo legível: cai no erro genérico abaixo */
+    }
+    const motivos = (corpo400.details ?? []).map((d) => d.reason).filter(Boolean) as string[];
+    if (motivos.some((m) => /outside of available schedule/i.test(m))) {
+      throw new ErroForaDoHorizonte(departureDate);
+    }
+    throw new Error(
+      `A AA recusou a busca: ${motivos.join(" ") || corpo400.message || resultado.texto.slice(0, 200)}`,
+    );
   }
   if (resultado.status !== 200) {
     throw new Error(`Calendário respondeu com status ${resultado.status} (mês de ${departureDate}).`);

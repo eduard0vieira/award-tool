@@ -366,22 +366,24 @@ export async function confirmarEmMilhas(
 }
 
 // A partir dos dias do calendário, escolhe o melhor par ida/volta dentro da
-// faixa "menor + margem" (padrão R$ 100, como combinado): o dia mais barato de
-// cada direção, com a volta caindo depois da ida.
+// faixa "menor + margem": o dia mais barato de cada direção, com a volta caindo
+// depois da ida. A margem é separada por direção porque a volta costuma sair
+// mais cara — R$ 100 na ida e R$ 300 na volta, como combinado.
 export function escolherMelhorPar(
   ida: DiaLatam[],
   volta: DiaLatam[],
-  margemReais = 100,
+  margemIdaReais = 100,
+  margemVoltaReais = 300,
 ): { ida: DiaLatam; volta: DiaLatam } | null {
   if (ida.length === 0 || volta.length === 0) return null;
 
-  const naFaixa = (dias: DiaLatam[]) => {
+  const naFaixa = (dias: DiaLatam[], margemReais: number) => {
     const menor = Math.min(...dias.map((d) => d.valor));
     return dias.filter((d) => d.valor <= menor + margemReais);
   };
 
-  const idaCandidatos = naFaixa(ida).sort((a, b) => a.valor - b.valor || a.data.localeCompare(b.data));
-  const voltaCandidatos = naFaixa(volta).sort((a, b) => a.valor - b.valor || a.data.localeCompare(b.data));
+  const idaCandidatos = naFaixa(ida, margemIdaReais).sort((a, b) => a.valor - b.valor || a.data.localeCompare(b.data));
+  const voltaCandidatos = naFaixa(volta, margemVoltaReais).sort((a, b) => a.valor - b.valor || a.data.localeCompare(b.data));
 
   for (const i of idaCandidatos) {
     const v = voltaCandidatos.find((x) => x.data > i.data);
