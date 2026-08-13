@@ -1,6 +1,15 @@
 #!/bin/bash
-# Abre uma janela do Chrome que o bot consegue usar pra buscar na AA
-# (ver iniciarSessaoAA em bot-aa.ts).
+# Abre uma janela do Chrome no perfil do bot, com a porta de depuração.
+#
+# ATENÇÃO: hoje o bot abre a janela dele sozinho ao buscar — não é mais preciso
+# rodar isso antes. E como o perfil é de uso exclusivo, deixar esta janela
+# aberta IMPEDE o bot de abrir a dele (a busca falha até você rodar
+# `npm run chrome:parar`). O attach por porta de depuração, que era o plano
+# original, não conclui numa janela real nesta máquina — ver o comentário do
+# topo de sessao-chrome.ts.
+#
+# Continua útil pra uma coisa: abrir o navegador do bot pra você navegar/logar
+# à mão sem nenhuma busca rodando. Feche antes de voltar a buscar.
 #
 # Dois detalhes do Chrome que ditam o formato disso aqui:
 #

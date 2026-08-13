@@ -361,11 +361,15 @@ function executarJobLatam(
           page,
           { origem: params.origem, destino: params.destino, data: par.ida.data, caminhoImagem: caminho("ida.png") },
           (msg) => console.log(`[${jobId}] ${msg}`),
+          // Pedido de login vira aviso na tela: é a única forma de o usuário
+          // saber que a busca está parada esperando ele na janela do bot.
+          (mensagem) => atualizarAviso(jobId, mensagem),
         );
         const cVolta = await confirmarEmMilhas(
           page,
           { origem: params.destino, destino: params.origem, data: par.volta.data, caminhoImagem: caminho("volta.png") },
           (msg) => console.log(`[${jobId}] ${msg}`),
+          (mensagem) => atualizarAviso(jobId, mensagem),
         );
 
         if (cIda && cVolta) {

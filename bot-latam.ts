@@ -279,10 +279,79 @@ type OfertaCrua = {
   }[];
 };
 
+// A busca em milhas exige sessão logada. Quando a sessão cai, o caminho é
+// entrar na JANELA DO BOT (que está aberta e visível) — o login fica salvo no
+// perfil e vale pras próximas buscas.
+//
+// Se LATAM_EMAIL e LATAM_SENHA estiverem no .env, o bot adianta o preenchimento
+// dos dois campos; o código de verificação (e qualquer captcha) é sempre com
+// você. Se o formulário mudar e o preenchimento não pegar, isso NÃO é erro:
+// o bot avisa e espera você terminar na mão. Nada de senha aparece em log.
+const ESPERA_LOGIN_MS = Number(process.env.LATAM_ESPERA_LOGIN_MS) || 300_000;
+
+function pedindoLogin(page: Page): boolean {
+  const url = page.url();
+  return /login|iniciar-sesion|signin|sign-in/i.test(url);
+}
+
+async function preencherCredenciais(page: Page, onLog: OnLog): Promise<void> {
+  const email = process.env.LATAM_EMAIL;
+  const senha = process.env.LATAM_SENHA;
+  if (!email || !senha) {
+    onLog("Sem LATAM_EMAIL/LATAM_SENHA no .env — o login é todo manual na janela do bot.");
+    return;
+  }
+
+  try {
+    const campoEmail = page.locator('input[type="email"], input[name="email"], #email').first();
+    const campoSenha = page.locator('input[type="password"]').first();
+    await campoEmail.waitFor({ state: "visible", timeout: 15000 });
+    await campoEmail.fill(email);
+    // A LATAM às vezes pede a senha só na tela seguinte; se não estiver aqui,
+    // deixa o resto com o usuário em vez de insistir num seletor que mudou.
+    if (await campoSenha.isVisible().catch(() => false)) {
+      await campoSenha.fill(senha);
+    }
+    onLog("Login da LATAM: e-mail (e senha, se o campo estava na tela) preenchidos. Confirme na janela do bot.");
+  } catch (err) {
+    const motivo = err instanceof Error ? err.message.split("\n")[0] : String(err);
+    onLog(`Não consegui preencher o formulário de login (${motivo}) — siga na mão na janela do bot.`);
+  }
+}
+
+async function esperarLoginManual(page: Page, onLog: OnLog, onAviso: OnAviso): Promise<void> {
+  await page.bringToFront().catch(() => {});
+  await preencherCredenciais(page, onLog);
+
+  const minutos = Math.round(ESPERA_LOGIN_MS / 60000);
+  const aviso =
+    `A LATAM pediu login. Entre na janela do Chrome do bot que está aberta (é a que o bot usa) — ` +
+    `assim que a sessão voltar, a busca continua sozinha. Espero até ${minutos} min.`;
+  onAviso(aviso);
+  onLog(aviso);
+
+  const limite = Date.now() + ESPERA_LOGIN_MS;
+  while (Date.now() < limite) {
+    await page.waitForTimeout(2000);
+    if (!pedindoLogin(page)) {
+      onAviso("");
+      onLog("Login concluído — retomando a busca em milhas.");
+      return;
+    }
+  }
+
+  onAviso("");
+  throw new Error(
+    `A LATAM continuou pedindo login por ${minutos} min. Faça o login na janela do bot e rode a busca de novo ` +
+      "(o login fica salvo no perfil, então isso não deve se repetir a cada busca).",
+  );
+}
+
 export async function confirmarEmMilhas(
   page: Page,
   params: { origem: string; destino: string; data: string; caminhoImagem: string },
   onLog: OnLog = () => {},
+  onAviso: OnAviso = () => {},
 ): Promise<ConfirmacaoMilhas | null> {
   const { origem, destino, data, caminhoImagem } = params;
 
@@ -317,11 +386,13 @@ export async function confirmarEmMilhas(
     onLog(`Confirmando em milhas: ${origem} → ${destino} em ${data}...`);
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
 
-    if (/login|iniciar sesi|entrar/i.test(new URL(page.url()).hostname)) {
-      throw new Error(
-        "A LATAM pediu login pra busca em milhas. Rode `bash scripts/importar-cookies.sh latamairlines.com` " +
-          "com a janela do bot fechada e tente de novo.",
-      );
+    if (pedindoLogin(page)) {
+      await esperarLoginManual(page, onLog, onAviso);
+      // Depois do login a LATAM cai na home, não na busca — refaz o deep link.
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
+      if (pedindoLogin(page)) {
+        throw new Error("Mesmo depois do login a LATAM voltou pra tela de entrada. Tente a busca de novo.");
+      }
     }
 
     // Espera os voos aparecerem (é o mesmo sinal que o JSON chegou).
