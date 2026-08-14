@@ -201,8 +201,31 @@ function lerCredenciais(): Credenciais | null {
   return { client_email: cru.client_email, private_key: cru.private_key };
 }
 
+// A aba vazia precisa ganhar o cabeçalho junto do primeiro append — senão
+// fica uma planilha com dados e sem nome de coluna, que ninguém sabe ler
+// depois. Só custa uma leitura, e só na primeira vez.
+async function abaVazia(token: string): Promise<boolean> {
+  const alcance = encodeURIComponent(`${PLANILHA_ABA}!A1:A1`);
+  const resposta = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${PLANILHA_ID}/values/${alcance}`,
+    { headers: { authorization: `Bearer ${token}` } },
+  );
+  if (!resposta.ok) {
+    if (resposta.status === 400) {
+      throw new Error(
+        `A planilha não tem uma aba chamada "${PLANILHA_ABA}". Renomeie a aba ou ajuste PLANILHA_ABA no .env.`,
+      );
+    }
+    return false; // erro de leitura não impede a escrita; o append reporta se falhar
+  }
+  const dados = (await resposta.json()) as { values?: unknown[][] };
+  return !dados.values || dados.values.length === 0;
+}
+
 async function enviarAoSheets(cred: Credenciais, linhas: LinhaPlanilha[]) {
   const token = await obterToken(cred);
+  const valores = linhas.map(paraCelulas);
+  if (await abaVazia(token)) valores.unshift([...COLUNAS]);
   const alcance = encodeURIComponent(`${PLANILHA_ABA}!A1`);
   const url =
     `https://sheets.googleapis.com/v4/spreadsheets/${PLANILHA_ID}/values/${alcance}:append` +
@@ -211,7 +234,7 @@ async function enviarAoSheets(cred: Credenciais, linhas: LinhaPlanilha[]) {
   const resposta = await fetch(url, {
     method: "POST",
     headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-    body: JSON.stringify({ values: linhas.map(paraCelulas) }),
+    body: JSON.stringify({ values: valores }),
   });
 
   if (!resposta.ok) {
