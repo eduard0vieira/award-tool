@@ -54,6 +54,7 @@ import {
   type TetosSmiles,
 } from "./bot-smiles.ts";
 import { DIR_ALERTAS, DIR_PORTAL_DIST, gerarAlerta, type PedidoAlerta } from "./alertas.ts";
+import { registrarBusca, type PernaParaPlanilha } from "./planilha.ts";
 
 // A extração de preços lê as 4 cores (Economy/PremiumEconomy/Business/First)
 // de cada dia independente do valor de "cabins" mandado na URL — então o
@@ -200,6 +201,22 @@ async function executarComPool<S>(
   }
 }
 
+// Toda busca concluída vira linhas na planilha (ver planilha.ts). Fica no
+// servidor, e não em cada bot, porque é aqui que as cinco fontes já convergem
+// pro mesmo SecaoRelatorio. Falha de registro nunca derruba a busca.
+function registrarNaPlanilha(
+  jobId: string,
+  dados: {
+    fonte: string;
+    origem: string;
+    destino: string;
+    pernas: PernaParaPlanilha[];
+    tetos?: Record<string, number | null | undefined>;
+  },
+) {
+  void registrarBusca({ ...dados, busca: jobId }, (msg) => console.log(`[${jobId}] ${msg}`));
+}
+
 function executarJob(jobId: string, params: { origem: string; destino: string; tetos: TetosTap }) {
   return executarComPool(poolAwardtool, jobId, async ({ page, baseUrl }) => {
     const job = jobs.get(jobId)!;
@@ -231,6 +248,21 @@ function executarJob(jobId: string, params: { origem: string; destino: string; t
     job.status = "done";
     job.relatorio = relatorio;
     if (avisoParcial) job.avisoParcial = avisoParcial;
+    registrarNaPlanilha(jobId, {
+      fonte: "tap",
+      origem: params.origem,
+      destino: params.destino,
+      pernas: [
+        {
+          rotulo: `${params.origem} → ${params.destino}`,
+          secoes: [
+            { ...relatorio.executivas, rotulo: "Executiva" },
+            { ...relatorio.economicas, rotulo: "Econômica" },
+          ],
+        },
+      ],
+      tetos: { Executiva: tetosAplicados.executivaK, "Econômica": tetosAplicados.economicaK },
+    });
     emitirEvento(jobId, { tipo: "done", relatorio, avisoParcial, tetosAplicados });
   });
 }
@@ -274,6 +306,18 @@ function executarJobSeatspy(
 
     job.status = "done";
     job.pernas = pernas;
+    registrarNaPlanilha(jobId, {
+      fonte: params.companhia,
+      origem: params.origem,
+      destino: params.destino,
+      pernas,
+      tetos: {
+        "Econômica": params.tetos.economica,
+        Premium: params.tetos.premium,
+        Executiva: params.tetos.executiva,
+        "Primeira Classe": params.tetos.primeira,
+      },
+    });
     emitirEvento(jobId, { tipo: "done", pernas });
   });
 }
@@ -322,6 +366,13 @@ function executarJobAA(
     job.status = "done";
     job.secaoAA = secao;
     if (avisoParcial) job.avisoParcial = avisoParcial;
+    registrarNaPlanilha(jobId, {
+      fonte: "AA",
+      origem: params.origem,
+      destino: params.destino,
+      pernas: [{ rotulo: `${params.origem} → ${params.destino}`, secoes: [secao] }],
+      tetos: { [secao.rotulo]: params.tetoMilhas },
+    });
     emitirEvento(jobId, { tipo: "done", secaoAA: secao, avisoParcial });
   });
 }
@@ -360,6 +411,17 @@ function executarJobSmiles(
     job.status = "done";
     job.pernas = pernas;
     if (avisoParcial) job.avisoParcial = avisoParcial;
+    registrarNaPlanilha(jobId, {
+      fonte: "SMILES",
+      origem: params.origem,
+      destino: params.destino,
+      pernas,
+      tetos: {
+        "Econômica": params.tetos.economica,
+        Conforto: params.tetos.premium,
+        Executiva: params.tetos.executiva,
+      },
+    });
     emitirEvento(jobId, { tipo: "done", pernas, avisoParcial });
   });
 }
@@ -481,6 +543,13 @@ function executarJobLatam(
     job.pernas = pernas;
     if (avisoParcial) job.avisoParcial = avisoParcial;
     if (confirmacao) job.confirmacao = confirmacao;
+    registrarNaPlanilha(jobId, {
+      fonte: "LATAM",
+      origem: params.origem,
+      destino: params.destino,
+      pernas,
+      tetos: { "Econômica": params.tetos.tetoReais },
+    });
     emitirEvento(jobId, { tipo: "done", pernas, avisoParcial, confirmacao });
   });
 }
