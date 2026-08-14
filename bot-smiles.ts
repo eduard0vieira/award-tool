@@ -152,6 +152,27 @@ export async function iniciarSessaoSmiles(headless = false): Promise<SessaoSmile
 export async function renovarSessaoSmiles(page: Page): Promise<void> {
   await page.goto(`${HOST_API}/`, { waitUntil: "domcontentloaded", timeout: 60000 }).catch(() => {});
   await page.waitForTimeout(3000);
+  ultimaRenovacao.set(page, Date.now());
+}
+
+// Quando cada aba replantou os cookies pela última vez. WeakMap porque a chave
+// é a aba: fechou a aba, a entrada some junto.
+const ultimaRenovacao = new WeakMap<Page, number>();
+
+// Replantar ANTES de vencer sai muito mais barato que descobrir o vencimento
+// pelo 406: são ~3s de recarga contra um dia perdido e duas tentativas.
+// Medido: 68 requisições em 10 min seguidas não derrubam a sessão, ou seja, o
+// gatilho não é volume — é idade. O padrão abaixo fica confortavelmente
+// abaixo do ponto em que a varredura do usuário quebrou (na segunda perna,
+// com a sessão já velha de uma varredura inteira).
+const VALIDADE_SESSAO_MS = Number(process.env.SMILES_VALIDADE_SESSAO_MS) || 8 * 60_000;
+
+async function garantirSessaoFresca(page: Page, onLog: OnLog): Promise<void> {
+  const desde = ultimaRenovacao.get(page) ?? 0;
+  const idade = Date.now() - desde;
+  if (idade < VALIDADE_SESSAO_MS) return;
+  onLog(`Sessão do Smiles com ${Math.round(idade / 60000)} min — replantando os cookies antes de seguir.`);
+  await renovarSessaoSmiles(page);
 }
 
 function urlBusca(params: ParametrosSmiles, data: string): string {
@@ -316,6 +337,7 @@ export async function buscarDiaSmiles(
   data: string,
   onLog: OnLog = () => {},
 ): Promise<RespostaSmiles> {
+  await garantirSessaoFresca(page, onLog);
   let resultado = await chamarApi(page, params, data);
 
   // 406 no meio da varredura quase sempre é cookie vencido, não bloqueio de
