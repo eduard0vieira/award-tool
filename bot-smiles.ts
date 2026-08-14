@@ -152,43 +152,6 @@ export async function iniciarSessaoSmiles(headless = false): Promise<SessaoSmile
 export async function renovarSessaoSmiles(page: Page): Promise<void> {
   await page.goto(`${HOST_API}/`, { waitUntil: "domcontentloaded", timeout: 60000 }).catch(() => {});
   await page.waitForTimeout(3000);
-  ultimaRenovacao.set(page, Date.now());
-  chamadasDesdeRenovacao.set(page, 0);
-}
-
-// Quando cada aba replantou os cookies pela última vez, e quantas chamadas fez
-// desde então. WeakMap porque a chave é a aba: fechou a aba, some junto.
-const ultimaRenovacao = new WeakMap<Page, number>();
-const chamadasDesdeRenovacao = new WeakMap<Page, number>();
-
-// Replantar ANTES de vencer sai muito mais barato que descobrir o limite pelo
-// 406: são ~3s de recarga contra um dia perdido e duas tentativas.
-//
-// O gatilho exato do bloqueio não está fechado, e as medições dizem mais sobre
-// o que ele NÃO é:
-//   - 80 requisições em 12 min seguidas: nenhum 406 → não é ritmo;
-//   - 19 requisições ao longo de 20 min: nenhum 406 → não é idade pura.
-// A quebra real aconteceu na SEGUNDA perna, com a sessão já tendo gasto ~112
-// requisições na primeira — o que aponta pra cota por sessão em algum ponto
-// acima de 80. Por isso o corte por CONTAGEM é a defesa principal, e o corte
-// por tempo fica de rede secundária.
-const VALIDADE_SESSAO_MS = Number(process.env.SMILES_VALIDADE_SESSAO_MS) || 10 * 60_000;
-const MAX_CHAMADAS_POR_SESSAO = Number(process.env.SMILES_MAX_CHAMADAS_SESSAO) || 60;
-
-async function garantirSessaoFresca(page: Page, onLog: OnLog): Promise<void> {
-  const chamadas = chamadasDesdeRenovacao.get(page) ?? 0;
-  if (chamadas >= MAX_CHAMADAS_POR_SESSAO) {
-    onLog(`${chamadas} chamadas nesta sessão do Smiles — replantando os cookies antes de seguir.`);
-    await renovarSessaoSmiles(page);
-    return;
-  }
-
-  const desde = ultimaRenovacao.get(page) ?? 0;
-  const idade = Date.now() - desde;
-  if (idade >= VALIDADE_SESSAO_MS) {
-    onLog(`Sessão do Smiles com ${Math.round(idade / 60000)} min — replantando os cookies antes de seguir.`);
-    await renovarSessaoSmiles(page);
-  }
 }
 
 function urlBusca(params: ParametrosSmiles, data: string): string {
@@ -333,12 +296,24 @@ function taxaDe(smiles: TarifaCrua, origemDados: string, contexto: string, onLog
   return null;
 }
 
-// Quantas vezes replantar os cookies antes de desistir de um dia.
-const MAX_RENOVACOES = 2;
+// 406 aqui NÃO é cookie vencido — medido: o bloqueio dura mais de 20 min e
+// replantar os cookies não recupera. É orçamento de requisições por IP numa
+// janela móvel (as sondas gastaram ~99 e a seguinte bloqueou na 40ª).
+//
+// Por isso não existe "tentar de novo": insistir só queima mais saldo. O jeito
+// é parar a varredura na hora, devolver o que já veio e dizer quanto esperar.
+export class ErroBloqueioSmiles extends Error {
+  constructor() {
+    super(
+      "O Smiles bloqueou temporariamente as consultas deste IP (406). Não adianta repetir: o bloqueio " +
+        "passa sozinho, mas leva mais de 20 minutos. Espere e busque de novo — de preferência com menos " +
+        "dias por busca (SMILES_MAX_DETALHES) ou uma perna de cada vez.",
+    );
+  }
+}
 
 async function chamarApi(page: Page, params: ParametrosSmiles, data: string) {
   await limitadorSmiles.aguardarVez();
-  chamadasDesdeRenovacao.set(page, (chamadasDesdeRenovacao.get(page) ?? 0) + 1);
   return page.evaluate(
     async ({ url, headers }) => {
       const res = await fetch(url, { headers });
@@ -354,20 +329,9 @@ export async function buscarDiaSmiles(
   data: string,
   onLog: OnLog = () => {},
 ): Promise<RespostaSmiles> {
-  await garantirSessaoFresca(page, onLog);
-  let resultado = await chamarApi(page, params, data);
+  const resultado = await chamarApi(page, params, data);
 
-  // 406 no meio da varredura quase sempre é cookie vencido, não bloqueio de
-  // verdade: replantar e repetir costuma resolver. Espera crescente entre as
-  // tentativas pra não insistir em cima de um bloqueio real.
-  for (let tentativa = 1; tentativa <= MAX_RENOVACOES && resultado.status === 406; tentativa++) {
-    const espera = 5000 * tentativa;
-    onLog(`406 em ${data} — replantando a sessão e tentando de novo (${tentativa}/${MAX_RENOVACOES}).`);
-    await page.waitForTimeout(espera);
-    await renovarSessaoSmiles(page);
-    resultado = await chamarApi(page, params, data);
-    if (resultado.status === 200) onLog(`Sessão replantada — ${data} respondeu normalmente.`);
-  }
+  if (resultado.status === 406) throw new ErroBloqueioSmiles();
 
   if (resultado.status === 452) {
     // Código próprio deles pra aeroporto inválido — vale mensagem específica,
@@ -378,12 +342,7 @@ export async function buscarDiaSmiles(
     );
   }
   if (resultado.status !== 200) {
-    throw new Error(
-      `O Smiles respondeu ${resultado.status} para ${data}. ` +
-        (resultado.status === 406
-          ? "É o bloqueio: a chamada precisa sair de uma página na origem da API (ver iniciarSessaoSmiles)."
-          : resultado.texto.slice(0, 200)),
-    );
+    throw new Error(`O Smiles respondeu ${resultado.status} para ${data}. ${resultado.texto.slice(0, 200)}`);
   }
 
   let corpo: RespostaCrua;
@@ -454,7 +413,11 @@ export type ResultadoAnoSmiles = {
 
 const DIAS_A_VARRER = Number(process.env.SMILES_DIAS_VARREDURA) || 365;
 const PASSO_AMOSTRAGEM = 7; // o calendário cobre ±3 dias
-const MAX_DETALHES = Number(process.env.SMILES_MAX_DETALHES) || 60;
+// O orçamento por IP é o recurso escasso (~100–150 requisições por janela),
+// então o que protege a busca é pedir MENOS, não pedir mais devagar. Com 52
+// sondagens de calendário + 25 detalhes, uma perna fica em ~77 e sobra folga
+// pra segunda perna não nascer sem saldo.
+const MAX_DETALHES = Number(process.env.SMILES_MAX_DETALHES) || 25;
 const MAX_FALHAS_SEGUIDAS = 3;
 
 function somarDias(data: string, dias: number): string {
@@ -504,6 +467,9 @@ export async function pesquisarAnoSmiles(
       }
       return resposta;
     } catch (err) {
+      // Bloqueio não é falha de um dia: é o fim da varredura. Insistir só
+      // queima o pouco de orçamento que ainda houver.
+      if (err instanceof ErroBloqueioSmiles) throw err;
       const mensagem = err instanceof Error ? err.message : String(err);
       diasComFalha.push({ data, erro: mensagem });
       onLog(`Falha em ${data}: ${mensagem}`);
@@ -521,6 +487,7 @@ export async function pesquisarAnoSmiles(
   );
 
   let falhasSeguidas = 0;
+  try {
   for (let i = 0; i < amostras.length; i++) {
     const resposta = await buscar(amostras[i]!);
     if (resposta) {
@@ -582,6 +549,20 @@ export async function pesquisarAnoSmiles(
     for (let i = 0; i < escolhidos.length; i++) {
       await buscar(escolhidos[i]![0]);
       onProgresso(0.6 + 0.4 * ((i + 1) / escolhidos.length));
+    }
+  }
+
+  } catch (err) {
+    // O que já veio vale: devolve parcial com a lacuna explicada, em vez de
+    // perder uma varredura inteira por causa do bloqueio no fim dela.
+    if (err instanceof ErroBloqueioSmiles) {
+      onLog(err.message);
+      lacunas.push(
+        `a busca foi interrompida pelo bloqueio do Smiles depois de ${dias.length} dia(s) — ` +
+          "o resto do período não chegou a ser consultado; espere uns 30 min pra completar",
+      );
+    } else {
+      throw err;
     }
   }
 
