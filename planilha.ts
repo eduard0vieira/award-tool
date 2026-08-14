@@ -29,6 +29,10 @@ const ARQUIVO_CSV = path.join(DIR_PLANILHAS, "buscas.csv");
 const CAMINHO_CREDENCIAIS = process.env.GOOGLE_CREDENCIAIS;
 const PLANILHA_ID = process.env.PLANILHA_ID;
 const PLANILHA_ABA = process.env.PLANILHA_ABA || "buscas";
+// A aba acumulada (uma linha por data, todas as buscas juntas) é opcional e
+// vem DESLIGADA: o pedido foi uma aba nova por busca, não somar na mesma. O
+// histórico não se perde — o CSV local continua acumulando sempre.
+const ACUMULAR_NO_SHEETS = process.env.PLANILHA_ACUMULAR === "true";
 
 export const COLUNAS = [
   "carimbo",
@@ -140,6 +144,122 @@ function gravarCsv(linhas: LinhaPlanilha[]) {
   fs.appendFileSync(ARQUIVO_CSV, conteudo, "utf8");
 }
 
+// ── Planilha por busca, no formato do bot antigo ──────────────────────────
+//
+// Mesmas colunas (e mesma ordem) do FlightAvailability do cheap-flights, que é
+// o formato que vocês já sabem filtrar. Uma linha por VOO — granularidade mais
+// fina que a do relatório de datas, que agrega por dia/cabine.
+//
+// Aqui cada busca gera uma planilha NOVA, com link próprio, em vez de somar na
+// mesma aba: foi o pedido, e é o mesmo comportamento do bot antigo. (O registro
+// acumulado continua existindo em paralelo, no CSV local.)
+
+export const COLUNAS_VOO = [
+  "departure_date",
+  "arrival_date",
+  "departure_station",
+  "departure_time",
+  "arrival_station",
+  "connections",
+  "connecting_airports",
+  "points",
+  "duration",
+  "cabin_category",
+  "operation_carriers",
+  "program",
+  "source_fare",
+  "available_seats",
+  "aircraft",
+  "tax",
+  "class_of_service",
+  "url",
+] as const;
+
+export type LinhaVoo = Record<(typeof COLUNAS_VOO)[number], string | number>;
+
+// Cada busca ganha uma ABA nova na planilha do usuário, com link próprio.
+//
+// Por que aba e não planilha nova: conta de serviço tem cota de Drive ZERO
+// (`storageQuota.limit: "0"`), então ela não pode ser DONA de arquivo nenhum —
+// criar planilha devolve 403 "storage quota has been exceeded". Isso é
+// política do Google e não tem contorno em conta pessoal. A aba entrega o
+// mesmo: dados isolados por busca, link direto, nada se sobrescreve.
+
+// Nome de aba não aceita : \\ / ? * [ ] e tem limite de 100 caracteres.
+function nomeDeAbaValido(titulo: string): string {
+  return titulo.replace(/[:\\/?*\[\]]/g, "-").slice(0, 95);
+}
+
+async function criarAba(token: string, titulo: string): Promise<{ gid: number; nome: string }> {
+  const nome = nomeDeAbaValido(titulo);
+  const resposta = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${PLANILHA_ID}:batchUpdate`,
+    {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({ requests: [{ addSheet: { properties: { title: nome } } }] }),
+    },
+  );
+  if (!resposta.ok) {
+    throw new Error(`Não consegui criar a aba da busca (${resposta.status}): ${(await resposta.text()).slice(0, 200)}`);
+  }
+  const dados = (await resposta.json()) as {
+    replies?: { addSheet?: { properties?: { sheetId?: number } } }[];
+  };
+  const gid = dados.replies?.[0]?.addSheet?.properties?.sheetId;
+  if (typeof gid !== "number") throw new Error("O Google criou a aba mas não devolveu o id dela.");
+  return { gid, nome };
+}
+
+// Cria a aba da busca e devolve o link direto pra ela. Null = planilha
+// desligada ou falhou; nunca lança, porque o resultado da busca vale mais que
+// o registro.
+export async function criarPlanilhaDaBusca(
+  params: { titulo: string; linhas: LinhaVoo[] },
+  onLog: (mensagem: string) => void = () => {},
+): Promise<string | null> {
+  if (params.linhas.length === 0) return null;
+
+  let cred: Credenciais | null = null;
+  try {
+    cred = lerCredenciais();
+  } catch (err) {
+    onLog(`Planilha desligada: ${err instanceof Error ? err.message : String(err)}`);
+    return null;
+  }
+  if (!cred) return null;
+
+  try {
+    const token = await obterToken(cred);
+    const { gid, nome } = await criarAba(token, params.titulo);
+
+    const valores = [
+      [...COLUNAS_VOO],
+      ...params.linhas.map((linha) => COLUNAS_VOO.map((coluna) => linha[coluna] ?? "")),
+    ];
+    const alcance = encodeURIComponent(`${nome}!A1`);
+    const resposta = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${PLANILHA_ID}/values/${alcance}:append` +
+        "?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS",
+      {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify({ values: valores }),
+      },
+    );
+    if (!resposta.ok) {
+      throw new Error(`Não consegui escrever na aba da busca (${resposta.status}): ${(await resposta.text()).slice(0, 200)}`);
+    }
+
+    const url = `https://docs.google.com/spreadsheets/d/${PLANILHA_ID}/edit#gid=${gid}`;
+    onLog(`Aba "${nome}" criada com ${params.linhas.length} voo(s): ${url}`);
+    return url;
+  } catch (err) {
+    onLog(`Falha ao criar a aba da busca: ${err instanceof Error ? err.message : String(err)}`);
+    return null;
+  }
+}
+
 // ── Google Sheets (REST puro, sem dependência nova) ───────────────────────
 
 type Credenciais = { client_email: string; private_key: string };
@@ -158,7 +278,7 @@ async function obterToken(cred: Credenciais): Promise<string> {
   const corpo = base64url(
     JSON.stringify({
       iss: cred.client_email,
-      scope: "https://www.googleapis.com/auth/spreadsheets",
+      scope: "https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive",
       aud: "https://oauth2.googleapis.com/token",
       iat: agora,
       exp: agora + 3600,
@@ -273,6 +393,8 @@ export async function registrarBusca(
     onLog(`Planilha do Google desligada: ${err instanceof Error ? err.message : String(err)}`);
     return;
   }
+
+  if (!ACUMULAR_NO_SHEETS) return; // ver ACUMULAR_NO_SHEETS
 
   if (!cred) {
     if (!jaAvisouSemSheets) {

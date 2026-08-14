@@ -583,6 +583,7 @@ function buscarNoServidor(card, corpo, rotuloProgresso) {
         fonte.close();
         resolve({
           resultado: dado.pernas || dado.secaoAA || dado.relatorio,
+          planilhaUrl: dado.planilhaUrl,
           avisoParcial: dado.avisoParcial,
           tetosAplicados: dado.tetosAplicados,
           confirmacao: dado.confirmacao,
@@ -984,16 +985,32 @@ async function iniciarBuscaSeatspy(programa, origem, destino, idaEVolta) {
   }
 }
 
+// Link da planilha daquela busca (uma planilha nova por busca — ver
+// planilha.ts). Vira um bloco clicável no card, junto do resultado.
+function mostrarLinkPlanilha(card, url, rotulo) {
+  if (!url) return;
+  const bloco = document.createElement("p");
+  bloco.className = "link-planilha";
+  const link = document.createElement("a");
+  link.href = url;
+  link.target = "_blank";
+  link.rel = "noopener";
+  link.textContent = `📊 Planilha da ${rotulo}`;
+  bloco.append(link);
+  card.raiz.appendChild(bloco);
+}
+
 // Smiles: uma direção por job (o endpoint é de ida simples), com as três
 // cabines juntas — o front pede a volta como segundo job, igual à AA.
 async function iniciarBuscaSmiles(origem, destino, tetos, idaEVolta) {
   const seta = idaEVolta ? "⇄" : "→";
   const card = criarCardJob(filaSmiles, `Smiles: ${origem} ${seta} ${destino}`);
   const avisosParciais = [];
+  let urlPlanilhaVolta = null;
   const corpoBase = { fonte: "smiles", tetos };
 
   try {
-    const { resultado: pernasIda, avisoParcial: avisoIda } = await buscarNoServidor(
+    const { resultado: pernasIda, avisoParcial: avisoIda, planilhaUrl: planilhaIda } = await buscarNoServidor(
       card,
       { ...corpoBase, origem, destino },
       idaEVolta ? "Buscando ida..." : "Buscando...",
@@ -1006,13 +1023,14 @@ async function iniciarBuscaSmiles(origem, destino, tetos, idaEVolta) {
 
     let pernasVolta = null;
     if (idaEVolta) {
-      const { resultado, avisoParcial: avisoVolta } = await buscarNoServidor(
+      const { resultado, avisoParcial: avisoVolta, planilhaUrl: planilhaVolta } = await buscarNoServidor(
         card,
         { ...corpoBase, origem: destino, destino: origem },
         "Buscando volta...",
       );
       pernasVolta = resultado;
       if (avisoVolta) avisosParciais.push(avisoVolta);
+      urlPlanilhaVolta = planilhaVolta;
       renderizarPernaSecoes(card.resultadoEl, `Volta: ${destino} → ${origem}`, pernasVolta[0].secoes);
       registrarPernaCopia(card, pernasVolta[0].secoes);
       promoverUltimaParaIdaEVolta(origem, destino, "SMILES");
@@ -1025,6 +1043,8 @@ async function iniciarBuscaSmiles(origem, destino, tetos, idaEVolta) {
       card.avisoEl.hidden = false;
     }
     atualizarAcoesCard(card);
+    mostrarLinkPlanilha(card, planilhaIda, idaEVolta ? "ida" : "busca");
+    mostrarLinkPlanilha(card, urlPlanilhaVolta, "volta");
 
     const secaoDe = (pernas, rotulo) => pernas?.[0]?.secoes.find((s) => s.rotulo === rotulo);
     mostrarBotoesAlerta(card, "SMILES", origem, destino, [

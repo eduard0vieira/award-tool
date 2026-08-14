@@ -54,7 +54,7 @@ import {
   type TetosSmiles,
 } from "./bot-smiles.ts";
 import { DIR_ALERTAS, DIR_PORTAL_DIST, gerarAlerta, type PedidoAlerta } from "./alertas.ts";
-import { registrarBusca, type PernaParaPlanilha } from "./planilha.ts";
+import { criarPlanilhaDaBusca, registrarBusca, type LinhaVoo, type PernaParaPlanilha } from "./planilha.ts";
 
 // A extração de preços lê as 4 cores (Economy/PremiumEconomy/Business/First)
 // de cada dia independente do valor de "cabins" mandado na URL — então o
@@ -87,6 +87,7 @@ type Job = {
   pernas?: PernaSeatspy[]; // resultado das buscas via SeatSpy
   secaoAA?: SecaoRelatorio & { rotulo: string }; // resultado das buscas na AA (uma cabine por busca)
   confirmacao?: ConfirmacaoLatam; // confirmação em milhas do melhor par (LATAM)
+  planilhaUrl?: string; // planilha da busca (uma nova por busca — ver planilha.ts)
   erro?: string;
   ouvintes: Set<Response>;
 };
@@ -408,9 +409,43 @@ function executarJobSmiles(
     }
     const avisoParcial = partes.length > 0 ? `Cobertura parcial — ${partes.join("; ")}.` : undefined;
 
+    // Planilha própria da busca, no formato do bot antigo (uma linha por voo).
+    // Falha aqui não derruba nada: o resultado já está pronto.
+    const linhasVoo: LinhaVoo[] = [];
+    for (const dia of dias) {
+      for (const voo of dia.voos) {
+        const d = voo.detalhe;
+        linhasVoo.push({
+          departure_date: d.partidaData,
+          arrival_date: d.chegadaData,
+          departure_station: d.partidaAeroporto,
+          departure_time: d.partidaHora,
+          arrival_station: d.chegadaAeroporto,
+          connections: voo.conexoes,
+          connecting_airports: d.aeroportosConexao,
+          points: voo.milhas,
+          duration: d.duracaoMinutos,
+          cabin_category: d.cabineCru,
+          operation_carriers: d.codigoCompanhia,
+          program: "SMILES",
+          source_fare: voo.tarifa,
+          available_seats: voo.assentos,
+          aircraft: d.aeronaves,
+          tax: voo.taxaReais ?? "",
+          class_of_service: d.classesServico,
+          url: urlBuscaSmiles(params.origem, params.destino, d.partidaData),
+        });
+      }
+    }
+    const planilhaUrl = await criarPlanilhaDaBusca(
+      { titulo: `Smiles ${params.origem}-${params.destino} ${new Date().toISOString().slice(0, 16).replace("T", " ")}`, linhas: linhasVoo },
+      (msg) => console.log(`[${jobId}] ${msg}`),
+    );
+
     job.status = "done";
     job.pernas = pernas;
     if (avisoParcial) job.avisoParcial = avisoParcial;
+    if (planilhaUrl) job.planilhaUrl = planilhaUrl;
     registrarNaPlanilha(jobId, {
       fonte: "SMILES",
       origem: params.origem,
@@ -422,8 +457,24 @@ function executarJobSmiles(
         Executiva: params.tetos.executiva,
       },
     });
-    emitirEvento(jobId, { tipo: "done", pernas, avisoParcial });
+    emitirEvento(jobId, { tipo: "done", pernas, avisoParcial, planilhaUrl });
   });
+}
+
+// Link da busca no site do Smiles, pra a planilha levar direto ao voo.
+function urlBuscaSmiles(origem: string, destino: string, data: string): string {
+  const ts = `${Date.parse(`${data}T12:00:00Z`)}`;
+  const q = new URLSearchParams({
+    adults: "1",
+    cabin: "ALL",
+    children: "0",
+    departureDate: ts,
+    infants: "0",
+    tripType: "2",
+    originAirport: origem,
+    destinationAirport: destino,
+  });
+  return `https://www.smiles.com.br/mfe/emissao-passagem/?${q}`;
 }
 
 // A LATAM devolve ida e volta na mesma resposta do calendário, então o job

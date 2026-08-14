@@ -83,6 +83,25 @@ export type VooSmiles = {
   taxaReais: number | null;
   companhia: string;
   origemDados: string; // sourceGDS: "G3" (GOL) ou o GDS da parceira
+  // Detalhe voo a voo, no nível que a planilha antiga (cheap-flights) usava.
+  // O relatório de datas não usa nada disto — é só pra planilha.
+  detalhe: DetalheVooSmiles;
+};
+
+export type DetalheVooSmiles = {
+  partidaData: string; // YYYY-MM-DD
+  partidaHora: string; // HH:MM
+  partidaAeroporto: string;
+  chegadaData: string;
+  chegadaHora: string;
+  chegadaAeroporto: string;
+  aeroportosConexao: string; // "BSB" ou "BSB, GIG"
+  duracaoMinutos: number;
+  numerosVoo: string; // "1454, 7462"
+  aeronaves: string; // "738, 73G"
+  classesServico: string; // "U, T"
+  codigoCompanhia: string; // "G3"
+  cabineCru: string; // ECONOMIC / COMFORT / BUSINESS, como a API manda
 };
 
 export type DiaCalendarioSmiles = { data: string; milhas: number };
@@ -117,14 +136,22 @@ function exigirTexto(valor: unknown, campo: string, contexto: string): string {
 
 export async function iniciarSessaoSmiles(headless = false): Promise<SessaoSmiles> {
   const sessao = await abrirSessaoChrome(headless, "Smiles");
-
-  // A raiz da API responde 406 como documento — e tudo bem: o que importa é a
-  // página ficar NA ORIGEM da API (é de lá que o fetch pode sair) e os cookies
-  // da visita ficarem no contexto.
-  await sessao.page.goto(`${HOST_API}/`, { waitUntil: "domcontentloaded", timeout: 60000 }).catch(() => {});
-  await sessao.page.waitForTimeout(3000);
-
+  await renovarSessaoSmiles(sessao.page);
   return sessao;
+}
+
+// Planta (ou replanta) os cookies do Akamai visitando a raiz da API.
+//
+// A raiz responde 406 como documento — e tudo bem: o que importa é a página
+// ficar NA ORIGEM da API (é de lá que o fetch pode sair) e os cookies da
+// visita ficarem no contexto.
+//
+// Precisa ser refeito no meio da varredura: os cookies têm validade curta e,
+// quando vencem, TODA chamada seguinte vira 406 — foi o que fazia a busca
+// morrer no meio depois de dezenas de dias já respondidos.
+export async function renovarSessaoSmiles(page: Page): Promise<void> {
+  await page.goto(`${HOST_API}/`, { waitUntil: "domcontentloaded", timeout: 60000 }).catch(() => {});
+  await page.waitForTimeout(3000);
 }
 
 function urlBusca(params: ParametrosSmiles, data: string): string {
@@ -141,13 +168,26 @@ function urlBusca(params: ParametrosSmiles, data: string): string {
 }
 
 type TarifaCrua = { type?: unknown; miles?: unknown; money?: unknown; g3?: { costTax?: unknown } };
+type PontoCru = { date?: unknown; airport?: { code?: unknown } };
+type PernaCrua = {
+  flightNumber?: unknown;
+  equipment?: unknown;
+  classOfService?: unknown;
+  departure?: PontoCru;
+  arrival?: PontoCru;
+};
 type VooCru = {
   cabin?: unknown;
   sourceGDS?: unknown;
   stops?: unknown;
   availableSeats?: unknown;
-  airline?: { name?: unknown };
+  airline?: { name?: unknown; code?: unknown };
   fareList?: TarifaCrua[];
+  legList?: PernaCrua[];
+  departure?: PontoCru;
+  arrival?: PontoCru;
+  airportStop?: unknown;
+  duration?: { hours?: unknown; minutes?: unknown };
 };
 type RespostaCrua = {
   requestedFlightSegmentList?: {
@@ -159,6 +199,45 @@ type RespostaCrua = {
 // Cabines novas não derrubam a busca, mas também não passam batido: entram
 // aqui e são avisadas uma vez por processo.
 const cabinesDesconhecidas = new Set<string>();
+
+// "2026-10-13T06:00:00" → ["2026-10-13", "06:00"]
+function partirDataHora(valor: unknown, campo: string, contexto: string): [string, string] {
+  const texto = exigirTexto(valor, campo, contexto);
+  const [dia = "", resto = ""] = texto.split("T");
+  return [dia, resto.slice(0, 5)];
+}
+
+function juntar(pernas: PernaCrua[], pegar: (p: PernaCrua) => unknown): string {
+  return pernas
+    .map(pegar)
+    .filter((v) => v !== undefined && v !== null && v !== "")
+    .join(", ");
+}
+
+function extrairDetalhe(cru: VooCru, contexto: string): DetalheVooSmiles {
+  const pernas = Array.isArray(cru.legList) ? cru.legList : [];
+  const [partidaData, partidaHora] = partirDataHora(cru.departure?.date, "departure.date", contexto);
+  const [chegadaData, chegadaHora] = partirDataHora(cru.arrival?.date, "arrival.date", contexto);
+  const horas = typeof cru.duration?.hours === "number" ? cru.duration.hours : 0;
+  const minutos = typeof cru.duration?.minutes === "number" ? cru.duration.minutes : 0;
+
+  return {
+    partidaData,
+    partidaHora,
+    partidaAeroporto: exigirTexto(cru.departure?.airport?.code, "departure.airport.code", contexto),
+    chegadaData,
+    chegadaHora,
+    chegadaAeroporto: exigirTexto(cru.arrival?.airport?.code, "arrival.airport.code", contexto),
+    // Voo direto não tem escala: string vazia é a ausência correta aqui.
+    aeroportosConexao: typeof cru.airportStop === "string" ? cru.airportStop : "",
+    duracaoMinutos: horas * 60 + minutos,
+    numerosVoo: juntar(pernas, (p) => p.flightNumber),
+    aeronaves: juntar(pernas, (p) => p.equipment),
+    classesServico: juntar(pernas, (p) => p.classOfService),
+    codigoCompanhia: typeof cru.airline?.code === "string" ? cru.airline.code : "",
+    cabineCru: typeof cru.cabin === "string" ? cru.cabin : "",
+  };
+}
 
 function extrairVoo(cru: VooCru, data: string, onLog: OnLog): VooSmiles | null {
   const codigoCabine = exigirTexto(cru.cabin, "cabin", `voo em ${data}`);
@@ -195,6 +274,7 @@ function extrairVoo(cru: VooCru, data: string, onLog: OnLog): VooSmiles | null {
     taxaReais: taxaDe(escolhida, origemDados, contexto, onLog),
     companhia: exigirTexto(cru.airline?.name, "airline.name", contexto),
     origemDados,
+    detalhe: extrairDetalhe(cru, contexto),
   };
 }
 
@@ -216,21 +296,39 @@ function taxaDe(smiles: TarifaCrua, origemDados: string, contexto: string, onLog
   return null;
 }
 
-export async function buscarDiaSmiles(
-  page: Page,
-  params: ParametrosSmiles,
-  data: string,
-  onLog: OnLog = () => {},
-): Promise<RespostaSmiles> {
-  await limitadorSmiles.aguardarVez();
+// Quantas vezes replantar os cookies antes de desistir de um dia.
+const MAX_RENOVACOES = 2;
 
-  const resultado = await page.evaluate(
+async function chamarApi(page: Page, params: ParametrosSmiles, data: string) {
+  await limitadorSmiles.aguardarVez();
+  return page.evaluate(
     async ({ url, headers }) => {
       const res = await fetch(url, { headers });
       return { status: res.status, texto: await res.text() };
     },
     { url: urlBusca(params, data), headers: HEADERS_APP },
   );
+}
+
+export async function buscarDiaSmiles(
+  page: Page,
+  params: ParametrosSmiles,
+  data: string,
+  onLog: OnLog = () => {},
+): Promise<RespostaSmiles> {
+  let resultado = await chamarApi(page, params, data);
+
+  // 406 no meio da varredura quase sempre é cookie vencido, não bloqueio de
+  // verdade: replantar e repetir costuma resolver. Espera crescente entre as
+  // tentativas pra não insistir em cima de um bloqueio real.
+  for (let tentativa = 1; tentativa <= MAX_RENOVACOES && resultado.status === 406; tentativa++) {
+    const espera = 5000 * tentativa;
+    onLog(`406 em ${data} — replantando a sessão e tentando de novo (${tentativa}/${MAX_RENOVACOES}).`);
+    await page.waitForTimeout(espera);
+    await renovarSessaoSmiles(page);
+    resultado = await chamarApi(page, params, data);
+    if (resultado.status === 200) onLog(`Sessão replantada — ${data} respondeu normalmente.`);
+  }
 
   if (resultado.status === 452) {
     // Código próprio deles pra aeroporto inválido — vale mensagem específica,
