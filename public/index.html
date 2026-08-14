@@ -15,6 +15,7 @@
       <button type="button" class="aba-btn" data-aba="seatspy">SeatSpy</button>
       <button type="button" class="aba-btn" data-aba="aa">American</button>
       <button type="button" class="aba-btn" data-aba="latam">LATAM</button>
+      <button type="button" class="aba-btn" data-aba="smiles">Smiles</button>
       <button type="button" class="aba-btn" data-aba="historico">Histórico</button>
     </nav>
 
@@ -219,6 +220,48 @@
       <p id="latam-aviso" class="aviso" hidden></p>
 
       <div id="latam-fila-buscas" class="fila-buscas"></div>
+    </section>
+
+    <!-- Aba Smiles (GOL). Sem login: a chamada sai de dentro do navegador do
+         bot (ver bot-smiles.ts). Uma direção por busca, três cabines juntas. -->
+    <section id="painel-smiles" class="painel" hidden>
+      <form id="form-busca-smiles">
+        <div class="campo">
+          <label for="smiles-origem">Origem</label>
+          <input id="smiles-origem" placeholder="GRU" maxlength="3" required autocomplete="off" />
+        </div>
+        <div class="campo">
+          <label for="smiles-destino">Destino</label>
+          <input id="smiles-destino" placeholder="MIA" maxlength="3" required autocomplete="off" />
+        </div>
+        <label class="checkbox">
+          <input type="checkbox" id="smiles-ida-volta" checked />
+          Ida e volta
+        </label>
+        <button type="submit">Buscar</button>
+
+        <!-- Os valores são da tarifa Smiles Clube (assinante), que é a mesma
+             que o calendário do site reporta. Sem teto, a busca detalha os
+             dias mais baratos até o limite e avisa o que ficou de fora. -->
+        <div class="linha-tetos">
+          <div class="campo">
+            <label for="smiles-teto-economica">Teto Econômica (K)</label>
+            <input id="smiles-teto-economica" type="number" min="1" step="0.5" placeholder="ex.: 80" autocomplete="off" />
+          </div>
+          <div class="campo">
+            <label for="smiles-teto-premium">Teto Conforto (K)</label>
+            <input id="smiles-teto-premium" type="number" min="1" step="0.5" placeholder="ex.: 190" autocomplete="off" />
+          </div>
+          <div class="campo">
+            <label for="smiles-teto-executiva">Teto Executiva (K)</label>
+            <input id="smiles-teto-executiva" type="number" min="1" step="0.5" placeholder="ex.: 250" autocomplete="off" />
+          </div>
+        </div>
+      </form>
+
+      <p id="smiles-aviso" class="aviso" hidden></p>
+
+      <div id="smiles-fila-buscas" class="fila-buscas"></div>
     </section>
 
     <section id="painel-historico" class="painel" hidden>

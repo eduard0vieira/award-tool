@@ -46,6 +46,13 @@ import {
 import type { SecaoRelatorio } from "./comum.ts";
 import { PoolSessoes } from "./pool-sessoes.ts";
 import { sessaoViva } from "./sessao-chrome.ts";
+import {
+  construirRelatorioSmiles,
+  iniciarSessaoSmiles,
+  pesquisarAnoSmiles,
+  type SessaoSmiles,
+  type TetosSmiles,
+} from "./bot-smiles.ts";
 import { DIR_ALERTAS, DIR_PORTAL_DIST, gerarAlerta, type PedidoAlerta } from "./alertas.ts";
 
 // A extração de preços lê as 4 cores (Economy/PremiumEconomy/Business/First)
@@ -94,6 +101,9 @@ const CONCORRENCIA_SEATSPY = Number(process.env.CONCORRENCIA_SEATSPY) || 3;
 const CONCORRENCIA_AA = Number(process.env.CONCORRENCIA_AA) || 2;
 // LATAM também depende da janela do bot (Chrome real) — mesma prudência.
 const CONCORRENCIA_LATAM = Number(process.env.CONCORRENCIA_LATAM) || 2;
+// Smiles: sem login, mas a chamada sai de dentro do navegador (ver bot-smiles)
+// e uma varredura de ano já são ~112 requisições — mesma prudência.
+const CONCORRENCIA_SMILES = Number(process.env.CONCORRENCIA_SMILES) || 2;
 
 const poolAwardtool = new PoolSessoes<Sessao>(
   CONCORRENCIA_AWARDTOOL,
@@ -120,6 +130,12 @@ const poolAA = new PoolSessoes<SessaoAA>(
 const poolLatam = new PoolSessoes<SessaoLatam>(
   CONCORRENCIA_LATAM,
   (headless) => iniciarSessaoLatam(headless),
+  sessaoViva,
+);
+
+const poolSmiles = new PoolSessoes<SessaoSmiles>(
+  CONCORRENCIA_SMILES,
+  (headless) => iniciarSessaoSmiles(headless),
   sessaoViva,
 );
 
@@ -307,6 +323,44 @@ function executarJobAA(
     job.secaoAA = secao;
     if (avisoParcial) job.avisoParcial = avisoParcial;
     emitirEvento(jobId, { tipo: "done", secaoAA: secao, avisoParcial });
+  });
+}
+
+// Smiles: uma direção por job (o endpoint é de ida simples), com as três
+// cabines juntas — o front pede a volta como um segundo job, igual à AA.
+function executarJobSmiles(
+  jobId: string,
+  params: { origem: string; destino: string; tetos: TetosSmiles },
+) {
+  return executarComPool(poolSmiles, jobId, async ({ page }) => {
+    const job = jobs.get(jobId)!;
+    const { dias, diasComFalha, lacunas } = await pesquisarAnoSmiles(
+      page,
+      { origem: params.origem, destino: params.destino },
+      params.tetos,
+      (msg) => console.log(`[${jobId}] ${msg}`),
+      (fracao) => atualizarProgresso(jobId, fracao),
+    );
+
+    const pernas: PernaSeatspy[] = [
+      {
+        rotulo: `${params.origem} → ${params.destino}`,
+        secoes: construirRelatorioSmiles(dias, params.tetos),
+      },
+    ];
+
+    // As lacunas vêm prontas em português do próprio bot: é ele que sabe o que
+    // deixou de cobrir. O servidor só junta com as falhas de dia.
+    const partes = [...lacunas];
+    if (diasComFalha.length > 0) {
+      partes.push(`${diasComFalha.length} dia(s) falharam — o primeiro foi ${diasComFalha[0]!.data}: ${diasComFalha[0]!.erro}`);
+    }
+    const avisoParcial = partes.length > 0 ? `Cobertura parcial — ${partes.join("; ")}.` : undefined;
+
+    job.status = "done";
+    job.pernas = pernas;
+    if (avisoParcial) job.avisoParcial = avisoParcial;
+    emitirEvento(jobId, { tipo: "done", pernas, avisoParcial });
   });
 }
 
@@ -502,6 +556,7 @@ app.post("/api/buscar", (req: Request, res: Response) => {
   const ehSeatspy = fonte === "seatspy";
   const ehAA = fonte === "aa";
   const ehLatam = fonte === "latam";
+  const ehSmiles = fonte === "smiles";
   if (ehSeatspy && !Object.hasOwn(NOME_COMPANHIA, companhia)) {
     res.status(400).json({
       erro: `companhia deve ser uma destas para buscas no SeatSpy: ${Object.keys(NOME_COMPANHIA).join(", ")}.`,
@@ -542,6 +597,16 @@ app.post("/api/buscar", (req: Request, res: Response) => {
       confirmarMilhas: Boolean(req.body?.confirmarMilhas),
       margemIdaReais: tetoDe(req.body?.margemIdaReais) ?? 100,
       margemVoltaReais: tetoDe(req.body?.margemVoltaReais) ?? 300,
+    });
+  } else if (ehSmiles) {
+    executarJobSmiles(jobId, {
+      origem: String(origem).toUpperCase(),
+      destino: String(destino).toUpperCase(),
+      tetos: {
+        economica: tetoDe(tetos?.economica),
+        premium: tetoDe(tetos?.premium),
+        executiva: tetoDe(tetos?.executiva),
+      },
     });
   } else if (ehAA) {
     executarJobAA(jobId, {

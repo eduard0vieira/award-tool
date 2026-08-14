@@ -282,6 +282,10 @@ h3 {
   border-left-color: #1b0088;
 }
 
+.accent-SMILES {
+  border-left-color: #ff7a00;
+}
+
 .accent-AF {
   border-left-color: #a06cf5;
 }

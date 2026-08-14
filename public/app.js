@@ -34,6 +34,16 @@ const checkboxAaIdaVolta = document.getElementById("aa-ida-volta");
 const avisoAa = document.getElementById("aa-aviso");
 const filaAa = document.getElementById("aa-fila-buscas");
 
+const formSmiles = document.getElementById("form-busca-smiles");
+const inputSmilesOrigem = document.getElementById("smiles-origem");
+const inputSmilesDestino = document.getElementById("smiles-destino");
+const checkboxSmilesIdaVolta = document.getElementById("smiles-ida-volta");
+const inputSmilesTetoEconomica = document.getElementById("smiles-teto-economica");
+const inputSmilesTetoPremium = document.getElementById("smiles-teto-premium");
+const inputSmilesTetoExecutiva = document.getElementById("smiles-teto-executiva");
+const avisoSmiles = document.getElementById("smiles-aviso");
+const filaSmiles = document.getElementById("smiles-fila-buscas");
+
 // Aba LATAM (tarifas em dinheiro; ida e volta vêm na mesma busca).
 const formLatam = document.getElementById("form-busca-latam");
 const inputLatamOrigem = document.getElementById("latam-origem");
@@ -50,6 +60,7 @@ const abasBtns = document.querySelectorAll(".aba-btn");
 const painelTap = document.getElementById("painel-tap");
 const painelSeatspy = document.getElementById("painel-seatspy");
 const painelAa = document.getElementById("painel-aa");
+const painelSmiles = document.getElementById("painel-smiles");
 const painelLatam = document.getElementById("painel-latam");
 const painelHistorico = document.getElementById("painel-historico");
 const listaHistorico = document.getElementById("lista-historico");
@@ -67,6 +78,7 @@ const PROGRAMA_LABEL = {
   tap: "TAP",
   AA: "American Airlines",
   LATAM: "LATAM",
+  SMILES: "Smiles",
   AF: "Air France",
   B6: "JetBlue",
   BA: "British Airways",
@@ -94,6 +106,7 @@ abasBtns.forEach((btn) => {
     painelTap.hidden = aba !== "tap";
     painelSeatspy.hidden = aba !== "seatspy";
     painelAa.hidden = aba !== "aa";
+    painelSmiles.hidden = aba !== "smiles";
     painelLatam.hidden = aba !== "latam";
     painelHistorico.hidden = aba !== "historico";
     if (aba === "historico") renderizarHistorico();
@@ -190,6 +203,12 @@ function repetirBusca(item) {
     checkboxTapIdaVolta.checked = Boolean(item.idaEVolta);
     ativarAba("tap");
     inputTapOrigem.focus();
+  } else if (programa === "SMILES") {
+    inputSmilesOrigem.value = item.origem;
+    inputSmilesDestino.value = item.destino;
+    checkboxSmilesIdaVolta.checked = Boolean(item.idaEVolta);
+    ativarAba("smiles");
+    inputSmilesOrigem.focus();
   } else if (programa === "AA") {
     inputAaOrigem.value = item.origem;
     inputAaDestino.value = item.destino;
@@ -343,6 +362,8 @@ function criarItemHistorico(item) {
       ? [["Executiva", "cartao-executiva"], ["Econômica", "cartao-economica"]]
       : programa === "LATAM"
         ? [["Econômica", "cartao-economica"]]
+      : programa === "SMILES"
+        ? [["Econômica", "cartao-economica"], ["Conforto", "cartao-premium"], ["Executiva", "cartao-executiva"]]
       : programa === "AA"
         ? [
             [
@@ -963,6 +984,63 @@ async function iniciarBuscaSeatspy(programa, origem, destino, idaEVolta) {
   }
 }
 
+// Smiles: uma direção por job (o endpoint é de ida simples), com as três
+// cabines juntas — o front pede a volta como segundo job, igual à AA.
+async function iniciarBuscaSmiles(origem, destino, tetos, idaEVolta) {
+  const seta = idaEVolta ? "⇄" : "→";
+  const card = criarCardJob(filaSmiles, `Smiles: ${origem} ${seta} ${destino}`);
+  const avisosParciais = [];
+  const corpoBase = { fonte: "smiles", tetos };
+
+  try {
+    const { resultado: pernasIda, avisoParcial: avisoIda } = await buscarNoServidor(
+      card,
+      { ...corpoBase, origem, destino },
+      idaEVolta ? "Buscando ida..." : "Buscando...",
+    );
+    if (avisoIda) avisosParciais.push(avisoIda);
+    const rotuloIda = idaEVolta ? `Ida: ${origem} → ${destino}` : `${origem} → ${destino}`;
+    renderizarPernaSecoes(card.resultadoEl, rotuloIda, pernasIda[0].secoes);
+    registrarPernaCopia(card, pernasIda[0].secoes);
+    salvarNoHistorico(origem, destino, "SMILES", false);
+
+    let pernasVolta = null;
+    if (idaEVolta) {
+      const { resultado, avisoParcial: avisoVolta } = await buscarNoServidor(
+        card,
+        { ...corpoBase, origem: destino, destino: origem },
+        "Buscando volta...",
+      );
+      pernasVolta = resultado;
+      if (avisoVolta) avisosParciais.push(avisoVolta);
+      renderizarPernaSecoes(card.resultadoEl, `Volta: ${destino} → ${origem}`, pernasVolta[0].secoes);
+      registrarPernaCopia(card, pernasVolta[0].secoes);
+      promoverUltimaParaIdaEVolta(origem, destino, "SMILES");
+    }
+
+    card.definirStatus("Pronto", "status-pronto");
+    card.resultadoEl.hidden = false;
+    if (avisosParciais.length > 0) {
+      card.avisoEl.textContent = avisosParciais.join(" ");
+      card.avisoEl.hidden = false;
+    }
+    atualizarAcoesCard(card);
+
+    const secaoDe = (pernas, rotulo) => pernas?.[0]?.secoes.find((s) => s.rotulo === rotulo);
+    mostrarBotoesAlerta(card, "SMILES", origem, destino, [
+      { classe: "Econômica", secaoIda: secaoDe(pernasIda, "Econômica"), secaoVolta: secaoDe(pernasVolta, "Econômica") },
+      { classe: "Premium Economy", secaoIda: secaoDe(pernasIda, "Conforto"), secaoVolta: secaoDe(pernasVolta, "Conforto") },
+      { classe: "Executiva", secaoIda: secaoDe(pernasIda, "Executiva"), secaoVolta: secaoDe(pernasVolta, "Executiva") },
+    ]);
+  } catch (err) {
+    card.definirStatus("Erro", "status-erro");
+    card.avisoEl.textContent = err.message || "Erro inesperado.";
+    card.avisoEl.hidden = false;
+  } finally {
+    card.progressoEl.hidden = true;
+  }
+}
+
 // ─── Geração de alertas (conexão com o vcc-alertas-portal) ────────────────
 // Depois que uma busca termina, cada cabine com disponibilidade vira um
 // botão "Gerar alerta": o servidor renderiza o card oficial do portal e a
@@ -1346,6 +1424,28 @@ formAa.addEventListener("submit", (evento) => {
     Number.isFinite(tetoK) && tetoK > 0 ? tetoK * 1000 : null,
     checkboxAaIdaVolta.checked,
     passageiros,
+  );
+});
+
+formSmiles.addEventListener("submit", (evento) => {
+  evento.preventDefault();
+  limparAviso(avisoSmiles);
+  const origem = inputSmilesOrigem.value.trim().toUpperCase();
+  const destino = inputSmilesDestino.value.trim().toUpperCase();
+  if (!origem || !destino) {
+    mostrarAviso(avisoSmiles, "Preencha origem e destino.");
+    return;
+  }
+  // Buscar no Smiles é grátis: sem o aviso de repetição das fontes pagas.
+  iniciarBuscaSmiles(
+    origem,
+    destino,
+    {
+      economica: tetoEmMilhas(inputSmilesTetoEconomica),
+      premium: tetoEmMilhas(inputSmilesTetoPremium),
+      executiva: tetoEmMilhas(inputSmilesTetoExecutiva),
+    },
+    checkboxSmilesIdaVolta.checked,
   );
 });
 
