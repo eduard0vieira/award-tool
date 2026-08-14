@@ -153,26 +153,42 @@ export async function renovarSessaoSmiles(page: Page): Promise<void> {
   await page.goto(`${HOST_API}/`, { waitUntil: "domcontentloaded", timeout: 60000 }).catch(() => {});
   await page.waitForTimeout(3000);
   ultimaRenovacao.set(page, Date.now());
+  chamadasDesdeRenovacao.set(page, 0);
 }
 
-// Quando cada aba replantou os cookies pela última vez. WeakMap porque a chave
-// é a aba: fechou a aba, a entrada some junto.
+// Quando cada aba replantou os cookies pela última vez, e quantas chamadas fez
+// desde então. WeakMap porque a chave é a aba: fechou a aba, some junto.
 const ultimaRenovacao = new WeakMap<Page, number>();
+const chamadasDesdeRenovacao = new WeakMap<Page, number>();
 
-// Replantar ANTES de vencer sai muito mais barato que descobrir o vencimento
-// pelo 406: são ~3s de recarga contra um dia perdido e duas tentativas.
-// Medido: 68 requisições em 10 min seguidas não derrubam a sessão, ou seja, o
-// gatilho não é volume — é idade. O padrão abaixo fica confortavelmente
-// abaixo do ponto em que a varredura do usuário quebrou (na segunda perna,
-// com a sessão já velha de uma varredura inteira).
-const VALIDADE_SESSAO_MS = Number(process.env.SMILES_VALIDADE_SESSAO_MS) || 8 * 60_000;
+// Replantar ANTES de vencer sai muito mais barato que descobrir o limite pelo
+// 406: são ~3s de recarga contra um dia perdido e duas tentativas.
+//
+// O gatilho exato do bloqueio não está fechado, e as medições dizem mais sobre
+// o que ele NÃO é:
+//   - 80 requisições em 12 min seguidas: nenhum 406 → não é ritmo;
+//   - 19 requisições ao longo de 20 min: nenhum 406 → não é idade pura.
+// A quebra real aconteceu na SEGUNDA perna, com a sessão já tendo gasto ~112
+// requisições na primeira — o que aponta pra cota por sessão em algum ponto
+// acima de 80. Por isso o corte por CONTAGEM é a defesa principal, e o corte
+// por tempo fica de rede secundária.
+const VALIDADE_SESSAO_MS = Number(process.env.SMILES_VALIDADE_SESSAO_MS) || 10 * 60_000;
+const MAX_CHAMADAS_POR_SESSAO = Number(process.env.SMILES_MAX_CHAMADAS_SESSAO) || 60;
 
 async function garantirSessaoFresca(page: Page, onLog: OnLog): Promise<void> {
+  const chamadas = chamadasDesdeRenovacao.get(page) ?? 0;
+  if (chamadas >= MAX_CHAMADAS_POR_SESSAO) {
+    onLog(`${chamadas} chamadas nesta sessão do Smiles — replantando os cookies antes de seguir.`);
+    await renovarSessaoSmiles(page);
+    return;
+  }
+
   const desde = ultimaRenovacao.get(page) ?? 0;
   const idade = Date.now() - desde;
-  if (idade < VALIDADE_SESSAO_MS) return;
-  onLog(`Sessão do Smiles com ${Math.round(idade / 60000)} min — replantando os cookies antes de seguir.`);
-  await renovarSessaoSmiles(page);
+  if (idade >= VALIDADE_SESSAO_MS) {
+    onLog(`Sessão do Smiles com ${Math.round(idade / 60000)} min — replantando os cookies antes de seguir.`);
+    await renovarSessaoSmiles(page);
+  }
 }
 
 function urlBusca(params: ParametrosSmiles, data: string): string {
@@ -322,6 +338,7 @@ const MAX_RENOVACOES = 2;
 
 async function chamarApi(page: Page, params: ParametrosSmiles, data: string) {
   await limitadorSmiles.aguardarVez();
+  chamadasDesdeRenovacao.set(page, (chamadasDesdeRenovacao.get(page) ?? 0) + 1);
   return page.evaluate(
     async ({ url, headers }) => {
       const res = await fetch(url, { headers });
