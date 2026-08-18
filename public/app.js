@@ -819,6 +819,7 @@ function buscarNoServidor(card, corpo, rotuloProgresso, sessao) {
           avisoParcial: dado.avisoParcial,
           tetosAplicados: dado.tetosAplicados,
           confirmacao: dado.confirmacao,
+          interrompidaPorVoce: dado.interrompidaPorVoce,
         };
         guardarResultado(dados);
         resolve(dados);
@@ -1098,7 +1099,12 @@ async function iniciarBuscaTap(origem, destino, idaEVolta, tetos, sessao) {
 
   try {
     const rotuloIda = idaEVolta ? "Buscando ida..." : "Buscando...";
-    const { resultado: relatorioIda, avisoParcial: avisoIda, tetosAplicados } = await buscarNoServidor(card, { origem, destino, tetos }, rotuloIda, sessao);
+    const {
+      resultado: relatorioIda,
+      avisoParcial: avisoIda,
+      tetosAplicados,
+      interrompidaPorVoce,
+    } = await buscarNoServidor(card, { origem, destino, tetos }, rotuloIda, sessao);
     if (tetosAplicados) {
       card.tetosEl.textContent =
         `Teto aplicado: Executiva ${tetosAplicados.executivaK}K · Econômica ${tetosAplicados.economicaK}K`;
@@ -1118,8 +1124,13 @@ async function iniciarBuscaTap(origem, destino, idaEVolta, tetos, sessao) {
     ]);
     if (!sessao.retomando) salvarNoHistorico(origem, destino, "tap");
 
+    // Se você mandou parar a ida (janelas vazias = fonte provavelmente fora do
+    // ar), a volta nem começa: seriam mais 10 buscas gastas no AwardTool pra
+    // trazer o mesmo vazio.
     let relatorioVolta = null;
-    if (idaEVolta) {
+    if (idaEVolta && interrompidaPorVoce) {
+      avisosParciais.push("A volta não foi buscada — você interrompeu a ida, e a volta gastaria as mesmas buscas no site.");
+    } else if (idaEVolta) {
       const { resultado, avisoParcial: avisoVolta } = await buscarNoServidor(
         card,
         { origem: destino, destino: origem, tetos },

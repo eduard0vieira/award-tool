@@ -92,6 +92,7 @@ type Job = {
   // Pergunta em aberto: a busca fica parada esperando resposta da tela. Fica
   // guardada no job pra continuar existindo depois de um F5 — senão a busca
   // esperaria por uma pergunta que ninguém mais vê.
+  interrompidaPorVoce?: boolean; // você mandou parar: a perna seguinte nem começa
   pergunta?: { id: string; mensagem: string } | undefined;
   responder?: ((continuar: boolean) => void) | undefined;
   erro?: string;
@@ -307,7 +308,8 @@ function executarJob(jobId: string, params: { origem: string; destino: string; t
       tetos: { Executiva: tetosAplicados.executivaK, "Econômica": tetosAplicados.economicaK },
     });
     job.tetosAplicados = tetosAplicados;
-    emitirEvento(jobId, { tipo: "done", relatorio, avisoParcial, tetosAplicados });
+    if (interrompidaPorVoce) job.interrompidaPorVoce = true;
+    emitirEvento(jobId, { tipo: "done", relatorio, avisoParcial, tetosAplicados, interrompidaPorVoce });
   });
 }
 
@@ -892,7 +894,11 @@ app.get("/api/buscar/:jobId/eventos", (req: Request, res: Response) => {
     // O reenvio precisa carregar tudo que o evento ao vivo carrega — planilha e
     // tetos inclusive. Sem isso, uma busca recuperada depois de um F5 voltava
     // sem o link da planilha e parecia que ela não tinha sido gerada.
-    const comum = { planilhaUrl: job.planilhaUrl, tetosAplicados: job.tetosAplicados };
+    const comum = {
+      planilhaUrl: job.planilhaUrl,
+      tetosAplicados: job.tetosAplicados,
+      interrompidaPorVoce: job.interrompidaPorVoce,
+    };
     const dado = job.pernas
       ? { tipo: "done", ...comum, pernas: job.pernas, confirmacao: job.confirmacao }
       : job.secaoAA
