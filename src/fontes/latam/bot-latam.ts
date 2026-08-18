@@ -1,6 +1,5 @@
 import "dotenv/config";
-import fs from "node:fs";
-import type { BrowserContext, Page } from "playwright";
+import type { Page } from "playwright";
 import { abrirSessaoChrome, type SessaoChrome } from "../../nucleo/sessao-chrome.ts";
 import {
   LimitadorFrequencia,
@@ -48,14 +47,6 @@ export type ResultadoAnoLatam = {
 };
 
 // Confirmação em milhas de um dia específico (ver confirmarEmMilhas).
-export type ConfirmacaoMilhas = {
-  data: string;
-  milhas: number;
-  taxas: number; // em reais
-  voo: string; // ex.: "LA8060 · 06:30 GRU → 09:40 LIM · Direto"
-  imagem: string; // caminho do print ("" se a captura falhou)
-};
-
 // As quatro linhas da tela "Combine suas milhas + dinheiro". É uma ESCADA, não
 // um preço: da opção 1 (tudo em milhas) até a 4 (mínimo de milhas, máximo de
 // dinheiro). Guardar só uma escolheria pelo cliente sem dizer.
@@ -413,95 +404,6 @@ export async function esperarLoginManual(page: Page, onLog: OnLog, onAviso: OnAv
   );
 }
 
-export async function confirmarEmMilhas(
-  page: Page,
-  params: { origem: string; destino: string; data: string; caminhoImagem: string },
-  onLog: OnLog = () => {},
-  onAviso: OnAviso = () => {},
-): Promise<ConfirmacaoMilhas | null> {
-  const { origem, destino, data, caminhoImagem } = params;
-
-  let resposta: OfertaCrua | undefined;
-  const capturar = async (res: import("playwright").Response) => {
-    if (!res.url().includes("/offers/search/redemption") || res.status() !== 200) return;
-    try {
-      resposta = (await res.json()) as OfertaCrua;
-    } catch {
-      /* ignora */
-    }
-  };
-  page.on("response", capturar);
-
-  try {
-    await limitadorLatam.aguardarVez();
-    const url =
-      "https://www.latamairlines.com/br/pt/oferta-voos?" +
-      new URLSearchParams({
-        origin: origem,
-        destination: destino,
-        outbound: `${data}T12:00:00.000Z`,
-        adt: "1",
-        chd: "0",
-        inf: "0",
-        trip: "OW",
-        cabin: "Economy",
-        redemption: "true",
-        sort: "RECOMMENDED",
-      }).toString();
-
-    onLog(`Confirmando em milhas: ${origem} → ${destino} em ${data}...`);
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
-
-    if (pedindoLogin(page)) {
-      await esperarLoginManual(page, onLog, onAviso);
-      // Depois do login a LATAM cai na home, não na busca — refaz o deep link.
-      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
-      if (pedindoLogin(page)) {
-        throw new Error("Mesmo depois do login a LATAM voltou pra tela de entrada. Tente a busca de novo.");
-      }
-    }
-
-    // Espera os voos aparecerem (é o mesmo sinal que o JSON chegou).
-    await page.locator('[data-testid^="wrapper-card-flight-"]').first().waitFor({ timeout: 60000 });
-    await page.waitForTimeout(2500);
-
-    const voos: NonNullable<OfertaCrua["content"]> = resposta?.content ?? [];
-    if (voos.length === 0) {
-      onLog(`Sem oferta em milhas para ${data}.`);
-      return null;
-    }
-
-    // O mais barato em milhas do dia.
-    const melhor = voos.reduce((a, b) =>
-      (a.summary?.lowestPrice?.amount ?? Infinity) <= (b.summary?.lowestPrice?.amount ?? Infinity) ? a : b,
-    );
-    const milhas = melhor.summary?.lowestPrice?.amount ?? 0;
-    const taxas = melhor.newPrices?.[0]?.taxes ?? melhor.newPrices?.[0]?.total ?? 0;
-    const hora = (iso?: string) => (iso ? iso.slice(11, 16) : "--:--");
-    const paradas = melhor.summary?.stopOvers ?? 0;
-    const voo =
-      `${melhor.summary?.flightCode ?? ""} · ${hora(melhor.summary?.origin?.departure)} ${origem}` +
-      ` → ${hora(melhor.summary?.destination?.arrival)} ${destino}` +
-      ` · ${paradas === 0 ? "Direto" : `${paradas} parada(s)`}`;
-
-    // Print só do primeiro cartão de voo — é o que interessa pro alerta. Se
-    // falhar, o valor em milhas (que é o dado essencial) não se perde: volta
-    // sem imagem e quem chamou decide o que fazer.
-    let imagem = "";
-    try {
-      await page.locator('[data-testid^="wrapper-card-flight-"]').first().screenshot({ path: caminhoImagem });
-      imagem = caminhoImagem;
-    } catch (err) {
-      onLog(`Não consegui tirar o print de ${data}: ${err instanceof Error ? err.message : String(err)}`);
-    }
-
-    onLog(`${data}: ${milhas.toLocaleString("pt-BR")} milhas + R$ ${taxas} (${voo}).`);
-    return { data, milhas, taxas, voo, imagem };
-  } finally {
-    page.off("response", capturar);
-  }
-}
-
 // Confirma o preço de um PAR ida e volta — que é diferente de somar as duas
 // pernas. Medido: GRU→JNB perna a perna deu 243.535 milhas; o mesmo par
 // comprado junto sai por 90.302. A LATAM precifica o par, e esse número só
@@ -722,71 +624,4 @@ export function escolherMelhorPar(
   margemVoltaReais = 300,
 ): { ida: DiaLatam; volta: DiaLatam } | null {
   return escolherMelhoresPares(ida, volta, 1, margemIdaReais, margemVoltaReais)[0] ?? null;
-}
-
-// Junta os prints das duas pernas num só — é assim que o alerta vai pro
-// grupo. Monta uma página simples com as duas capturas e fotografa ela; usar
-// o próprio navegador evita depender de biblioteca de imagem.
-export async function montarPrintCombinado(
-  context: BrowserContext,
-  dados: {
-    origem: string;
-    destino: string;
-    ida: ConfirmacaoMilhas;
-    volta: ConfirmacaoMilhas;
-    totalMilhas: number;
-    totalTaxas: number;
-    caminhoImagem: string;
-  },
-): Promise<string> {
-  const { origem, destino, ida, volta, totalMilhas, totalTaxas, caminhoImagem } = dados;
-  const base64 = (caminho: string) => `data:image/png;base64,${fs.readFileSync(caminho).toString("base64")}`;
-  const nBR = (n: number) => n.toLocaleString("pt-BR");
-  const dataBR = (iso: string) => iso.split("-").reverse().join("/");
-
-  const perna = (rotulo: string, de: string, para: string, c: ConfirmacaoMilhas) => `
-    <section>
-      <h2><span class="tag">${rotulo}</span> ${de} → ${para} · ${dataBR(c.data)}</h2>
-      <img src="${base64(c.imagem)}" alt="${rotulo}" />
-      <p class="valor">${nBR(c.milhas)} milhas + R$ ${c.taxas.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>
-    </section>`;
-
-  const html = `<!doctype html><meta charset="utf-8" />
-  <style>
-    body { margin:0; background:#fff; }
-    #cartao { padding:28px 30px; width:1080px; box-sizing:border-box;
-              background:#fff; color:#1b0088;
-              font-family:-apple-system,"Segoe UI",system-ui,sans-serif; }
-    h1 { font-size:26px; margin:0 0 4px; }
-    .sub { font-size:13px; color:#6b7280; margin:0 0 22px; }
-    section { margin-bottom:22px; }
-    h2 { font-size:15px; font-weight:700; margin:0 0 10px; color:#1b0088; }
-    .tag { background:#1b0088; color:#fff; border-radius:5px; padding:2px 9px;
-           font-size:12px; letter-spacing:.06em; margin-right:8px; }
-    img { width:100%; display:block; border:1px solid #e5e7eb; border-radius:10px; }
-    .valor { font-size:14px; font-weight:700; margin:8px 0 0; }
-    .total { border-top:2px solid #1b0088; padding-top:14px; font-size:20px; font-weight:800; }
-    .total small { display:block; font-size:12px; font-weight:500; color:#6b7280; margin-top:4px; }
-  </style>
-  <div id="cartao">
-  <h1>${origem} ⇄ ${destino} · Econômica</h1>
-  <p class="sub">LATAM · valores por passageiro, taxas incluídas</p>
-  ${perna("IDA", origem, destino, ida)}
-  ${perna("VOLTA", destino, origem, volta)}
-  <div class="total">Total: ${nBR(totalMilhas)} milhas + R$ ${totalTaxas.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-    <small>Ida e volta para 1 passageiro</small>
-  </div>
-  </div>`;
-
-  const pagina = await context.newPage();
-  try {
-    await pagina.setViewportSize({ width: 1080, height: 800 });
-    await pagina.setContent(html, { waitUntil: "load" });
-    // Fotografa o cartão, não a página: assim a imagem termina no conteúdo,
-    // sem a sobra branca do viewport.
-    await pagina.locator("#cartao").screenshot({ path: caminhoImagem });
-    return caminhoImagem;
-  } finally {
-    await pagina.close();
-  }
 }
