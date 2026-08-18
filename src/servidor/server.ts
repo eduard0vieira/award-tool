@@ -32,13 +32,12 @@ import {
   type SessaoAA,
 } from "../fontes/aa/bot-aa.ts";
 import {
-  confirmarEmMilhas,
+  confirmarParEmMilhas,
   construirRelatorioLatam,
-  montarPrintCombinado,
-  escolherMelhorPar,
+  escolherMelhoresPares,
   iniciarSessaoLatam,
   pesquisarAnoLatam,
-  type ConfirmacaoMilhas,
+  type ConfirmacaoPar,
   type SessaoLatam,
   type TetosLatam,
 } from "../fontes/latam/bot-latam.ts";
@@ -67,14 +66,10 @@ type InfoJanela = { atual: number; total: number; inicio: string; fim: string };
 
 type PernaSeatspy = { rotulo: string; secoes: SecaoSeatspy[] };
 
-// Resultado da fase 2 da LATAM: o melhor par de datas confirmado em milhas.
-type ConfirmacaoLatam = {
-  ida: ConfirmacaoMilhas;
-  volta: ConfirmacaoMilhas;
-  totalMilhas: number;
-  totalTaxas: number;
-  imagem: string; // print único com as duas pernas ("" se a captura falhou)
-};
+// Resultado da fase 2 da LATAM: os melhores pares de datas confirmados em
+// milhas, cada um com a escada de combinações milhas+dinheiro que a LATAM
+// oferece pro par.
+type ConfirmacaoLatam = { pares: ConfirmacaoPar[] };
 
 type Job = {
   status: "fila" | "running" | "done" | "erro";
@@ -228,6 +223,11 @@ function registrarNaPlanilha(
 // fechada seguraria um slot do navegador pra sempre. Ao expirar, para a busca:
 // devolver parcial é melhor que ocupar recurso indefinidamente.
 const ESPERA_RESPOSTA_MS = Number(process.env.ESPERA_RESPOSTA_MS) || 15 * 60_000;
+
+// Quantos pares de datas confirmar em milhas na LATAM. Cada par é um fluxo
+// completo no site (deep link → escolhe ida → escolhe volta), então subir isso
+// custa tempo e sessão.
+const PARES_LATAM = Number(process.env.LATAM_PARES) || 3;
 
 function perguntarAoUsuario(jobId: string, mensagem: string): Promise<boolean> {
   const job = jobs.get(jobId);
@@ -553,73 +553,59 @@ function executarJobLatam(
         ? `${mesesComFalha.length} período(s) não puderam ser buscados — o resultado abaixo é parcial.`
         : undefined;
 
-    // Fase 2: confirma em milhas o melhor par de datas dentro da faixa
-    // "menor + margem". Os prints vão pra mesma pasta servida em /alertas.
+    // Fase 2: confirma em milhas os melhores pares de datas. O preço do PAR não
+    // é a soma das pernas — perna a perna a LATAM cobrou 243.535 milhas num par
+    // que, comprado junto, sai por 90.302.
     let confirmacao: ConfirmacaoLatam | undefined;
     let avisoConfirmacao: string | undefined;
     if (params.confirmarMilhas) {
       try {
-      const par = escolherMelhorPar(ida, volta, params.margemIdaReais, params.margemVoltaReais);
-      if (!par) {
+      const pares = escolherMelhoresPares(ida, volta, PARES_LATAM, params.margemIdaReais, params.margemVoltaReais);
+      if (pares.length === 0) {
         avisoConfirmacao = "Não achei par de ida e volta dentro da faixa pra confirmar em milhas.";
       } else {
-        atualizarAviso(jobId, `Confirmando em milhas ${par.ida.data} → ${par.volta.data}...`);
         const pasta = `latam-${params.origem}-${params.destino}-${Date.now()}`;
         fs.mkdirSync(path.join(DIR_ALERTAS, pasta), { recursive: true });
-        const caminho = (n: string) => path.join(DIR_ALERTAS, pasta, n);
 
-        const cIda = await confirmarEmMilhas(
-          page,
-          { origem: params.origem, destino: params.destino, data: par.ida.data, caminhoImagem: caminho("ida.png") },
-          (msg) => console.log(`[${jobId}] ${msg}`),
-          // Pedido de login vira aviso na tela: é a única forma de o usuário
-          // saber que a busca está parada esperando ele na janela do bot.
-          (mensagem) => atualizarAviso(jobId, mensagem),
-        );
-        const cVolta = await confirmarEmMilhas(
-          page,
-          { origem: params.destino, destino: params.origem, data: par.volta.data, caminhoImagem: caminho("volta.png") },
-          (msg) => console.log(`[${jobId}] ${msg}`),
-          (mensagem) => atualizarAviso(jobId, mensagem),
-        );
-
-        if (cIda && cVolta) {
-          const totalMilhas = cIda.milhas + cVolta.milhas;
-          const totalTaxas = Math.round((cIda.taxas + cVolta.taxas) * 100) / 100;
-
-          // O print é o último passo e o mais frágil (depende da página estar
-          // renderizada). Se falhar, os valores em milhas — que é o que
-          // interessa — continuam valendo, só sem imagem.
-          let imagem = "";
+        const confirmados: ConfirmacaoPar[] = [];
+        const falhas: string[] = [];
+        for (const [i, par] of pares.entries()) {
+          atualizarAviso(jobId, `Confirmando par ${i + 1} de ${pares.length}: ${par.ida.data} → ${par.volta.data}...`);
+          const arquivo = `par-${i + 1}.png`;
           try {
-            if (cIda.imagem && cVolta.imagem) {
-              await montarPrintCombinado(context, {
+            const c = await confirmarParEmMilhas(
+              page,
+              {
                 origem: params.origem,
                 destino: params.destino,
-                ida: cIda,
-                volta: cVolta,
-                totalMilhas,
-                totalTaxas,
-                caminhoImagem: caminho("ida-e-volta.png"),
-              });
-              imagem = `/alertas/${pasta}/ida-e-volta.png`;
-            } else {
-              avisoConfirmacao = "Não consegui capturar o print de um dos trechos — os valores em milhas abaixo continuam válidos.";
-            }
+                dataIda: par.ida.data,
+                dataVolta: par.volta.data,
+                caminhoImagem: path.join(DIR_ALERTAS, pasta, arquivo),
+              },
+              (msg) => console.log(`[${jobId}] ${msg}`),
+              // Pedido de login vira aviso na tela: é a única forma de o usuário
+              // saber que a busca está parada esperando ele na janela do bot.
+              (mensagem) => atualizarAviso(jobId, mensagem),
+            );
+            if (c) confirmados.push({ ...c, imagem: c.imagem ? `/alertas/${pasta}/${arquivo}` : "" });
+            else falhas.push(`${par.ida.data} → ${par.volta.data}: sem oferta em milhas`);
           } catch (err) {
-            console.error(`[${jobId}] falha ao montar o print: ${err instanceof Error ? err.message : String(err)}`);
-            avisoConfirmacao = "Não consegui montar o print da confirmação — os valores em milhas abaixo continuam válidos.";
+            // Um par que falha não derruba os outros: o resultado sai parcial e
+            // diz quais pares ficaram de fora.
+            const motivo = err instanceof Error ? err.message : String(err);
+            console.error(`[${jobId}] par ${par.ida.data}→${par.volta.data} falhou: ${motivo}`);
+            falhas.push(`${par.ida.data} → ${par.volta.data}: ${motivo}`);
           }
+        }
+        atualizarAviso(jobId, "");
 
-          confirmacao = {
-            ida: { ...cIda, imagem: cIda.imagem ? `/alertas/${pasta}/ida.png` : "" },
-            volta: { ...cVolta, imagem: cVolta.imagem ? `/alertas/${pasta}/volta.png` : "" },
-            totalMilhas,
-            totalTaxas,
-            imagem,
-          };
+        if (confirmados.length > 0) {
+          confirmacao = { pares: confirmados };
+          if (falhas.length > 0) {
+            avisoConfirmacao = `${falhas.length} de ${pares.length} par(es) não confirmaram: ${falhas.join(" · ")}`;
+          }
         } else {
-          avisoConfirmacao = "As datas mais baratas não tinham oferta em milhas.";
+          avisoConfirmacao = `Nenhum par confirmou em milhas. ${falhas.join(" · ")}`;
         }
       }
       } catch (err) {
