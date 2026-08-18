@@ -98,8 +98,23 @@ o formulário com a sessão já válida.
 - espera padrão: 10 min (`IBERIA_ESPERA_LOGIN_MS` muda isso);
 - o login fica salvo no perfil do Chrome do bot (`~/.chrome-bot-aa`), então é
   **uma vez só**, não a cada busca;
-- **a senha não passa pelo script**: ele não lê, não preenche e não guarda nada —
-  quem digita é você, direto no navegador.
+### Preenchimento automático (opcional)
+
+Mesmo acordo do módulo da LATAM: com `IBERIA_EMAIL` e `IBERIA_SENHA` no `.env`, o
+script adianta a digitação dos dois campos. **O clique em "Fazer login" continua
+sendo seu** — é onde entram 2FA, captcha e o que mais a Iberia resolver pedir.
+
+```
+# no .env do projeto (já está no .gitignore)
+IBERIA_EMAIL=...
+IBERIA_SENHA=...
+```
+
+Sem essas variáveis, o login é todo na mão — o script só espera.
+
+Seletores do login (Salesforce Identity), caso mudem:
+`input[name="loginPage:theForm:loginEmailInput"]`, `input[type=password]`,
+`input[name="loginPage:theForm:loginSubmit"]`.
 
 Se aparecer o erro de perfil em uso, feche o Chrome do bot com `npm run
 chrome:parar` (ou pare o `npm run server`, que também segura o perfil) e rode de

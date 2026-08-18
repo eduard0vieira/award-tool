@@ -162,18 +162,58 @@ async function main() {
 
 const pedindoLogin = (page: import("playwright").Page) => /login\.iberia\.com/.test(page.url());
 
+// Mesmo acordo do módulo da LATAM (`preencherCredenciais` em bot-latam.ts): se
+// IBERIA_EMAIL e IBERIA_SENHA estiverem no .env, o script adianta a digitação.
+// Ele **não confirma o login** — o clique em "Fazer login" fica com você, que é
+// onde entram 2FA, captcha e qualquer coisa que a Iberia resolva pedir.
+//
+// As credenciais moram só no seu .env (que está no .gitignore). Nada é impresso
+// no terminal nem guardado em outro lugar.
+async function preencherCredenciais(page: import("playwright").Page): Promise<void> {
+  const email = process.env.IBERIA_EMAIL;
+  const senha = process.env.IBERIA_SENHA;
+  if (!email || !senha) {
+    console.log("   (sem IBERIA_EMAIL/IBERIA_SENHA no .env — o login é todo na mão, na janela do bot)");
+    return;
+  }
+
+  try {
+    // O aviso de cookies cobre esta página também, e o filtro dele engole cliques.
+    await recusarCookies(page);
+
+    const campoEmail = page
+      .locator('input[name="loginPage:theForm:loginEmailInput"], input[type="email"]')
+      .first();
+    const campoSenha = page.locator('input[type="password"]').first();
+
+    await campoEmail.waitFor({ state: "visible", timeout: 20_000 });
+    await campoEmail.fill(email);
+
+    if (await campoSenha.isVisible().catch(() => false)) {
+      await campoSenha.fill(senha);
+      console.log("   e-mail e senha preenchidos a partir do .env — falta você clicar em \"Fazer login\".");
+    } else {
+      console.log("   e-mail preenchido; o campo de senha não estava na tela — siga na janela do bot.");
+    }
+  } catch (erro) {
+    const motivo = erro instanceof Error ? erro.message.split("\n")[0] : String(erro);
+    console.log(`   não consegui preencher o login (${motivo}) — siga na mão na janela do bot.`);
+  }
+}
+
 // A busca com Avios não chama disponibilidade nenhuma sem conta: ela redireciona
 // pro login. Então o script para aqui e devolve o volante — a senha é sua e não
 // passa por este processo.
 async function esperarLoginManual(page: import("playwright").Page): Promise<boolean> {
   await page.bringToFront().catch(() => {});
+  await preencherCredenciais(page);
   const minutos = Math.round(ESPERA_LOGIN_MS / 60000);
   console.log("");
   console.log("   ┌──────────────────────────────────────────────────────────────┐");
   console.log("   │  A Iberia pediu login pra buscar com Avios.                  │");
   console.log("   │                                                              │");
-  console.log("   │  Entre na janela do Chrome que está aberta (é a do bot) e     │");
-  console.log("   │  faça o login na sua conta Iberia Club. Assim que a sessão    │");
+  console.log("   │  Na janela do Chrome que está aberta (é a do bot): confira     │");
+  console.log("   │  os campos e clique em \"Fazer login\". Assim que a sessão      │");
   console.log("   │  abrir, o recon continua sozinho.                            │");
   console.log("   │                                                              │");
   console.log(`   │  Espero até ${String(minutos).padStart(2)} min. Nada do que você digitar passa por      │`);
