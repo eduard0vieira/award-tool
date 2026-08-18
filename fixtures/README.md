@@ -11,6 +11,7 @@ orçamento por IP é limitado e cada busca de teste queima parte dele (ver o 406
 | `smiles-real.json` | Smiles — busca GRU→MIA | `npx tsx scripts/recon-smiles.ts` |
 | `azul-real.json` | Azul — uma data, chamada do próprio site | `npx tsx scripts/recon-azul.ts` |
 | `azul-real-multidata.json` | Azul — seis datas, chamada sequestrada | `LOTES=6 npx tsx scripts/recon-azul.ts` |
+| `latam-redemption-options-real.json` | LATAM — as 4 combinações milhas+dinheiro de um par ida e volta | `npm run recon:latam GRU JNB <ida> <volta>` (sessão logada) |
 | `seatsaero-real.json` | Seats.aero — API Partner | `SEATS_API_KEY=... npx tsx scripts/salvar-fixture-seatsaero.ts` |
 | `seatsaero-real.headers.json` | headers da resposta acima | idem |
 

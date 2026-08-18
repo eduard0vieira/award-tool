@@ -1,0 +1,60 @@
+{
+  "tax": {
+    "amount": 255.69,
+    "currency": "BRL"
+  },
+  "redemptionOptions": [
+    {
+      "id": 1,
+      "totalValueToPay": {
+        "loyalty": {
+          "amount": 90302,
+          "currency": "LOYALTY_POINTS"
+        },
+        "money": {
+          "amount": 0,
+          "currency": "BRL"
+        }
+      }
+    },
+    {
+      "id": 2,
+      "totalValueToPay": {
+        "loyalty": {
+          "amount": 81272,
+          "currency": "LOYALTY_POINTS"
+        },
+        "money": {
+          "amount": 469.56,
+          "currency": "BRL"
+        }
+      }
+    },
+    {
+      "id": 3,
+      "totalValueToPay": {
+        "loyalty": {
+          "amount": 63212,
+          "currency": "LOYALTY_POINTS"
+        },
+        "money": {
+          "amount": 1164.87,
+          "currency": "BRL"
+        }
+      }
+    },
+    {
+      "id": 4,
+      "totalValueToPay": {
+        "loyalty": {
+          "amount": 45151,
+          "currency": "LOYALTY_POINTS"
+        },
+        "money": {
+          "amount": 1760.89,
+          "currency": "BRL"
+        }
+      }
+    }
+  ]
+}
