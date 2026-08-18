@@ -110,7 +110,10 @@ pedir.
 - Front é HTML + JS puro, sem framework e sem bundler. **Não introduza framework,
   bundler ou build step.**
 - Nomes de identificadores e mensagens em português, seguindo o código existente
-- Cada fonte é um arquivo `bot-*.ts` autocontido, seguindo o padrão dos demais
+- Cada fonte vive em `src/fontes/<programa>/`, autocontida, seguindo o padrão das
+  demais. `src/nucleo/` não importa fonte nenhuma
+- Todo caminho de disco sai de `src/nucleo/caminhos.ts` — nunca calcule com
+  `__dirname` no próprio arquivo
 - Fontes com login usam o pool de sessões; fontes com API oficial não precisam de
   navegador nenhum
 
