@@ -335,7 +335,28 @@ const JANELA_DIAS = 36;
 const MAX_JANELAS_FALHAS_SEGUIDAS = 3;
 
 export type JanelaComFalha = { inicio: string; fim: string; erro: string };
+
+// Pergunta feita ao usuário no meio da busca. Devolve `true` pra continuar.
+// Quem responde é a pessoa na tela — não há default seguro aqui: seguir sozinho
+// gastaria meia hora de navegador pra devolver um relatório vazio, e parar
+// sozinho esconderia uma rota que de fato não tem disponibilidade.
+export type OnPergunta = (mensagem: string) => Promise<boolean>;
+
+// Quantas janelas seguidas sem NENHUM voo antes de desconfiar da fonte. Três é
+// mais de 100 dias de calendário: rota que não vende nesse intervalo inteiro
+// existe, mas é raro o bastante pra valer perguntar.
+const MAX_JANELAS_VAZIAS_SEGUIDAS = Number(process.env.TAP_JANELAS_VAZIAS) || 3;
+
+// "Vazia" aqui é o que o AwardTool mostra quando a fonte dele cai: a tira de
+// datas aparece, mas nenhum dia tem voo. Diferente de janela que falhou (erro,
+// timeout) — essa responde bem, só não tem nada dentro.
+function janelaVazia(dias: DiaDisponibilidade[]): boolean {
+  return dias.length > 0 && dias.every((d) => d.found === 0);
+}
 export type ResultadoAnoCompleto = {
+  // Verdadeiro quando você mandou parar: o resultado é parcial de propósito, e
+  // isso precisa aparecer no relatório em vez de passar por busca completa.
+  interrompidaPorVoce?: boolean;
   dias: DiaDisponibilidade[];
   janelasComFalha: JanelaComFalha[];
 };
@@ -356,6 +377,7 @@ export async function pesquisarAnoCompleto(
   onProgresso: OnProgresso = () => {},
   onJanela: OnJanela = () => {},
   onAviso: OnAviso = () => {},
+  onPergunta?: OnPergunta,
 ): Promise<ResultadoAnoCompleto> {
   const { baseUrl, origem, destino, cabineParam } = opts;
 
@@ -368,6 +390,8 @@ export async function pesquisarAnoCompleto(
 
   const todasAsDatas: DiaDisponibilidade[] = [];
   const janelasComFalha: JanelaComFalha[] = [];
+  let vaziasSeguidas = 0;
+  let interrompidaPorVoce = false;
   let falhasSeguidas = 0;
   let janelaInicio = new Date(
     hoje.getFullYear(),
@@ -411,6 +435,31 @@ export async function pesquisarAnoCompleto(
       );
       todasAsDatas.push(...diasDaJanela);
       falhasSeguidas = 0;
+
+      // O AwardTool responde "No results match your current filters" tanto
+      // quando a rota não tem prêmio quanto quando o feed da companhia caiu.
+      // Da nossa parte os dois casos são idênticos, então quem decide é você.
+      if (janelaVazia(diasDaJanela)) {
+        vaziasSeguidas++;
+        if (vaziasSeguidas >= MAX_JANELAS_VAZIAS_SEGUIDAS && onPergunta) {
+          const de = janelaInicio.toLocaleDateString("pt-BR");
+          const ate = janelaFim.toLocaleDateString("pt-BR");
+          const continuar = await onPergunta(
+            `${vaziasSeguidas} janelas seguidas sem nenhum voo (até ${de}–${ate}). ` +
+              "Isso acontece quando a rota realmente não tem prêmio no período, mas também " +
+              "quando a fonte do AwardTool cai — e daqui não dá pra distinguir. Continuar a busca?",
+          );
+          if (!continuar) {
+            onLog("Busca interrompida por você depois das janelas vazias.");
+            interrompidaPorVoce = true;
+            break;
+          }
+          // Respondeu que sim: o contador zera pra não perguntar a cada janela.
+          vaziasSeguidas = 0;
+        }
+      } else {
+        vaziasSeguidas = 0;
+      }
     } catch (err) {
       const mensagemErro = err instanceof Error ? err.message : String(err);
       onLog(`  (janela ${numeroJanela}/${totalJanelas} falhou, pulando: ${mensagemErro})`);
@@ -441,7 +490,7 @@ export async function pesquisarAnoCompleto(
   if (janelasComFalha.length > 0) {
     onLog(`${janelasComFalha.length} janela(s) falharam e foram puladas.`);
   }
-  return { dias: todasAsDatas, janelasComFalha };
+  return { dias: todasAsDatas, janelasComFalha, interrompidaPorVoce };
 }
 
 export type Sessao = {

@@ -670,6 +670,62 @@ async function restaurarBuscas() {
   }
 }
 
+// O servidor pode parar no meio e perguntar algo (hoje: o AwardTool devolvendo
+// janela após janela sem nenhum voo, que tanto pode ser rota sem prêmio quanto
+// fonte fora do ar). A busca fica parada até alguém clicar — por isso a
+// pergunta aparece no card, e não num alert que se perde.
+function mostrarPergunta(card, jobId, { id, mensagem }) {
+  tirarPergunta(card);
+
+  const caixa = document.createElement("div");
+  caixa.className = "pergunta";
+
+  const texto = document.createElement("p");
+  texto.className = "pergunta-texto";
+  texto.textContent = mensagem;
+
+  const acoes = document.createElement("div");
+  acoes.className = "pergunta-acoes";
+
+  const responder = async (continuar, botao) => {
+    acoes.querySelectorAll("button").forEach((b) => (b.disabled = true));
+    botao.textContent = "...";
+    try {
+      const r = await fetch(`/api/buscar/${jobId}/responder`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, continuar }),
+      });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).erro || "Não deu pra responder.");
+    } catch (err) {
+      // Sem isso o card ficaria mudo com os dois botões travados.
+      texto.textContent = `${mensagem}\n\n${err.message}`;
+      acoes.querySelectorAll("button").forEach((b) => (b.disabled = false));
+      botao.textContent = continuar ? "Continuar" : "Parar aqui";
+    }
+  };
+
+  const btnSim = document.createElement("button");
+  btnSim.type = "button";
+  btnSim.className = "btn-acao btn-continuar";
+  btnSim.textContent = "Continuar";
+  btnSim.addEventListener("click", () => responder(true, btnSim));
+
+  const btnNao = document.createElement("button");
+  btnNao.type = "button";
+  btnNao.className = "btn-acao btn-parar";
+  btnNao.textContent = "Parar aqui";
+  btnNao.addEventListener("click", () => responder(false, btnNao));
+
+  acoes.append(btnSim, btnNao);
+  caixa.append(texto, acoes);
+  card.raiz.querySelector(".job-cabecalho").after(caixa);
+}
+
+function tirarPergunta(card) {
+  card.raiz.querySelector(":scope > .pergunta")?.remove();
+}
+
 // Roda uma busca via SSE e resolve com o resultado final: o relatório da
 // perna (TAP) ou a lista de pernas (SeatSpy, que traz ida e volta juntas).
 // Atualiza só o card dessa busca — outros cards em paralelo não são afetados.
@@ -750,8 +806,13 @@ function buscarNoServidor(card, corpo, rotuloProgresso, sessao) {
         // AwardTool) — some sozinho quando a próxima janela/progresso chegar.
         card.avisoEl.textContent = dado.mensagem;
         card.avisoEl.hidden = !dado.mensagem;
+      } else if (dado.tipo === "pergunta") {
+        mostrarPergunta(card, jobId, dado);
+      } else if (dado.tipo === "respondida") {
+        tirarPergunta(card);
       } else if (dado.tipo === "done") {
         fonte.close();
+        tirarPergunta(card);
         const dados = {
           resultado: dado.pernas || dado.secaoAA || dado.relatorio,
           planilhaUrl: dado.planilhaUrl,
@@ -763,6 +824,7 @@ function buscarNoServidor(card, corpo, rotuloProgresso, sessao) {
         resolve(dados);
       } else if (dado.tipo === "erro") {
         fonte.close();
+        tirarPergunta(card);
         reject(new Error(dado.mensagem));
       }
     };

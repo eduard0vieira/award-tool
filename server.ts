@@ -89,6 +89,11 @@ type Job = {
   confirmacao?: ConfirmacaoLatam; // confirmação em milhas do melhor par (LATAM)
   planilhaUrl?: string; // planilha da busca (uma nova por busca — ver planilha.ts)
   tetosAplicados?: { executivaK: number; economicaK: number }; // guardado pra sobreviver a um F5
+  // Pergunta em aberto: a busca fica parada esperando resposta da tela. Fica
+  // guardada no job pra continuar existindo depois de um F5 — senão a busca
+  // esperaria por uma pergunta que ninguém mais vê.
+  pergunta?: { id: string; mensagem: string } | undefined;
+  responder?: ((continuar: boolean) => void) | undefined;
   erro?: string;
   ouvintes: Set<Response>;
 };
@@ -219,10 +224,42 @@ function registrarNaPlanilha(
   void registrarBusca({ ...dados, busca: jobId }, (msg) => console.log(`[${jobId}] ${msg}`));
 }
 
+// Quanto tempo uma pergunta fica de pé antes de desistir. Sem isso, uma aba
+// fechada seguraria um slot do navegador pra sempre. Ao expirar, para a busca:
+// devolver parcial é melhor que ocupar recurso indefinidamente.
+const ESPERA_RESPOSTA_MS = Number(process.env.ESPERA_RESPOSTA_MS) || 15 * 60_000;
+
+function perguntarAoUsuario(jobId: string, mensagem: string): Promise<boolean> {
+  const job = jobs.get(jobId);
+  if (!job) return Promise.resolve(false);
+
+  const id = `${jobId}-${Date.now()}`;
+  job.pergunta = { id, mensagem };
+  emitirEvento(jobId, { tipo: "pergunta", id, mensagem });
+
+  return new Promise<boolean>((resolve) => {
+    let jaRespondeu = false;
+    const encerrar = (continuar: boolean) => {
+      if (jaRespondeu) return;
+      jaRespondeu = true;
+      clearTimeout(prazo);
+      job.pergunta = undefined;
+      job.responder = undefined;
+      emitirEvento(jobId, { tipo: "respondida", id, continuar });
+      resolve(continuar);
+    };
+    const prazo = setTimeout(() => {
+      console.log(`[${jobId}] ninguém respondeu em ${Math.round(ESPERA_RESPOSTA_MS / 60000)} min — parando a busca.`);
+      encerrar(false);
+    }, ESPERA_RESPOSTA_MS);
+    job.responder = encerrar;
+  });
+}
+
 function executarJob(jobId: string, params: { origem: string; destino: string; tetos: TetosTap }) {
   return executarComPool(poolAwardtool, jobId, async ({ page, baseUrl }) => {
     const job = jobs.get(jobId)!;
-    const { dias: todasAsDatas, janelasComFalha } = await pesquisarAnoCompleto(
+    const { dias: todasAsDatas, janelasComFalha, interrompidaPorVoce } = await pesquisarAnoCompleto(
       page,
       {
         baseUrl,
@@ -234,6 +271,7 @@ function executarJob(jobId: string, params: { origem: string; destino: string; t
       (fracao) => atualizarProgresso(jobId, fracao),
       (info) => atualizarJanela(jobId, info),
       (mensagem) => atualizarAviso(jobId, mensagem),
+      (mensagem) => perguntarAoUsuario(jobId, mensagem),
     );
 
     const relatorio = construirRelatorio(todasAsDatas, params.tetos);
@@ -243,8 +281,11 @@ function executarJob(jobId: string, params: { origem: string; destino: string; t
       executivaK: params.tetos.executivaK ?? TETO_EXECUTIVA_K_PADRAO,
       economicaK: params.tetos.economicaK ?? TETO_ECONOMICA_K_PADRAO,
     };
-    const avisoParcial =
-      janelasComFalha.length > 0
+    // Parar por decisão sua também produz resultado parcial — e isso precisa
+    // estar escrito, senão o relatório curto passa por busca completa.
+    const avisoParcial = interrompidaPorVoce
+      ? "Você interrompeu a busca depois das janelas vazias — o resultado abaixo cobre só o período já consultado."
+      : janelasComFalha.length > 0
         ? `${janelasComFalha.length} janela(s) não puderam ser buscadas (ver detalhes no terminal do servidor) — o resultado abaixo é parcial.`
         : undefined;
     job.status = "done";
@@ -789,6 +830,26 @@ app.post("/api/alerta", async (req: Request, res: Response) => {
 // servidor reiniciou no meio, os jobs sumiram da memória — isto é o que o front
 // consulta pra descartar o que não existe mais, em vez de abrir um SSE que
 // morre com 404.
+app.post("/api/buscar/:jobId/responder", (req: Request, res: Response) => {
+  const job = jobs.get(String(req.params.jobId));
+  if (!job) {
+    res.status(404).json({ erro: "Busca não existe mais." });
+    return;
+  }
+  if (!job.pergunta || !job.responder) {
+    res.status(409).json({ erro: "Não há pergunta em aberto nessa busca." });
+    return;
+  }
+  if (req.body?.id && req.body.id !== job.pergunta.id) {
+    // Resposta de uma pergunta antiga (aba velha, clique duplicado): ignora em
+    // vez de aplicar na pergunta errada.
+    res.status(409).json({ erro: "Essa pergunta já foi respondida." });
+    return;
+  }
+  job.responder(req.body?.continuar === true);
+  res.json({ ok: true });
+});
+
 app.get("/api/buscar/:jobId/estado", (req: Request, res: Response) => {
   const job = jobs.get(String(req.params.jobId));
   if (!job) {
@@ -823,6 +884,9 @@ app.get("/api/buscar/:jobId/eventos", (req: Request, res: Response) => {
   }
   if (job.avisoAtual) {
     res.write(`data: ${JSON.stringify({ tipo: "aviso", mensagem: job.avisoAtual })}\n\n`);
+  }
+  if (job.pergunta) {
+    res.write(`data: ${JSON.stringify({ tipo: "pergunta", ...job.pergunta })}\n\n`);
   }
   if (job.status === "done") {
     // O reenvio precisa carregar tudo que o evento ao vivo carrega — planilha e
