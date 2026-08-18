@@ -502,6 +502,177 @@ export async function confirmarEmMilhas(
   }
 }
 
+// Confirma o preço de um PAR ida e volta — que é diferente de somar as duas
+// pernas. Medido: GRU→JNB perna a perna deu 243.535 milhas; o mesmo par
+// comprado junto sai por 90.302. A LATAM precifica o par, e esse número só
+// existe depois de escolher um voo de ida E um de volta.
+//
+// O caminho é dirigir o site: deep link ida e volta → escolhe a ida → escolhe a
+// volta → a tela "Combine suas milhas + dinheiro". O preço vem da resposta de
+// `/offers/redemption-options`, não do HTML.
+export async function confirmarParEmMilhas(
+  page: Page,
+  params: { origem: string; destino: string; dataIda: string; dataVolta: string; caminhoImagem: string },
+  onLog: OnLog = () => {},
+  onAviso: OnAviso = () => {},
+): Promise<ConfirmacaoPar | null> {
+  const { origem, destino, dataIda, dataVolta, caminhoImagem } = params;
+
+  let opcoesCruas: unknown;
+  let buscaIda: OfertaCrua | undefined;
+  let buscaVolta: OfertaCrua | undefined;
+
+  const capturar = async (res: import("playwright").Response) => {
+    const url = res.url();
+    if (res.status() !== 200) return;
+    try {
+      if (url.includes("/offers/redemption-options")) {
+        opcoesCruas = await res.json();
+      } else if (url.includes("/offers/search/redemption")) {
+        // A segunda busca vem com `outOfferId`: é a volta, já precificada em
+        // função da ida escolhida.
+        const corpo = (await res.json()) as OfertaCrua;
+        if (url.includes("outOfferId=") && !url.includes("outOfferId=null")) buscaVolta = corpo;
+        else buscaIda = corpo;
+      }
+    } catch {
+      /* resposta não-JSON: os campos exigidos cobram isso depois */
+    }
+  };
+  page.on("response", capturar);
+
+  try {
+    await limitadorLatam.aguardarVez();
+    const url =
+      "https://www.latamairlines.com/br/pt/oferta-voos?" +
+      new URLSearchParams({
+        origin: origem,
+        destination: destino,
+        outbound: `${dataIda}T12:00:00.000Z`,
+        inbound: `${dataVolta}T12:00:00.000Z`,
+        adt: "1",
+        chd: "0",
+        inf: "0",
+        trip: "RT",
+        cabin: "Economy",
+        redemption: "true",
+        sort: "RECOMMENDED",
+      }).toString();
+
+    onLog(`Confirmando o par em milhas: ${origem} ⇄ ${destino} · ${dataIda} → ${dataVolta}...`);
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 90_000 });
+
+    if (pedindoLogin(page)) {
+      await esperarLoginManual(page, onLog, onAviso);
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 90_000 });
+      if (pedindoLogin(page)) {
+        throw new Error("Mesmo depois do login a LATAM voltou pra tela de entrada. Tente a busca de novo.");
+      }
+    }
+
+    if (!(await escolherPrimeiroVoo(page, "ida", onLog))) {
+      onLog(`Sem voo em milhas na ida de ${dataIda}.`);
+      return null;
+    }
+    if (!(await escolherPrimeiroVoo(page, "volta", onLog))) {
+      onLog(`Sem voo em milhas na volta de ${dataVolta}.`);
+      return null;
+    }
+
+    // A tela das combinações carrega depois da segunda escolha.
+    await esperarPor(() => opcoesCruas !== undefined, 30_000, page);
+    if (opcoesCruas === undefined) {
+      throw new Error(
+        "Cheguei ao fim do fluxo mas a LATAM não devolveu as combinações de milhas+dinheiro. " +
+          "Rode `npm run recon:latam` pra ver onde parou.",
+      );
+    }
+
+    const { taxaReais, opcoes } = lerOpcoesResgate(opcoesCruas);
+
+    let imagem = "";
+    try {
+      const painel = page.locator("section, div").filter({ hasText: /Selecione a op/i }).last();
+      if ((await painel.count()) > 0) await painel.screenshot({ path: caminhoImagem });
+      else await page.screenshot({ path: caminhoImagem, fullPage: true });
+      imagem = caminhoImagem;
+    } catch (err) {
+      // O preço é o dado essencial; a imagem não. Falta de print vira aviso.
+      onLog(`Não consegui tirar o print do par: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    const melhor = opcoes[0]!;
+    onLog(
+      `${dataIda} → ${dataVolta}: ${melhor.milhas.toLocaleString("pt-BR")} milhas + R$ ${melhor.totalReais.toFixed(2)} ` +
+        `(${opcoes.length} combinações).`,
+    );
+
+    return {
+      origem,
+      destino,
+      dataIda,
+      dataVolta,
+      vooIda: descreverPrimeiroVoo(buscaIda, origem, destino),
+      vooVolta: descreverPrimeiroVoo(buscaVolta, destino, origem),
+      taxaReais,
+      opcoes,
+      imagem,
+    };
+  } finally {
+    page.off("response", capturar);
+  }
+}
+
+// O voo que foi escolhido é sempre o primeiro cartão — é nele que clicamos.
+function descreverPrimeiroVoo(busca: OfertaCrua | undefined, de: string, para: string): string {
+  const voo = busca?.content?.[0]?.summary;
+  if (!voo) return "";
+  const hora = (iso?: string) => (iso ? iso.slice(11, 16) : "--:--");
+  const paradas = voo.stopOvers ?? 0;
+  return (
+    `${voo.flightCode ?? ""} · ${hora(voo.origin?.departure)} ${de} → ${hora(voo.destination?.arrival)} ${para}` +
+    ` · ${paradas === 0 ? "Direto" : `${paradas} parada(s)`}`
+  );
+}
+
+// Cada perna pede duas escolhas: o voo e, no painel que abre em seguida, a
+// tarifa (Light/Plus/Top). Pega sempre a primeira das duas — a escolha de tarifa
+// não muda a escada de milhas, que é o que interessa aqui.
+async function escolherPrimeiroVoo(page: Page, qual: string, onLog: OnLog): Promise<boolean> {
+  const cartao = page.locator('[data-testid^="wrapper-card-flight-"]').first();
+  try {
+    await cartao.waitFor({ timeout: 60_000 });
+  } catch {
+    onLog(`  (nenhum voo apareceu na ${qual})`);
+    return false;
+  }
+  await page.waitForTimeout(2000);
+  await cartao.click({ timeout: 15_000 });
+  await page.waitForTimeout(2500);
+
+  const alvos = [
+    '[data-testid*="fare-selection"] button',
+    'button[data-testid*="select"]',
+    "button:has-text('Escolher')",
+    "button:has-text('Selecionar')",
+  ];
+  for (const sel of alvos) {
+    const botao = page.locator(sel).first();
+    if ((await botao.count()) > 0 && (await botao.isVisible().catch(() => false))) {
+      await botao.click({ timeout: 10_000 }).catch(() => {});
+      await page.waitForTimeout(2500);
+      return true;
+    }
+  }
+  // Sem painel de tarifa o clique no cartão já basta.
+  return true;
+}
+
+async function esperarPor(pronto: () => boolean, limiteMs: number, page: Page) {
+  const fim = Date.now() + limiteMs;
+  while (Date.now() < fim && !pronto()) await page.waitForTimeout(500);
+}
+
 // A partir dos dias do calendário, escolhe os melhores pares ida/volta dentro
 // da faixa "menor + margem", com a volta sempre depois da ida. A margem é
 // separada por direção porque a volta costuma sair mais cara — R$ 100 na ida e
