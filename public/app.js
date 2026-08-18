@@ -256,13 +256,21 @@ function agruparParaExibicao(historico) {
         usados.add(j);
         // O registro mais antigo do par é a ida: dita a direção exibida.
         const ida = historico[j];
-        exibicao.push({ ...ida, idaEVolta: true, timestamp: item.timestamp });
+        // `timestamps` é só de exibição: é a chave usada pra apagar o item, e
+        // um par juntado apaga os dois registros que o formaram.
+        exibicao.push({ ...ida, idaEVolta: true, timestamp: item.timestamp, timestamps: [ida.timestamp, item.timestamp] });
         continue;
       }
     }
-    exibicao.push(item);
+    exibicao.push({ ...item, timestamps: [item.timestamp] });
   }
   return exibicao;
+}
+
+function removerDoHistorico(timestamps) {
+  const alvos = new Set(timestamps);
+  localStorage.setItem(HISTORICO_KEY, JSON.stringify(carregarHistorico().filter((h) => !alvos.has(h.timestamp))));
+  renderizarHistorico();
 }
 
 function renderizarHistorico() {
@@ -404,7 +412,16 @@ function criarItemHistorico(item) {
   btnRepetir.textContent = "↻";
   btnRepetir.addEventListener("click", () => repetirBusca(item));
 
-  linha.append(principal, grupoCabines, direita, btnRepetir);
+  // Apagar um trecho só. Um item de ida e volta que veio de dois registros
+  // apaga os dois — senão a metade que sobrasse reapareceria sozinha.
+  const btnApagar = document.createElement("button");
+  btnApagar.type = "button";
+  btnApagar.className = "btn-apagar-item";
+  btnApagar.title = "Remover este trecho do histórico";
+  btnApagar.textContent = "✕";
+  btnApagar.addEventListener("click", () => removerDoHistorico(item.timestamps || [item.timestamp]));
+
+  linha.append(principal, grupoCabines, direita, btnRepetir, btnApagar);
   return linha;
 }
 
@@ -456,6 +473,7 @@ function criarCardJob(filaBuscasEl, tituloRota) {
     btnCopiarIdaEl: raiz.querySelector(".btn-copiar-ida"),
     btnCopiarVoltaEl: raiz.querySelector(".btn-copiar-volta"),
     btnMinimizarEl: raiz.querySelector(".btn-minimizar"),
+    btnRemoverEl: raiz.querySelector(".btn-remover"),
     pernasParaUpgrade: [],
     // Datas por perna na ordem em que chegam (ida primeiro), pros botões de
     // copiar do cabeçalho — ver registrarPernaCopia.
@@ -494,6 +512,14 @@ function criarCardJob(filaBuscasEl, tituloRota) {
     card.subpainelUpgradeEl.hidden = card.minimizado || abaAtiva !== "upgrade";
     card.subAbasEl.hidden = card.minimizado;
     card.btnMinimizarEl.textContent = card.minimizado ? "Expandir" : "Minimizar";
+  });
+
+  // Remover tira o card da tela E da memória — sem isso ele voltaria no
+  // próximo F5, que é justamente o que a persistência faz.
+  card.btnRemoverEl.addEventListener("click", () => {
+    const id = raiz.dataset.buscaId;
+    if (id) gravarBuscas(carregarBuscas().filter((b) => b.id !== id));
+    raiz.remove();
   });
 
   filaBuscasEl.prepend(raiz);
@@ -668,6 +694,9 @@ function buscarNoServidor(card, corpo, rotuloProgresso, sessao) {
       resolve(passo.resultado);
       return;
     }
+
+    // O botão Remover precisa saber qual registro apagar.
+    if (sessao) card.raiz.dataset.buscaId = sessao.registro.id;
 
     const guardarResultado = (dados) => {
       if (!sessao) return;

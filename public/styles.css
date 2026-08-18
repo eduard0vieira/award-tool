@@ -520,7 +520,8 @@ button:disabled {
 .btn-copiar,
 .btn-alerta,
 .btn-limpar,
-.btn-rebuscar {
+.btn-rebuscar,
+.btn-apagar-item {
   padding: 6px var(--e3);
   border: 1px solid var(--borda-forte);
   border-radius: var(--raio-p);
@@ -552,6 +553,26 @@ button:disabled {
 
 .btn-limpar {
   border-color: rgba(248, 113, 113, 0.35);
+  background: var(--erro-fundo);
+  color: var(--erro);
+}
+
+/* Apagar é destrutivo: fica discreto até o mouse chegar nele. */
+.btn-apagar-item {
+  padding: 4px 8px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--texto-fraco);
+}
+
+.btn-apagar-item:hover:not(:disabled) {
+  border-color: rgba(248, 113, 113, 0.4);
+  background: var(--erro-fundo);
+  color: var(--erro);
+}
+
+.job-busca .btn-remover:hover:not(:disabled) {
+  border-color: rgba(248, 113, 113, 0.45);
   background: var(--erro-fundo);
   color: var(--erro);
 }
@@ -785,6 +806,9 @@ button:disabled {
 }
 
 .dia-cabecalho {
+  display: flex;
+  align-items: baseline;
+  gap: var(--e2);
   font-size: 12px;
   font-weight: 600;
   color: var(--texto-suave);
