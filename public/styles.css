@@ -843,8 +843,26 @@ button:disabled {
 .alerta-acoes {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: var(--e2);
   margin-top: var(--e3);
+}
+
+/* Como faixa no topo do card, a barra de alerta se apoia no cabeçalho em vez
+   de flutuar solta no meio do conteúdo. */
+.job-busca > .alerta-acoes {
+  margin: 0;
+  padding: var(--e3) var(--e5);
+  background: var(--fundo);
+  border-bottom: 1px solid var(--borda);
+}
+
+.job-busca > .alerta-acoes .alerta-rotulo {
+  margin-right: var(--e1);
+}
+
+.job-busca > .alerta-resultado {
+  margin: var(--e4) var(--e5) 0;
 }
 
 .alerta-galeria {

@@ -1129,7 +1129,10 @@ function mostrarBotoesAlerta(card, fonte, origem, destino, opcoes) {
     });
     barra.appendChild(btn);
   }
-  card.raiz.appendChild(barra);
+  // No topo, logo abaixo do cabeçalho: gerar alerta é a ação que se faz assim
+  // que a busca termina, e no fim do card ela ficava atrás de meses de
+  // resultado.
+  card.raiz.querySelector(".job-cabecalho").after(barra);
 }
 
 // Monta um bloco "imagens + legenda + copiar" — usado tanto pro alerta
@@ -1183,10 +1186,22 @@ function mostrarAlertaGerado(card, { imagens, legenda, imagemCombo, legendaCombo
   // Combos só vem quando as datas de ida e volta se cruzam — é o alerta que
   // vocês mandam depois do principal, com as combinações já prontas.
   const temCombo = Boolean(imagemCombo);
-  card.raiz.appendChild(blocoDeAlerta(temCombo ? "Alerta principal" : "", imagens, legenda));
+  // As imagens nascem logo abaixo dos botões que as geraram, não no fim do card.
+  inserirDepoisDoAlerta(card, blocoDeAlerta(temCombo ? "Alerta principal" : "", imagens, legenda));
   if (temCombo) {
-    card.raiz.appendChild(blocoDeAlerta("Combinações ida + volta", [imagemCombo], legendaCombo || ""));
+    inserirDepoisDoAlerta(card, blocoDeAlerta("Combinações ida + volta", [imagemCombo], legendaCombo || ""));
   }
+}
+
+// Empilha os blocos gerados na ordem em que saíram, logo depois da barra de
+// botões — e cai pro fim do card se a barra não existir (fonte sem alerta).
+function inserirDepoisDoAlerta(card, bloco) {
+  const anteriores = card.raiz.querySelectorAll(":scope > .alerta-resultado");
+  const ancora = anteriores.length
+    ? anteriores[anteriores.length - 1]
+    : card.raiz.querySelector(":scope > .alerta-acoes");
+  if (ancora) ancora.after(bloco);
+  else card.raiz.appendChild(bloco);
 }
 
 // AA: uma cabine por busca, cada direção é um job próprio (como na TAP).
