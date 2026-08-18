@@ -9,6 +9,8 @@ orçamento por IP é limitado e cada busca de teste queima parte dele (ver o 406
 | arquivo | fonte | como regerar |
 |---|---|---|
 | `smiles-real.json` | Smiles — busca GRU→MIA | `npx tsx scripts/recon-smiles.ts` |
+| `azul-real.json` | Azul — uma data, chamada do próprio site | `npx tsx scripts/recon-azul.ts` |
+| `azul-real-multidata.json` | Azul — seis datas, chamada sequestrada | `LOTES=6 npx tsx scripts/recon-azul.ts` |
 | `seatsaero-real.json` | Seats.aero — API Partner | `SEATS_API_KEY=... npx tsx scripts/salvar-fixture-seatsaero.ts` |
 | `seatsaero-real.headers.json` | headers da resposta acima | idem |
 
