@@ -960,10 +960,12 @@ function renderizarPerna(destinoEl, rotulo, relatorio) {
 // Versão do SeatSpy: as cabines vêm do servidor (Econômica/Premium/Executiva),
 // então as colunas são montadas dinamicamente em vez de vir do template.
 function renderizarPernaSecoes(destinoEl, rotulo, secoes) {
-  const raiz = document.createElement("div");
+  // details/summary: a perna inteira fecha num clique, igual às colunas.
+  const raiz = document.createElement("details");
   raiz.className = "perna";
+  raiz.open = true;
 
-  const titulo = document.createElement("h2");
+  const titulo = document.createElement("summary");
   titulo.className = "perna-titulo";
   titulo.textContent = rotulo;
   raiz.appendChild(titulo);

@@ -596,27 +596,59 @@ button:disabled {
 }
 
 .perna + .perna {
-  margin-top: var(--e6);
-  padding-top: var(--e5);
+  margin-top: var(--e5);
+  padding-top: var(--e4);
   border-top: 1px solid var(--borda);
 }
 
+/* O título da perna é o botão que abre e fecha ela. */
 .perna-titulo {
-  margin-bottom: var(--e4);
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  margin-bottom: var(--e3);
+  padding: var(--e2) var(--e3);
+  border-radius: var(--raio-p);
+  background: var(--superficie);
   font-family: var(--mono);
   font-size: 13px;
   letter-spacing: 0.04em;
   color: var(--texto-suave);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
 }
 
+.perna-titulo::-webkit-details-marker {
+  display: none;
+}
+
+.perna-titulo::before {
+  content: "›";
+  color: var(--texto-fraco);
+  transition: transform var(--transicao);
+}
+
+.perna[open] > .perna-titulo::before {
+  transform: rotate(90deg);
+}
+
+.perna-titulo:hover {
+  background: var(--superficie-alta);
+  color: var(--texto);
+}
+
+/* `start` é o que impede uma cabine vazia (ou fechada) de esticar até a altura
+   da coluna mais cheia — era o buraco que sobrava ao minimizar a Executiva. */
 .colunas {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: var(--e4);
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  align-items: start;
+  gap: var(--e3);
 }
 
 .colunas-3 {
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
 }
 
 .coluna {
@@ -630,7 +662,7 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: var(--e2);
-  padding: var(--e3) var(--e4);
+  padding: var(--e2) var(--e3);
   background: var(--superficie);
   cursor: pointer;
   list-style: none;
@@ -666,7 +698,7 @@ button:disabled {
 
 .coluna-resumo {
   margin: 0;
-  padding: var(--e2) var(--e4);
+  padding: var(--e1) var(--e3);
   border-bottom: 1px solid var(--borda);
   font-size: 12px;
   color: var(--texto-suave);
@@ -675,12 +707,12 @@ button:disabled {
 .cartoes {
   display: flex;
   flex-direction: column;
-  gap: var(--e3);
-  padding: var(--e4);
+  gap: var(--e2);
+  padding: var(--e3);
 }
 
 .mes-titulo {
-  margin: var(--e4) 0 var(--e1);
+  margin: var(--e3) 0 2px;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -695,19 +727,20 @@ button:disabled {
 .linha-cartoes {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--e2);
+  gap: 5px;
 }
 
 .cartao {
   display: inline-flex;
   align-items: baseline;
-  gap: var(--e1);
-  padding: var(--e2) var(--e3);
+  gap: 3px;
+  padding: 2px 6px;
   border: 1px solid var(--borda);
   border-radius: var(--raio-p);
   background: var(--superficie);
   font-family: var(--mono);
-  font-size: 13px;
+  font-size: 12px;
+  line-height: 1.5;
   transition: border-color var(--transicao), transform var(--transicao);
 }
 
@@ -734,7 +767,7 @@ button:disabled {
 
 .cartao-vagas {
   color: var(--texto-fraco);
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .cartao-vagas::before {

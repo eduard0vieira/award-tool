@@ -322,9 +322,11 @@
     </section>
   </template>
 
+  <!-- Cada perna fecha sozinha (details): com ida e volta na tela, chegar na
+       volta exigia rolar a ida inteira. -->
   <template id="tpl-perna">
-    <div class="perna">
-      <h2 class="perna-titulo"></h2>
+    <details class="perna" open>
+      <summary class="perna-titulo"></summary>
       <div class="colunas">
         <details class="coluna coluna-executiva" open>
           <summary class="coluna-cabecalho">
@@ -345,7 +347,7 @@
           <div class="cartoes"></div>
         </details>
       </div>
-    </div>
+    </details>
   </template>
 
   <script src="/app.js"></script>
