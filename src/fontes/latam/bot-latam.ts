@@ -289,7 +289,7 @@ type OfertaCrua = {
 // o bot avisa e espera você terminar na mão. Nada de senha aparece em log.
 const ESPERA_LOGIN_MS = Number(process.env.LATAM_ESPERA_LOGIN_MS) || 300_000;
 
-function pedindoLogin(page: Page): boolean {
+export function pedindoLogin(page: Page): boolean {
   const url = page.url();
   return /login|iniciar-sesion|signin|sign-in/i.test(url);
 }
@@ -319,7 +319,7 @@ async function preencherCredenciais(page: Page, onLog: OnLog): Promise<void> {
   }
 }
 
-async function esperarLoginManual(page: Page, onLog: OnLog, onAviso: OnAviso): Promise<void> {
+export async function esperarLoginManual(page: Page, onLog: OnLog, onAviso: OnAviso): Promise<void> {
   await page.bringToFront().catch(() => {});
   await preencherCredenciais(page, onLog);
 
