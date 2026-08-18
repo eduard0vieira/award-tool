@@ -436,33 +436,56 @@ export async function confirmarEmMilhas(
   }
 }
 
-// A partir dos dias do calendário, escolhe o melhor par ida/volta dentro da
-// faixa "menor + margem": o dia mais barato de cada direção, com a volta caindo
-// depois da ida. A margem é separada por direção porque a volta costuma sair
-// mais cara — R$ 100 na ida e R$ 300 na volta, como combinado.
+// A partir dos dias do calendário, escolhe os melhores pares ida/volta dentro
+// da faixa "menor + margem", com a volta sempre depois da ida. A margem é
+// separada por direção porque a volta costuma sair mais cara — R$ 100 na ida e
+// R$ 300 na volta, como combinado.
+//
+// Devolve VÁRIOS pares porque o preço do calendário é em dinheiro e o preço em
+// milhas do par só aparece na confirmação: o par mais barato em reais não é
+// necessariamente o mais barato em milhas. Cada data entra em um par só, pra
+// dar três opções de fato diferentes em vez de três variações do mesmo dia.
+export function escolherMelhoresPares(
+  ida: DiaLatam[],
+  volta: DiaLatam[],
+  quantos = 3,
+  margemIdaReais = 100,
+  margemVoltaReais = 300,
+): { ida: DiaLatam; volta: DiaLatam }[] {
+  if (ida.length === 0 || volta.length === 0 || quantos < 1) return [];
+
+  const naFaixa = (dias: DiaLatam[], margemReais: number) => {
+    const menor = Math.min(...dias.map((d) => d.valor));
+    return dias
+      .filter((d) => d.valor <= menor + margemReais)
+      .sort((a, b) => a.valor - b.valor || a.data.localeCompare(b.data));
+  };
+
+  const idaCandidatos = naFaixa(ida, margemIdaReais);
+  const voltaCandidatos = naFaixa(volta, margemVoltaReais);
+
+  const pares: { ida: DiaLatam; volta: DiaLatam }[] = [];
+  const voltasUsadas = new Set<string>();
+
+  for (const i of idaCandidatos) {
+    if (pares.length >= quantos) break;
+    const v = voltaCandidatos.find((x) => x.data > i.data && !voltasUsadas.has(x.data));
+    if (!v) continue;
+    voltasUsadas.add(v.data);
+    pares.push({ ida: i, volta: v });
+  }
+  return pares;
+}
+
+// Um par só — o que o servidor usava antes de passar a confirmar três.
 export function escolherMelhorPar(
   ida: DiaLatam[],
   volta: DiaLatam[],
   margemIdaReais = 100,
   margemVoltaReais = 300,
 ): { ida: DiaLatam; volta: DiaLatam } | null {
-  if (ida.length === 0 || volta.length === 0) return null;
-
-  const naFaixa = (dias: DiaLatam[], margemReais: number) => {
-    const menor = Math.min(...dias.map((d) => d.valor));
-    return dias.filter((d) => d.valor <= menor + margemReais);
-  };
-
-  const idaCandidatos = naFaixa(ida, margemIdaReais).sort((a, b) => a.valor - b.valor || a.data.localeCompare(b.data));
-  const voltaCandidatos = naFaixa(volta, margemVoltaReais).sort((a, b) => a.valor - b.valor || a.data.localeCompare(b.data));
-
-  for (const i of idaCandidatos) {
-    const v = voltaCandidatos.find((x) => x.data > i.data);
-    if (v) return { ida: i, volta: v };
-  }
-  return null;
+  return escolherMelhoresPares(ida, volta, 1, margemIdaReais, margemVoltaReais)[0] ?? null;
 }
-
 
 // Junta os prints das duas pernas num só — é assim que o alerta vai pro
 // grupo. Monta uma página simples com as duas capturas e fotografa ela; usar
