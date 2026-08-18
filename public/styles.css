@@ -10,18 +10,20 @@
 /* ── 1. Tokens ───────────────────────────────────────────────────────────── */
 
 :root {
-  /* superfícies, do fundo pro topo */
-  --fundo: #0b0d12;
-  --fundo-alto: #11141b;
-  --superficie: #161a23;
-  --superficie-alta: #1c212c;
-  --borda: #262c39;
-  --borda-forte: #333b4b;
+  /* superfícies, do fundo pro topo. Os degraus são curtos de propósito: o
+     contraste alto entre camadas era o que fazia a tela parecer um painel de
+     caixas empilhadas. */
+  --fundo: #000000;
+  --fundo-alto: #0c0c0e;
+  --superficie: #141416;
+  --superficie-alta: #1c1c1f;
+  --borda: rgba(255, 255, 255, 0.09);
+  --borda-forte: rgba(255, 255, 255, 0.16);
 
-  /* texto */
-  --texto: #e8eaf0;
-  --texto-suave: #a2abbd;
-  --texto-fraco: #6b7488;
+  /* texto — a escada de cinzas do sistema da Apple */
+  --texto: #f5f5f7;
+  --texto-suave: #a1a1a6;
+  --texto-fraco: #6e6e73;
 
   /* marca e estados — o vermelho é o mesmo do favicon */
   --marca: #e11d2f;
@@ -50,11 +52,11 @@
   --e7: 48px;
 
   /* forma */
-  --raio-p: 6px;
-  --raio: 10px;
-  --raio-g: 14px;
-  --sombra: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --sombra-alta: 0 8px 24px -8px rgba(0, 0, 0, 0.6);
+  --raio-p: 8px;
+  --raio: 12px;
+  --raio-g: 18px;
+  --sombra: none;
+  --sombra-alta: 0 8px 30px -12px rgba(0, 0, 0, 0.8);
   --anel: 0 0 0 3px rgba(225, 29, 47, 0.40);
 
   /* tipografia — San Francisco, a fonte de sistema da Apple. `-apple-system`
@@ -109,17 +111,6 @@ body {
   font-feature-settings: "kern", "liga";
 }
 
-/* Uma luz fria no topo, pra página não parecer uma folha preta chapada. */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0 0 auto 0;
-  height: 420px;
-  background: radial-gradient(80% 100% at 50% 0%, rgba(225, 29, 47, 0.10), transparent 70%);
-  pointer-events: none;
-  z-index: 0;
-}
-
 h1,
 h2,
 h3 {
@@ -157,16 +148,16 @@ a {
 main {
   position: relative;
   z-index: 1;
-  max-width: 1160px;
+  max-width: 1120px;
   margin: 0 auto;
-  padding: var(--e6) var(--e5) var(--e7);
+  padding: var(--e7) var(--e5) 96px;
 }
 
 main > h1 {
   display: flex;
   align-items: center;
   gap: var(--e2);
-  margin-bottom: var(--e4);
+  margin-bottom: var(--e5);
 }
 
 /* A barra de fontes acompanha a rolagem: trocar de programa no meio de uma
@@ -181,8 +172,8 @@ main > h1 {
   padding: var(--e2) var(--e5);
   overflow-x: auto;
   scrollbar-width: none;
-  background: rgba(11, 13, 18, 0.85);
-  backdrop-filter: blur(12px);
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: saturate(180%) blur(20px);
   border-bottom: 1px solid var(--borda);
 }
 
@@ -234,8 +225,7 @@ main > h1 {
   padding: var(--e5);
   border: 1px solid var(--borda);
   border-radius: var(--raio-g);
-  background: linear-gradient(180deg, var(--superficie), var(--fundo-alto));
-  box-shadow: var(--sombra);
+  background: var(--fundo-alto);
 }
 
 .campo {
@@ -265,10 +255,10 @@ main > h1 {
 input,
 select {
   width: 100%;
-  padding: 9px var(--e3);
-  border: 1px solid var(--borda-forte);
+  padding: 10px var(--e3);
+  border: 1px solid var(--borda);
   border-radius: var(--raio-p);
-  background: var(--fundo);
+  background: var(--superficie);
   color: var(--texto);
   font: inherit;
   transition: border-color var(--transicao), box-shadow var(--transicao);
@@ -280,7 +270,7 @@ input::placeholder {
 
 input:hover,
 select:hover {
-  border-color: #3f4859;
+  border-color: var(--borda-forte);
 }
 
 input:focus,
@@ -332,7 +322,7 @@ button[type="submit"] {
   margin-left: auto;
   padding: 10px var(--e5);
   border: 0;
-  border-radius: var(--raio-p);
+  border-radius: 100px;
   background: var(--marca);
   color: #fff;
   font: inherit;
@@ -445,7 +435,6 @@ button:disabled {
   align-items: center;
   gap: var(--e3) var(--e4);
   padding: var(--e4) var(--e5);
-  background: var(--superficie);
   border-bottom: 1px solid var(--borda);
 }
 
@@ -551,7 +540,6 @@ button:disabled {
 .job-tetos {
   margin: 0;
   padding: var(--e2) var(--e5);
-  background: var(--fundo);
   border-bottom: 1px solid var(--borda);
   font-size: 12px;
   color: var(--texto-fraco);
@@ -570,8 +558,8 @@ button:disabled {
 .btn-rebuscar,
 .btn-apagar-item {
   padding: 6px var(--e3);
-  border: 1px solid var(--borda-forte);
-  border-radius: var(--raio-p);
+  border: 1px solid var(--borda);
+  border-radius: 100px;
   background: var(--superficie-alta);
   color: var(--texto-suave);
   font: inherit;
@@ -675,9 +663,9 @@ button:disabled {
   align-items: center;
   gap: var(--e2);
   margin-bottom: var(--e3);
-  padding: var(--e2) var(--e3);
+  padding: var(--e2) 0;
   border-radius: var(--raio-p);
-  background: var(--superficie);
+  background: transparent;
   font-family: var(--mono);
   font-size: 13px;
   letter-spacing: 0.04em;
@@ -722,7 +710,7 @@ button:disabled {
 .coluna {
   border: 1px solid var(--borda);
   border-radius: var(--raio);
-  background: var(--fundo);
+  background: var(--fundo-alto);
   overflow: hidden;
 }
 
@@ -730,8 +718,8 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: var(--e2);
-  padding: var(--e2) var(--e3);
-  background: var(--superficie);
+  padding: var(--e3);
+  background: transparent;
   cursor: pointer;
   list-style: none;
   user-select: none;
@@ -801,7 +789,7 @@ button:disabled {
   display: inline-flex;
   align-items: baseline;
   gap: 3px;
-  padding: 2px 6px;
+  padding: 3px 8px;
   border: 1px solid var(--borda);
   border-radius: var(--raio-p);
   background: var(--superficie);
@@ -955,7 +943,6 @@ button:disabled {
 .job-busca > .alerta-acoes {
   margin: 0;
   padding: var(--e3) var(--e5);
-  background: var(--fundo);
   border-bottom: 1px solid var(--borda);
 }
 
