@@ -57,13 +57,14 @@
   --raio-g: 18px;
   --sombra: none;
   --sombra-alta: 0 8px 30px -12px rgba(0, 0, 0, 0.8);
-  --anel: 0 0 0 3px rgba(225, 29, 47, 0.40);
+  --anel: 0 0 0 3px rgba(225, 29, 47, 0.4);
 
   /* tipografia — San Francisco, a fonte de sistema da Apple. `-apple-system`
      já resolve pra ela no macOS e no iOS; os nomes explícitos cobrem quem tem
      o SF Pro instalado, e o resto da pilha é o fallback de outros sistemas.
      Nada é baixado: fonte de sistema não custa requisição nem pisca no load. */
-  --fonte: "SF Pro Text", "SF Pro Display", -apple-system, BlinkMacSystemFont,
+  --fonte:
+    "SF Pro Text", "SF Pro Display", -apple-system, BlinkMacSystemFont,
     "Segoe UI", system-ui, sans-serif;
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
 
@@ -160,6 +161,14 @@ main > h1 {
   margin-bottom: var(--e5);
 }
 
+.versao {
+  padding-top: 4px;
+  font-size: 16px;
+  font-weight: 400;
+  letter-spacing: -0.005em;
+  color: var(--texto-suave);
+}
+
 /* A barra de fontes acompanha a rolagem: trocar de programa no meio de uma
    lista longa de resultados era o clique mais caro da interface. */
 .abas {
@@ -192,7 +201,9 @@ main > h1 {
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
-  transition: background var(--transicao), color var(--transicao);
+  transition:
+    background var(--transicao),
+    color var(--transicao);
 }
 
 .aba-btn:hover:not(:disabled) {
@@ -203,7 +214,7 @@ main > h1 {
 .aba-btn.ativo {
   background: var(--marca-fundo);
   color: var(--marca-forte);
-  box-shadow: inset 0 0 0 1px rgba(225, 29, 47, 0.40);
+  box-shadow: inset 0 0 0 1px rgba(225, 29, 47, 0.4);
 }
 
 .painel {
@@ -261,7 +272,9 @@ select {
   background: var(--superficie);
   color: var(--texto);
   font: inherit;
-  transition: border-color var(--transicao), box-shadow var(--transicao);
+  transition:
+    border-color var(--transicao),
+    box-shadow var(--transicao);
 }
 
 input::placeholder {
@@ -328,7 +341,9 @@ button[type="submit"] {
   font: inherit;
   font-weight: 600;
   cursor: pointer;
-  transition: background var(--transicao), transform var(--transicao);
+  transition:
+    background var(--transicao),
+    transform var(--transicao);
 }
 
 button[type="submit"]:hover:not(:disabled) {
@@ -567,7 +582,10 @@ button:disabled {
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
-  transition: background var(--transicao), color var(--transicao), border-color var(--transicao);
+  transition:
+    background var(--transicao),
+    color var(--transicao),
+    border-color var(--transicao);
 }
 
 .btn-acao:hover:not(:disabled),
@@ -632,7 +650,9 @@ button:disabled {
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: color var(--transicao), border-color var(--transicao);
+  transition:
+    color var(--transicao),
+    border-color var(--transicao);
 }
 
 .sub-aba-btn:hover:not(:disabled) {
@@ -796,7 +816,9 @@ button:disabled {
   font-family: var(--mono);
   font-size: 12px;
   line-height: 1.5;
-  transition: border-color var(--transicao), transform var(--transicao);
+  transition:
+    border-color var(--transicao),
+    transform var(--transicao);
 }
 
 .cartao:hover {
@@ -966,7 +988,9 @@ button:disabled {
   max-width: 220px;
   border: 1px solid var(--borda);
   border-radius: var(--raio-p);
-  transition: border-color var(--transicao), transform var(--transicao);
+  transition:
+    border-color var(--transicao),
+    transform var(--transicao);
 }
 
 .alerta-galeria a:hover img {
@@ -1043,7 +1067,9 @@ button:disabled {
   border: 1px solid var(--borda);
   border-radius: var(--raio);
   background: var(--fundo-alto);
-  transition: border-color var(--transicao), background var(--transicao);
+  transition:
+    border-color var(--transicao),
+    background var(--transicao);
 }
 
 .item-historico:hover {
