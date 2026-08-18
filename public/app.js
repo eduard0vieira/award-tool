@@ -532,35 +532,177 @@ function atualizarAcoesCard(card) {
   card.btnCopiarVoltaEl.hidden = !textoDaPerna(card.pernasCopia[1]);
 }
 
+
+// ── Buscas que sobrevivem ao F5 ─────────────────────────────────────────────
+//
+// O servidor guarda cada job em memória e o endpoint de eventos reenvia o
+// estado atual pra quem chega atrasado — inclusive o "done" com o relatório
+// inteiro. Então basta o front lembrar QUAIS buscas ele começou.
+//
+// De cada busca ficam guardados: a fonte, os argumentos originais e a lista de
+// passos (uma perna = um passo = um job no servidor). Quando um passo termina,
+// o resultado dele também é guardado — assim uma busca concluída volta na hora,
+// mesmo que o servidor tenha reiniciado no meio.
+const BUSCAS_KEY = "botEmissoes.buscas.v1";
+const MAX_BUSCAS_SALVAS = 10;
+const VALIDADE_BUSCA_MS = 24 * 60 * 60 * 1000;
+// localStorage costuma parar em 5 MB; um relatório de ano inteiro tem alguns KB.
+// O teto existe pra uma busca gigante não derrubar a gravação das outras.
+const MAX_BYTES_BUSCAS = 1_500_000;
+
+function carregarBuscas() {
+  try {
+    const lista = JSON.parse(localStorage.getItem(BUSCAS_KEY)) || [];
+    const limite = Date.now() - VALIDADE_BUSCA_MS;
+    return lista.filter((b) => b.criadaEm > limite);
+  } catch {
+    return [];
+  }
+}
+
+function gravarBuscas(lista) {
+  // Descarta as mais antigas até caber. Falhar em silêncio aqui seria pior que
+  // perder histórico: a busca em si continua funcionando.
+  let recorte = lista.slice(-MAX_BUSCAS_SALVAS);
+  while (recorte.length > 0) {
+    const texto = JSON.stringify(recorte);
+    if (texto.length <= MAX_BYTES_BUSCAS) {
+      try {
+        localStorage.setItem(BUSCAS_KEY, texto);
+        return;
+      } catch {
+        /* cota estourada: tenta com menos */
+      }
+    }
+    recorte = recorte.slice(1);
+  }
+  localStorage.removeItem(BUSCAS_KEY);
+}
+
+function persistirSessao(sessao) {
+  const lista = carregarBuscas().filter((b) => b.id !== sessao.registro.id);
+  lista.push(sessao.registro);
+  gravarBuscas(lista);
+}
+
+// `args` precisa ser serializável: é com ele que a busca é remontada depois.
+function novaSessao(fonte, args) {
+  return {
+    registro: { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, fonte, args, passos: [], criadaEm: Date.now() },
+    retomando: false,
+    indice: 0,
+  };
+}
+
+// Qual função remonta cada fonte. A ordem dos argumentos é a mesma com que a
+// busca foi iniciada — por isso `args` é guardado como veio.
+const RETOMAR_POR_FONTE = {
+  tap: (...a) => iniciarBuscaTap(...a),
+  seatspy: (...a) => iniciarBuscaSeatspy(...a),
+  smiles: (...a) => iniciarBuscaSmiles(...a),
+  aa: (...a) => iniciarBuscaAA(...a),
+  latam: (...a) => iniciarBuscaLatam(...a),
+};
+
+async function restaurarBuscas() {
+  const salvas = carregarBuscas();
+  if (salvas.length === 0) return;
+
+  const vivas = [];
+  for (const registro of salvas) {
+    const remontar = RETOMAR_POR_FONTE[registro.fonte];
+    if (!remontar) continue;
+
+    // Um passo serve se já tem resultado guardado (não depende do servidor) ou
+    // se o job ainda existe lá. Se o servidor reiniciou e o passo estava no ar,
+    // não há o que recuperar — a busca inteira sai da lista em vez de voltar
+    // como um card quebrado.
+    const passos = [];
+    let intacta = true;
+    for (const passo of registro.passos) {
+      if (passo.resultado) {
+        passos.push(passo);
+        continue;
+      }
+      const existe = await fetch(`/api/buscar/${passo.jobId}/estado`)
+        .then((r) => r.ok)
+        .catch(() => false);
+      if (!existe) {
+        intacta = false;
+        break;
+      }
+      passos.push(passo);
+    }
+    if (!intacta) continue;
+
+    vivas.push({ ...registro, passos });
+  }
+
+  gravarBuscas(vivas);
+  for (const registro of vivas) {
+    RETOMAR_POR_FONTE[registro.fonte](...registro.args, { registro, retomando: true, indice: 0 });
+  }
+}
+
 // Roda uma busca via SSE e resolve com o resultado final: o relatório da
 // perna (TAP) ou a lista de pernas (SeatSpy, que traz ida e volta juntas).
 // Atualiza só o card dessa busca — outros cards em paralelo não são afetados.
-function buscarNoServidor(card, corpo, rotuloProgresso) {
+function buscarNoServidor(card, corpo, rotuloProgresso, sessao) {
   return new Promise(async (resolve, reject) => {
     card.progressoLabelEl.textContent = rotuloProgresso;
     card.progressoJanelaEl.textContent = "";
     atualizarBarra(card.barraEl, 0);
     card.definirStatus("Na fila", "status-fila");
 
+    // Cada chamada é um passo da busca (a ida é um, a volta é outro). Ao
+    // retomar, o passo já conhecido é reaproveitado; quando acabam os passos
+    // guardados, a busca simplesmente continua de onde parou — que é o que
+    // teria acontecido se o F5 não existisse.
+    const passo = sessao?.registro.passos[sessao.indice];
+    sessao && sessao.indice++;
+
+    if (passo?.resultado) {
+      card.definirStatus("Pronto", "status-pronto");
+      atualizarBarra(card.barraEl, 1);
+      card.progressoLabelEl.textContent = "Recuperado";
+      resolve(passo.resultado);
+      return;
+    }
+
+    const guardarResultado = (dados) => {
+      if (!sessao) return;
+      const alvo = sessao.registro.passos[sessao.indice - 1];
+      if (alvo) alvo.resultado = dados;
+      persistirSessao(sessao);
+    };
+
+    let jobId = passo?.jobId;
     let resposta;
-    try {
-      resposta = await fetch("/api/buscar", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(corpo),
-      });
-    } catch {
-      reject(new Error("Não foi possível conectar ao servidor."));
-      return;
+    if (!jobId) {
+      try {
+        resposta = await fetch("/api/buscar", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(corpo),
+        });
+      } catch {
+        reject(new Error("Não foi possível conectar ao servidor."));
+        return;
+      }
+
+      if (!resposta.ok) {
+        const corpo = await resposta.json().catch(() => ({}));
+        reject(new Error(corpo.erro || "Erro ao iniciar a busca."));
+        return;
+      }
+
+      ({ jobId } = await resposta.json());
+      if (sessao) {
+        sessao.registro.passos[sessao.indice - 1] = { jobId };
+        persistirSessao(sessao);
+      }
     }
 
-    if (!resposta.ok) {
-      const corpo = await resposta.json().catch(() => ({}));
-      reject(new Error(corpo.erro || "Erro ao iniciar a busca."));
-      return;
-    }
-
-    const { jobId } = await resposta.json();
     const fonte = new EventSource(`/api/buscar/${jobId}/eventos`);
 
     fonte.onmessage = (evento) => {
@@ -581,13 +723,15 @@ function buscarNoServidor(card, corpo, rotuloProgresso) {
         card.avisoEl.hidden = !dado.mensagem;
       } else if (dado.tipo === "done") {
         fonte.close();
-        resolve({
+        const dados = {
           resultado: dado.pernas || dado.secaoAA || dado.relatorio,
           planilhaUrl: dado.planilhaUrl,
           avisoParcial: dado.avisoParcial,
           tetosAplicados: dado.tetosAplicados,
           confirmacao: dado.confirmacao,
-        });
+        };
+        guardarResultado(dados);
+        resolve(dados);
       } else if (dado.tipo === "erro") {
         fonte.close();
         reject(new Error(dado.mensagem));
@@ -857,14 +1001,15 @@ function tetoEmMilhas(input) {
 // Cada chamada cria seu próprio card (ver criarCardJob) e roda de forma
 // independente — várias buscas podem estar em andamento ao mesmo tempo
 // (modo agents), cada uma numa sessão própria do pool no servidor.
-async function iniciarBuscaTap(origem, destino, idaEVolta, tetos) {
+async function iniciarBuscaTap(origem, destino, idaEVolta, tetos, sessao) {
+  sessao = sessao || novaSessao("tap", [origem, destino, idaEVolta, tetos]);
   const seta = idaEVolta ? "⇄" : "→";
   const card = criarCardJob(filaTap, `TAP: ${origem} ${seta} ${destino}`);
   const avisosParciais = [];
 
   try {
     const rotuloIda = idaEVolta ? "Buscando ida..." : "Buscando...";
-    const { resultado: relatorioIda, avisoParcial: avisoIda, tetosAplicados } = await buscarNoServidor(card, { origem, destino, tetos }, rotuloIda);
+    const { resultado: relatorioIda, avisoParcial: avisoIda, tetosAplicados } = await buscarNoServidor(card, { origem, destino, tetos }, rotuloIda, sessao);
     if (tetosAplicados) {
       card.tetosEl.textContent =
         `Teto aplicado: Executiva ${tetosAplicados.executivaK}K · Econômica ${tetosAplicados.economicaK}K`;
@@ -882,14 +1027,14 @@ async function iniciarBuscaTap(origem, destino, idaEVolta, tetos) {
       { rotulo: "Executiva", ...relatorioIda.executivas },
       { rotulo: "Econômica", ...relatorioIda.economicas },
     ]);
-    salvarNoHistorico(origem, destino, "tap");
+    if (!sessao.retomando) salvarNoHistorico(origem, destino, "tap");
 
     let relatorioVolta = null;
     if (idaEVolta) {
       const { resultado, avisoParcial: avisoVolta } = await buscarNoServidor(
         card,
         { origem: destino, destino: origem, tetos },
-        "Buscando volta...",
+        "Buscando volta...", sessao,
       );
       relatorioVolta = resultado;
       if (avisoVolta) avisosParciais.push(avisoVolta);
@@ -930,7 +1075,8 @@ async function iniciarBuscaTap(origem, destino, idaEVolta, tetos) {
 
 // Idem, mas pro SeatSpy: uma busca só já traz ida e volta juntas (e consome
 // um crédito só), então não tem o passo separado de "buscar volta" da TAP.
-async function iniciarBuscaSeatspy(programa, origem, destino, idaEVolta) {
+async function iniciarBuscaSeatspy(programa, origem, destino, idaEVolta, sessao) {
+  sessao = sessao || novaSessao("seatspy", [programa, origem, destino, idaEVolta]);
   const rotuloPrograma = PROGRAMA_LABEL[programa] || programa;
   const seta = idaEVolta ? "⇄" : "→";
   const card = criarCardJob(filaSeatspy, `${rotuloPrograma}: ${origem} ${seta} ${destino}`);
@@ -950,7 +1096,7 @@ async function iniciarBuscaSeatspy(programa, origem, destino, idaEVolta) {
           executiva: tetoEmMilhas(inputSeatspyTetoExecutiva),
         },
       },
-      idaEVolta ? "Buscando ida e volta..." : "Buscando...",
+      idaEVolta ? "Buscando ida e volta..." : "Buscando...", sessao,
     );
     for (const perna of pernas) {
       renderizarPernaSecoes(card.resultadoEl, perna.rotulo, perna.secoes);
@@ -961,7 +1107,7 @@ async function iniciarBuscaSeatspy(programa, origem, destino, idaEVolta) {
         economica: extrairDiasPorRotulo(perna.secoes, "Econômica"),
       });
     }
-    salvarNoHistorico(origem, destino, programa, idaEVolta);
+    if (!sessao.retomando) salvarNoHistorico(origem, destino, programa, idaEVolta);
 
     card.definirStatus("Pronto", "status-pronto");
     card.resultadoEl.hidden = false;
@@ -1002,7 +1148,8 @@ function mostrarLinkPlanilha(card, url, rotulo) {
 
 // Smiles: uma direção por job (o endpoint é de ida simples), com as três
 // cabines juntas — o front pede a volta como segundo job, igual à AA.
-async function iniciarBuscaSmiles(origem, destino, tetos, idaEVolta) {
+async function iniciarBuscaSmiles(origem, destino, tetos, idaEVolta, sessao) {
+  sessao = sessao || novaSessao("smiles", [origem, destino, tetos, idaEVolta]);
   const seta = idaEVolta ? "⇄" : "→";
   const card = criarCardJob(filaSmiles, `Smiles: ${origem} ${seta} ${destino}`);
   const avisosParciais = [];
@@ -1013,20 +1160,20 @@ async function iniciarBuscaSmiles(origem, destino, tetos, idaEVolta) {
     const { resultado: pernasIda, avisoParcial: avisoIda, planilhaUrl: planilhaIda } = await buscarNoServidor(
       card,
       { ...corpoBase, origem, destino },
-      idaEVolta ? "Buscando ida..." : "Buscando...",
+      idaEVolta ? "Buscando ida..." : "Buscando...", sessao,
     );
     if (avisoIda) avisosParciais.push(avisoIda);
     const rotuloIda = idaEVolta ? `Ida: ${origem} → ${destino}` : `${origem} → ${destino}`;
     renderizarPernaSecoes(card.resultadoEl, rotuloIda, pernasIda[0].secoes);
     registrarPernaCopia(card, pernasIda[0].secoes);
-    salvarNoHistorico(origem, destino, "SMILES", false);
+    if (!sessao.retomando) salvarNoHistorico(origem, destino, "SMILES", false);
 
     let pernasVolta = null;
     if (idaEVolta) {
       const { resultado, avisoParcial: avisoVolta, planilhaUrl: planilhaVolta } = await buscarNoServidor(
         card,
         { ...corpoBase, origem: destino, destino: origem },
-        "Buscando volta...",
+        "Buscando volta...", sessao,
       );
       pernasVolta = resultado;
       if (avisoVolta) avisosParciais.push(avisoVolta);
@@ -1206,7 +1353,8 @@ function inserirDepoisDoAlerta(card, bloco) {
 
 // AA: uma cabine por busca, cada direção é um job próprio (como na TAP).
 // Sem aba Upgrade (não há cruzamento de cabines numa busca de cabine única).
-async function iniciarBuscaAA(origem, destino, cabine, maxConexoes, tetoK, idaEVolta, passageiros = 1) {
+async function iniciarBuscaAA(origem, destino, cabine, maxConexoes, tetoK, idaEVolta, passageiros = 1, sessao) {
+  sessao = sessao || novaSessao("aa", [origem, destino, cabine, maxConexoes, tetoK, idaEVolta, passageiros]);
   const seta = idaEVolta ? "⇄" : "→";
   const rotuloCabine = CABINE_AA_LABEL[cabine] || cabine;
   // O caso comum é 1 passageiro; só polui o título do card quando for mais.
@@ -1224,19 +1372,20 @@ async function iniciarBuscaAA(origem, destino, cabine, maxConexoes, tetoK, idaEV
       card,
       { ...corpoBase, origem, destino },
       rotuloIda,
+      sessao,
     );
     if (avisoIda) avisosParciais.push(avisoIda);
     const rotuloPernaIda = idaEVolta ? `Ida: ${origem} → ${destino}` : `${origem} → ${destino}`;
     renderizarPernaSecoes(card.resultadoEl, rotuloPernaIda, [{ ...secaoIda, corClasse: CABINE_AA_COR[cabine] }]);
     registrarPernaCopia(card, [secaoIda]);
-    salvarNoHistorico(origem, destino, "AA", false, { cabine, passageiros });
+    if (!sessao.retomando) salvarNoHistorico(origem, destino, "AA", false, { cabine, passageiros });
 
     let secaoVolta = null;
     if (idaEVolta) {
       const { resultado, avisoParcial: avisoVolta } = await buscarNoServidor(
         card,
         { ...corpoBase, origem: destino, destino: origem },
-        "Buscando volta...",
+        "Buscando volta...", sessao,
       );
       secaoVolta = resultado;
       if (avisoVolta) avisosParciais.push(avisoVolta);
@@ -1340,21 +1489,22 @@ const origemDestinoDe = (card) => card.rotaEl.textContent || "";
 // LATAM: uma busca só devolve ida e volta (o calendário traz as duas
 // direções). Sem botão de alerta: o card do portal fala em milhas e ainda não
 // sabe exibir tarifa em reais.
-async function iniciarBuscaLatam(origem, destino, tetos, confirmarMilhas) {
+async function iniciarBuscaLatam(origem, destino, tetos, confirmarMilhas, sessao) {
+  sessao = sessao || novaSessao("latam", [origem, destino, tetos, confirmarMilhas]);
   const card = criarCardJob(filaLatam, `LATAM: ${origem} ⇄ ${destino}`);
 
   try {
     const { resultado: pernas, avisoParcial, confirmacao } = await buscarNoServidor(
       card,
       { fonte: "latam", origem, destino, tetos, confirmarMilhas, margemIdaReais: 100, margemVoltaReais: 300 },
-      "Buscando ida e volta...",
+      "Buscando ida e volta...", sessao,
     );
     for (const perna of pernas) {
       renderizarPernaSecoes(card.resultadoEl, perna.rotulo, perna.secoes);
       registrarPernaCopia(card, perna.secoes);
     }
     if (confirmacao) mostrarConfirmacaoMilhas(card, confirmacao);
-    salvarNoHistorico(origem, destino, "LATAM", true);
+    if (!sessao.retomando) salvarNoHistorico(origem, destino, "LATAM", true);
 
     card.definirStatus("Pronto", "status-pronto");
     card.resultadoEl.hidden = false;
@@ -1498,3 +1648,7 @@ formSeatspy.addEventListener("submit", (evento) => {
   if (!avisoDeRepeticao(programa, origem, destino, idaEVolta)) return;
   iniciarBuscaSeatspy(programa, origem, destino, idaEVolta);
 });
+
+// As buscas voltam sozinhas depois de um F5. Roda por último: as funções de
+// cada fonte e os elementos de formulário já precisam existir.
+restaurarBuscas();

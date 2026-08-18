@@ -88,6 +88,7 @@ type Job = {
   secaoAA?: SecaoRelatorio & { rotulo: string }; // resultado das buscas na AA (uma cabine por busca)
   confirmacao?: ConfirmacaoLatam; // confirmação em milhas do melhor par (LATAM)
   planilhaUrl?: string; // planilha da busca (uma nova por busca — ver planilha.ts)
+  tetosAplicados?: { executivaK: number; economicaK: number }; // guardado pra sobreviver a um F5
   erro?: string;
   ouvintes: Set<Response>;
 };
@@ -264,6 +265,7 @@ function executarJob(jobId: string, params: { origem: string; destino: string; t
       ],
       tetos: { Executiva: tetosAplicados.executivaK, "Econômica": tetosAplicados.economicaK },
     });
+    job.tetosAplicados = tetosAplicados;
     emitirEvento(jobId, { tipo: "done", relatorio, avisoParcial, tetosAplicados });
   });
 }
@@ -783,6 +785,19 @@ app.post("/api/alerta", async (req: Request, res: Response) => {
   }
 });
 
+// O front guarda os ids das buscas pra recuperá-las depois de um F5. Se o
+// servidor reiniciou no meio, os jobs sumiram da memória — isto é o que o front
+// consulta pra descartar o que não existe mais, em vez de abrir um SSE que
+// morre com 404.
+app.get("/api/buscar/:jobId/estado", (req: Request, res: Response) => {
+  const job = jobs.get(String(req.params.jobId));
+  if (!job) {
+    res.status(404).json({ erro: "Busca não existe mais." });
+    return;
+  }
+  res.json({ status: job.status, progresso: job.progresso });
+});
+
 app.get("/api/buscar/:jobId/eventos", (req: Request, res: Response) => {
   const jobId = String(req.params.jobId);
   const job = jobs.get(jobId);
@@ -810,11 +825,15 @@ app.get("/api/buscar/:jobId/eventos", (req: Request, res: Response) => {
     res.write(`data: ${JSON.stringify({ tipo: "aviso", mensagem: job.avisoAtual })}\n\n`);
   }
   if (job.status === "done") {
+    // O reenvio precisa carregar tudo que o evento ao vivo carrega — planilha e
+    // tetos inclusive. Sem isso, uma busca recuperada depois de um F5 voltava
+    // sem o link da planilha e parecia que ela não tinha sido gerada.
+    const comum = { planilhaUrl: job.planilhaUrl, tetosAplicados: job.tetosAplicados };
     const dado = job.pernas
-      ? { tipo: "done", pernas: job.pernas, confirmacao: job.confirmacao }
+      ? { tipo: "done", ...comum, pernas: job.pernas, confirmacao: job.confirmacao }
       : job.secaoAA
-        ? { tipo: "done", secaoAA: job.secaoAA, avisoParcial: job.avisoParcial }
-        : { tipo: "done", relatorio: job.relatorio, avisoParcial: job.avisoParcial };
+        ? { tipo: "done", ...comum, secaoAA: job.secaoAA, avisoParcial: job.avisoParcial }
+        : { tipo: "done", ...comum, relatorio: job.relatorio, avisoParcial: job.avisoParcial };
     res.write(`data: ${JSON.stringify(dado)}\n\n`);
     res.end();
     return;
