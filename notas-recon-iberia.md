@@ -83,7 +83,29 @@ controle sem Avios rodou com Avios ligado na primeira tentativa e mentiu), e
 **escrever no campo de data não basta** — o valor aparece, mas o calendário mantém
 o estado dele por dentro.
 
-## 5. O que falta, e de quem depende
+## 5. Como fazer o login (fluxo pronto)
+
+```
+npm run recon:iberia GRU MAD 2026-11-16
+```
+
+O script preenche a busca, e quando a Iberia mandar pro login ele **para e espera
+você**: traz a janela do Chrome do bot pra frente, avisa no terminal, e fica
+checando a cada 3 segundos. Você digita e-mail e senha **na janela**, e assim que a
+sessão abrir o recon continua sozinho — se a Iberia não refizer a busca, ele repete
+o formulário com a sessão já válida.
+
+- espera padrão: 10 min (`IBERIA_ESPERA_LOGIN_MS` muda isso);
+- o login fica salvo no perfil do Chrome do bot (`~/.chrome-bot-aa`), então é
+  **uma vez só**, não a cada busca;
+- **a senha não passa pelo script**: ele não lê, não preenche e não guarda nada —
+  quem digita é você, direto no navegador.
+
+Se aparecer o erro de perfil em uso, feche o Chrome do bot com `npm run
+chrome:parar` (ou pare o `npm run server`, que também segura o perfil) e rode de
+novo.
+
+## 6. O que falta, e de quem depende
 
 Com uma sessão logada da Iberia Club, o caminho daqui é o mesmo que funcionou na
 Azul: deixar o site fazer a requisição e trocar o corpo. Mas o login é do dono da

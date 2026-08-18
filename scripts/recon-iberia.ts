@@ -40,6 +40,10 @@ function dataBR(iso: string): string {
   return `${d}/${m}/${a}`;
 }
 
+// Quanto tempo o script espera você fazer o login na janela do bot. O login
+// fica salvo no perfil, então isso é uma vez só — não a cada busca.
+const ESPERA_LOGIN_MS = Number(process.env.IBERIA_ESPERA_LOGIN_MS) || 600_000;
+
 const SIGILOSOS = ["authorization", "cookie", "x-acf-sensor-data"];
 const mascarar = (n: string, v: string) =>
   SIGILOSOS.includes(n.toLowerCase()) ? `<${v.length} chars — não impresso>` : v;
@@ -99,7 +103,27 @@ async function main() {
   }
 
   console.log("3. Esperando o resultado...");
-  await page.waitForTimeout(20_000);
+  const temBusca = () =>
+    capturas.some((c) => /availability|shopping|flights|fares/i.test(c.url) && (c.corpoRecebido?.length ?? 0) > 2000);
+
+  await esperarAte(page, 25_000, () => temBusca() || pedindoLogin(page));
+
+  if (pedindoLogin(page)) {
+    if (!(await esperarLoginManual(page))) {
+      await encerrar(page);
+      return;
+    }
+    // Depois do login a Iberia volta pro fluxo de reserva sozinha; se não voltar,
+    // refaz a busca — agora com sessão.
+    await esperarAte(page, 30_000, temBusca);
+    if (!temBusca()) {
+      console.log("   a busca não refez sozinha depois do login — repetindo o formulário...");
+      await page.goto("https://www.iberia.com/br/", { waitUntil: "domcontentloaded", timeout: 90_000 });
+      await page.waitForTimeout(5000);
+      await recusarCookies(page);
+      if (await preencherFormulario(page)) await esperarAte(page, 40_000, temBusca);
+    }
+  }
 
   console.log(`\n   URL final: ${page.url()}`);
   console.log(`   Título: ${await page.title()}`);
@@ -134,6 +158,46 @@ async function main() {
   console.log(`\n✅ Resposta crua salva em fixtures/iberia-real.json (${busca.corpoRecebido.length} bytes).`);
 
   await encerrar(page);
+}
+
+const pedindoLogin = (page: import("playwright").Page) => /login\.iberia\.com/.test(page.url());
+
+// A busca com Avios não chama disponibilidade nenhuma sem conta: ela redireciona
+// pro login. Então o script para aqui e devolve o volante — a senha é sua e não
+// passa por este processo.
+async function esperarLoginManual(page: import("playwright").Page): Promise<boolean> {
+  await page.bringToFront().catch(() => {});
+  const minutos = Math.round(ESPERA_LOGIN_MS / 60000);
+  console.log("");
+  console.log("   ┌──────────────────────────────────────────────────────────────┐");
+  console.log("   │  A Iberia pediu login pra buscar com Avios.                  │");
+  console.log("   │                                                              │");
+  console.log("   │  Entre na janela do Chrome que está aberta (é a do bot) e     │");
+  console.log("   │  faça o login na sua conta Iberia Club. Assim que a sessão    │");
+  console.log("   │  abrir, o recon continua sozinho.                            │");
+  console.log("   │                                                              │");
+  console.log(`   │  Espero até ${String(minutos).padStart(2)} min. Nada do que você digitar passa por      │`);
+  console.log("   │  aqui — o login fica salvo no perfil do Chrome do bot.        │");
+  console.log("   └──────────────────────────────────────────────────────────────┘");
+  console.log("");
+
+  const limite = Date.now() + ESPERA_LOGIN_MS;
+  let ultimo = "";
+  while (Date.now() < limite) {
+    await page.waitForTimeout(3000);
+    if (!pedindoLogin(page)) {
+      console.log(`   ✅ login concluído — a página saiu do login (${page.url().slice(0, 80)})`);
+      return true;
+    }
+    const faltam = Math.round((limite - Date.now()) / 60000);
+    const marca = `${faltam}`;
+    if (marca !== ultimo) {
+      console.log(`   ...esperando o login (${faltam} min restantes)`);
+      ultimo = marca;
+    }
+  }
+  console.log(`   ⏱️  passaram ${minutos} min sem login. Rode de novo quando puder — o que já foi descoberto está nas notas.`);
+  return false;
 }
 
 // O aviso de cookies da Iberia oferece só "Aceitar todos" e "Definições" — não
@@ -262,6 +326,13 @@ async function preencherFormulario(page: import("playwright").Page): Promise<boo
     console.log(`   (falhou: ${(erro as Error).message.slice(0, 200)})`);
     return false;
   }
+}
+
+// Espera por uma condição em vez de por um tempo fixo: o que interessa é a
+// captura chegar, não o relógio.
+async function esperarAte(page: import("playwright").Page, limiteMs: number, pronto: () => boolean) {
+  const fim = Date.now() + limiteMs;
+  while (Date.now() < fim && !pronto()) await page.waitForTimeout(1000);
 }
 
 async function encerrar(page: import("playwright").Page) {

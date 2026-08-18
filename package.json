@@ -10,7 +10,8 @@
     "tunnel": "ngrok http 5555",
     "chrome": "bash scripts/chrome-aa.sh",
     "chrome:parar": "bash scripts/parar-chrome.sh",
-    "planilha:configurar": "bash scripts/configurar-planilha.sh"
+    "planilha:configurar": "bash scripts/configurar-planilha.sh",
+    "recon:iberia": "tsx scripts/recon-iberia.ts"
   },
   "keywords": [],
   "author": "",
