@@ -56,6 +56,31 @@ export type ConfirmacaoMilhas = {
   imagem: string; // caminho do print ("" se a captura falhou)
 };
 
+// As quatro linhas da tela "Combine suas milhas + dinheiro". É uma ESCADA, não
+// um preço: da opção 1 (tudo em milhas) até a 4 (mínimo de milhas, máximo de
+// dinheiro). Guardar só uma escolheria pelo cliente sem dizer.
+export type OpcaoResgate = {
+  id: number;
+  milhas: number;
+  // O que a LATAM mostra é `dinheiro + taxa` — conferido nas quatro linhas do
+  // recon (469,56 + 255,69 = 725,25, e assim por diante). `totalReais` é esse
+  // número; `dinheiroReais` é a parte que troca milhas por dinheiro.
+  dinheiroReais: number;
+  totalReais: number;
+};
+
+export type ConfirmacaoPar = {
+  origem: string;
+  destino: string;
+  dataIda: string;
+  dataVolta: string;
+  vooIda: string;
+  vooVolta: string;
+  taxaReais: number;
+  opcoes: OpcaoResgate[];
+  imagem: string;
+};
+
 export type TetosLatam = {
   tetoReais?: number | null; // dias mais caros que isso ficam de fora
   somenteMenorTarifa?: boolean; // só os dias que o site marca como menor tarifa
@@ -278,6 +303,47 @@ type OfertaCrua = {
     newPrices?: { total?: number; taxes?: number }[];
   }[];
 };
+
+// A resposta que carrega o preço do PAR. Campo ausente aqui é erro, não zero:
+// um par que "custa 0 milhas" viraria alerta e chegaria no cliente.
+type RespostaResgate = {
+  tax?: { amount?: number; currency?: string };
+  redemptionOptions?: { id?: number; totalValueToPay?: { loyalty?: { amount?: number }; money?: { amount?: number } } }[];
+};
+
+export class ErroCampoLatam extends Error {
+  constructor(campo: string) {
+    super(`A LATAM respondeu sem "${campo}". O formato mudou — o parser precisa ser conferido antes de confiar no número.`);
+    this.name = "ErroCampoLatam";
+  }
+}
+
+function exigirNumero(valor: unknown, campo: string): number {
+  if (typeof valor !== "number" || !Number.isFinite(valor)) throw new ErroCampoLatam(campo);
+  return valor;
+}
+
+// Traduz a resposta crua na escada de opções. Sem default em campo nenhum.
+export function lerOpcoesResgate(corpo: unknown): { taxaReais: number; opcoes: OpcaoResgate[] } {
+  const r = corpo as RespostaResgate;
+  const taxaReais = exigirNumero(r?.tax?.amount, "tax.amount");
+  const cruas = r?.redemptionOptions;
+  if (!Array.isArray(cruas) || cruas.length === 0) throw new ErroCampoLatam("redemptionOptions");
+
+  const opcoes = cruas.map((o, i) => {
+    const milhas = exigirNumero(o?.totalValueToPay?.loyalty?.amount, `redemptionOptions[${i}].loyalty.amount`);
+    const dinheiroReais = exigirNumero(o?.totalValueToPay?.money?.amount, `redemptionOptions[${i}].money.amount`);
+    return {
+      id: exigirNumero(o?.id, `redemptionOptions[${i}].id`),
+      milhas,
+      dinheiroReais,
+      totalReais: Number((dinheiroReais + taxaReais).toFixed(2)),
+    };
+  });
+  // Da mais milhas pra menos milhas, que é a ordem em que a LATAM mostra.
+  opcoes.sort((a, b) => b.milhas - a.milhas);
+  return { taxaReais, opcoes };
+}
 
 // A busca em milhas exige sessão logada. Quando a sessão cai, o caminho é
 // entrar na JANELA DO BOT (que está aberta e visível) — o login fica salvo no
