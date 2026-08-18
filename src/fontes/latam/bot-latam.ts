@@ -61,6 +61,10 @@ export type OpcaoResgate = {
 };
 
 export type ConfirmacaoPar = {
+  // Preenchidos pelo servidor com o formatador comum: é o que o gerador de
+  // alertas parseia ("Out 2026: 31").
+  textoIda?: string;
+  textoVolta?: string;
   origem: string;
   destino: string;
   dataIda: string;

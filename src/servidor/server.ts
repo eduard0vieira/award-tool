@@ -41,7 +41,7 @@ import {
   type SessaoLatam,
   type TetosLatam,
 } from "../fontes/latam/bot-latam.ts";
-import type { SecaoRelatorio } from "../nucleo/comum.ts";
+import { formatarListaPorMes, type SecaoRelatorio } from "../nucleo/comum.ts";
 import { DIR_PUBLICO } from "../nucleo/caminhos.ts";
 import { PoolSessoes } from "../nucleo/pool-sessoes.ts";
 import { sessaoViva } from "../nucleo/sessao-chrome.ts";
@@ -587,7 +587,16 @@ function executarJobLatam(
               // saber que a busca está parada esperando ele na janela do bot.
               (mensagem) => atualizarAviso(jobId, mensagem),
             );
-            if (c) confirmados.push({ ...c, imagem: c.imagem ? `/alertas/${pasta}/${arquivo}` : "" });
+            if (c) {
+              confirmados.push({
+                ...c,
+                imagem: c.imagem ? `/alertas/${pasta}/${arquivo}` : "",
+                // Datas já no formato que o gerador de alertas parseia, montadas
+                // com o mesmo formatador das outras fontes.
+                textoIda: formatarListaPorMes([c.dataIda]),
+                textoVolta: formatarListaPorMes([c.dataVolta]),
+              });
+            }
             else falhas.push(`${par.ida.data} → ${par.volta.data}: sem oferta em milhas`);
           } catch (err) {
             // Um par que falha não derruba os outros: o resultado sai parcial e

@@ -24,6 +24,7 @@ const INFO_FONTE: Record<string, { companhia: string; programa: string; unit: st
   tap: { companhia: "TAP Air Portugal", programa: "TAP Miles & Go", unit: "milhas" },
   aa: { companhia: "American Airlines", programa: "American Airlines AAdvantage", unit: "milhas" },
   SMILES: { companhia: "GOL", programa: "Smiles", unit: "milhas" },
+  LATAM: { companhia: "LATAM", programa: "LATAM Pass", unit: "pontos" },
   IB: { companhia: "Iberia", programa: "Iberia Club", unit: "Avios" },
   BA: { companhia: "British Airways", programa: "British Airways Executive Club", unit: "Avios" },
   AF: { companhia: "Air France", programa: "Air France-KLM Flying Blue", unit: "milhas" },
