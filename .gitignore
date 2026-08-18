@@ -18,3 +18,7 @@ alertas/
 planilhas/
 
 .perfil-aa/
+
+# Recon da LATAM: as fotos saem de uma sessão logada e podem mostrar nome,
+# número de conta e saldo. Ficam fora do git.
+fixtures/latam-rt/
