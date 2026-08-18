@@ -130,6 +130,33 @@ pedir.
 
 ---
 
+## Commits
+
+**Um commit por mudança, mesmo pequena.** Nada de commit que junta conserto,
+refatoração e documentação: se algo quebrar, o `git diff` precisa apontar uma
+coisa só.
+
+Mensagem no padrão Conventional Commits, uma linha:
+
+```
+<emoji> <tipo>(<escopo opcional>): <descrição>
+```
+
+- Tipos válidos: `feat`, `fix`, `chore`, `refactor`, `docs`, `style`, `test`,
+  `perf`, `ci`, `build`
+- Tipo e escopo em minúsculas; descrição no imperativo, curta e sem ponto final
+- Escopo é a fonte ou a área: `smiles`, `latam`, `aa`, `tap`, `seatspy`,
+  `servidor`, `front`, `planilha`, `alertas`
+
+```
+✨ feat(latam): confirma milhas com ida e volta na mesma busca
+🐛 fix(smiles): trata 406 como bloqueio e devolve resultado parcial
+♻️ refactor: separa as fontes em src/fontes
+📝 docs: registra o recon da azul
+```
+
+---
+
 ## Como trabalhar
 
 Uma fase por vez. Ao fim de cada fase, pare, mostre o que mudou e o resultado do
