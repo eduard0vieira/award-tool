@@ -131,19 +131,42 @@ navegações seguidas, 6 datas cada, perfil limpo.
 # 9 | a busca simplesmente não dispara mais (timeout de 60s)
 ```
 
-**Parou na 9ª, aos ~47 segundos.** E continuou parada por mais de 10 minutos de
-tentativas. A página até carrega; o que some é a chamada de disponibilidade.
+**Parou na 9ª, aos ~47 segundos.**
+
+Uma segunda sonda foi ver o que aparece na tela nesse momento, em vez de contar
+timeout — e o site diz com todas as letras:
+
+```
+403 em www.voeazul.com.br/br/pt/home/selecao-voo
+"Oops! Just a moment. We detected unusual activity from your IP.
+ Access is temporarily limited. Please try disabling VPN, clearing
+ cookies, or wait a moment. IP: <o IP de saída da máquina>"
+```
+
+Três coisas ficam claras:
+
+1. **O bloqueio é por IP, e a própria página diz isso.** Não é cookie, não é perfil,
+   não é sessão — limpar cookie não muda nada, como o texto sugere.
+2. **Cai o site inteiro, não só a API.** O 403 é na navegação; a busca nem chega a
+   ser tentada.
+3. **Dura muito.** Do primeiro bloqueio até a última tentativa passou mais de meia
+   hora, e continuava bloqueado.
+
+É o mesmo formato do 406 do Smiles, com uma diferença importante: lá o teto era de
+~100–150 requisições; aqui bastaram **8 navegações em 47 segundos**.
 
 Isso derruba o desenho ingênuo: **61 navegações seguidas não acontecem.** Um ano por
 direção precisa de outra coisa —
 
-- descobrir se a SPA refaz a busca sem recarregar (talvez o custo esteja na
-  navegação, não na consulta);
-- medir se um intervalo maior entre navegações muda o limite (no Smiles não mudou —
-  o orçamento era de volume, não de ritmo);
-- ou aceitar janelas menores por busca, como se fez no Smiles.
+- **medir se o intervalo importa.** 8 navegações em 47s é ~6s entre elas, rápido pra
+  um humano. No Smiles ritmo não mudava nada (o orçamento era de volume), mas lá a
+  mensagem falava de requisição e aqui fala de *"unusual activity"*. **É o primeiro
+  teste a fazer**, e precisa esperar o bloqueio passar;
+- descobrir se a SPA refaz a busca sem recarregar — se o gasto estiver na navegação
+  e não na consulta, muda tudo;
+- ou aceitar janelas menores por busca, como ficou o Smiles.
 
-**Nada disso está respondido ainda.** Enquanto não estiver, o módulo não tem custo
+**Nada disso está respondido.** Enquanto não estiver, o módulo não tem custo
 conhecido, e prometer "ano inteiro" seria inventar.
 
 ## 8. Forma da resposta e as armadilhas
