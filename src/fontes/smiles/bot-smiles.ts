@@ -1,7 +1,7 @@
 import "dotenv/config";
 import type { Page } from "playwright";
-import { abrirSessaoChrome, type SessaoChrome } from "./sessao-chrome.ts";
-import { LimitadorFrequencia, formatarListaPorMes, type OnLog, type SecaoRelatorio } from "./comum.ts";
+import { abrirSessaoChrome, type SessaoChrome } from "../../nucleo/sessao-chrome.ts";
+import { LimitadorFrequencia, formatarListaPorMes, type OnLog, type SecaoRelatorio } from "../../nucleo/comum.ts";
 
 // Bot do Smiles (GOL) — busca de disponibilidade em milhas, sem login.
 //

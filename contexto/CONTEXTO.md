@@ -52,20 +52,37 @@ quando exponho por ngrok qualquer um que achasse a URL dispararia busca nas
 contas pagas.
 
 **Stack:** TypeScript + Node (tsx, sem build), Express, Playwright. Front é HTML +
-JS puro, sem framework, sem bundler — `public/index.html` + `public/app.js` (1.3k
-linhas). ~4,5k linhas no total.
+JS puro, sem framework, sem bundler — `public/index.html` + `public/app.js`.
 
 ```
-bot.ts           482  AwardTool/TAP
-bot-seatspy.ts   407  SeatSpy (9 programas)
-bot-aa.ts        380  American
-bot-latam.ts     461  LATAM (calendário em R$ + confirmação em milhas com print)
-sessao-chrome.ts  70  conecta no Chrome real (CDP) ou abre perfil próprio
-pool-sessoes.ts   58  reaproveita sessões logadas entre buscas
-comum.ts          82  limitador de frequência, formatação de datas, tipos
-alertas.ts       158  gera a imagem do alerta a partir do resultado
-server.ts        646  API, fila de jobs, SSE
+src/
+  fontes/                    uma pasta por programa — é onde mora o scraping
+    tap/bot-tap.ts             531  AwardTool/TAP
+    seatspy/bot-seatspy.ts     407  SeatSpy (9 programas)
+    aa/bot-aa.ts               380  American
+    latam/bot-latam.ts         532  LATAM (calendário em R$ + confirmação em milhas)
+    smiles/bot-smiles.ts       629  Smiles/GOL
+  nucleo/                    o que toda fonte usa
+    comum.ts                    82  limitador de frequência, formatação de datas, tipos
+    sessao-chrome.ts           148  um Chrome por processo (CDP ou perfil próprio)
+    pool-sessoes.ts             58  reaproveita sessões logadas entre buscas
+    caminhos.ts                 22  todo caminho de disco sai daqui
+  saidas/                    o que vira entregável
+    alertas.ts                 157  gera a imagem do alerta a partir do resultado
+    planilha.ts                414  CSV + Google Sheets (uma aba por busca)
+  servidor/server.ts           923  API, fila de jobs, SSE
+  cli.ts                        96  busca pelo terminal, sem servidor
+public/                      front (HTML + JS puro, sem bundler)
+contexto/                    este documento e as notas de recon
+scripts/                     recon, sondas e setup (não entram no servidor)
+fixtures/                    respostas cruas das APIs, pra mexer no parser sem gastar requisição
 ```
+
+**Por que assim:** uma fonte por pasta porque é a unidade em que o trabalho
+acontece — quando o Smiles muda o schema, tudo que precisa mudar está num lugar
+só, e nada em `nucleo/` deveria precisar saber que o Smiles existe. A dependência
+só aponta pra dentro: `fontes/` e `saidas/` usam `nucleo/`, `servidor/` usa os
+três, e `nucleo/` não importa ninguém.
 
 ---
 

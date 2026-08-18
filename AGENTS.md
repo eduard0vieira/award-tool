@@ -3,7 +3,7 @@
 Regras permanentes para agentes trabalhando neste repositório.
 Tarefas específicas vêm no chat. Isto aqui vale sempre.
 
-Leia também o `CONTEXTO.md` na raiz — ele descreve a arquitetura, as fontes e o
+Leia também o `contexto/CONTEXTO.md` — ele descreve a arquitetura, as fontes e o
 estado real do sistema. Este documento cobre **como escrever código aqui**.
 
 ---
@@ -84,7 +84,7 @@ português, dia com zero à esquerda, assentos entre parênteses. É contrato co
 `vcc-alertas-portal` e com o gerador de alertas. Não invente formato novo, não
 altere `formatarListaPorMes`.
 
-**Tipo comum de saída.** Toda fonte devolve `SecaoRelatorio` (`comum.ts`). É o que
+**Tipo comum de saída.** Toda fonte devolve `SecaoRelatorio` (`src/nucleo/comum.ts`). É o que
 faz as fontes caberem no mesmo front e no mesmo gerador. Não crie tipo paralelo.
 
 **Limitador de frequência entre requisições.** Existe porque as fontes pagas
@@ -123,7 +123,7 @@ pedir.
 - Refatorar código fora do escopo da tarefa atual
 - Criar abstração nova ou camada de indireção
 - Mexer numa fonte existente enquanto trabalha em outra
-- Alterar `comum.ts`, o formato de saída ou qualquer contrato acima
+- Alterar `src/nucleo/comum.ts`, o formato de saída ou qualquer contrato acima
 
 ---
 

@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
-import { formatarListaPorMes, type OnLog, type OnProgresso } from "./comum.ts";
+import { formatarListaPorMes, type OnLog, type OnProgresso } from "../../nucleo/comum.ts";
 
 export type SessaoSeatspy = {
   browser: Browser;

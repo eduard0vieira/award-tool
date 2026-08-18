@@ -2,7 +2,7 @@ import "dotenv/config";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { abrirSessaoChrome } from "../sessao-chrome.ts";
+import { abrirSessaoChrome } from "../src/nucleo/sessao-chrome.ts";
 
 // FASE 0 do módulo Iberia.
 //

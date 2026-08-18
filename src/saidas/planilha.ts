@@ -2,7 +2,6 @@ import "dotenv/config";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
 // Registro das buscas em planilha — a memória que o bot não tem.
 //
@@ -22,8 +21,7 @@ import { fileURLToPath } from "node:url";
 // Sem dependência nova: o acesso ao Sheets é REST puro, com o JWT da conta de
 // serviço assinado pelo `node:crypto`.
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DIR_PLANILHAS = path.join(__dirname, "planilhas");
+import { DIR_PLANILHAS, RAIZ } from "../nucleo/caminhos.ts";
 const ARQUIVO_CSV = path.join(DIR_PLANILHAS, "buscas.csv");
 
 const CAMINHO_CREDENCIAIS = process.env.GOOGLE_CREDENCIAIS;
@@ -401,7 +399,7 @@ export async function registrarBusca(
       jaAvisouSemSheets = true;
       onLog(
         "Planilha do Google não configurada (GOOGLE_CREDENCIAIS + PLANILHA_ID no .env) — " +
-          `as buscas estão sendo gravadas só em ${path.relative(__dirname, ARQUIVO_CSV)}.`,
+          `as buscas estão sendo gravadas só em ${path.relative(RAIZ, ARQUIVO_CSV)}.`,
       );
     }
     return;

@@ -10,7 +10,7 @@ import {
   type OnProgresso,
   type DiaFormatado,
   type SecaoRelatorio,
-} from "./comum.ts";
+} from "../../nucleo/comum.ts";
 
 export type { OnAviso, OnJanela, OnLog, OnProgresso, SecaoRelatorio };
 

@@ -6,7 +6,7 @@
 # aberta IMPEDE o bot de abrir a dele (a busca falha até você rodar
 # `npm run chrome:parar`). O attach por porta de depuração, que era o plano
 # original, não conclui numa janela real nesta máquina — ver o comentário do
-# topo de sessao-chrome.ts.
+# topo de src/nucleo/sessao-chrome.ts.
 #
 # Continua útil pra uma coisa: abrir o navegador do bot pra você navegar/logar
 # à mão sem nenhuma busca rodando. Feche antes de voltar a buscar.

@@ -2,7 +2,6 @@ import crypto, { randomUUID } from "node:crypto";
 import express, { type Request, type Response } from "express";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import {
   construirRelatorio,
   iniciarSessao,
@@ -12,7 +11,7 @@ import {
   type Relatorio,
   type Sessao,
   type TetosTap,
-} from "./bot.ts";
+} from "../fontes/tap/bot-tap.ts";
 import {
   construirRelatorioSeatspy,
   iniciarSessaoSeatspy,
@@ -22,7 +21,7 @@ import {
   type SecaoSeatspy,
   type SessaoSeatspy,
   type TetosSeatspy,
-} from "./bot-seatspy.ts";
+} from "../fontes/seatspy/bot-seatspy.ts";
 import {
   CABINE_AA_LABEL,
   MAX_PASSAGEIROS_AA,
@@ -31,7 +30,7 @@ import {
   pesquisarAnoAA,
   type CabineAA,
   type SessaoAA,
-} from "./bot-aa.ts";
+} from "../fontes/aa/bot-aa.ts";
 import {
   confirmarEmMilhas,
   construirRelatorioLatam,
@@ -42,19 +41,20 @@ import {
   type ConfirmacaoMilhas,
   type SessaoLatam,
   type TetosLatam,
-} from "./bot-latam.ts";
-import type { SecaoRelatorio } from "./comum.ts";
-import { PoolSessoes } from "./pool-sessoes.ts";
-import { sessaoViva } from "./sessao-chrome.ts";
+} from "../fontes/latam/bot-latam.ts";
+import type { SecaoRelatorio } from "../nucleo/comum.ts";
+import { DIR_PUBLICO } from "../nucleo/caminhos.ts";
+import { PoolSessoes } from "../nucleo/pool-sessoes.ts";
+import { sessaoViva } from "../nucleo/sessao-chrome.ts";
 import {
   construirRelatorioSmiles,
   iniciarSessaoSmiles,
   pesquisarAnoSmiles,
   type SessaoSmiles,
   type TetosSmiles,
-} from "./bot-smiles.ts";
-import { DIR_ALERTAS, DIR_PORTAL_DIST, gerarAlerta, type PedidoAlerta } from "./alertas.ts";
-import { criarPlanilhaDaBusca, registrarBusca, type LinhaVoo, type PernaParaPlanilha } from "./planilha.ts";
+} from "../fontes/smiles/bot-smiles.ts";
+import { DIR_ALERTAS, DIR_PORTAL_DIST, gerarAlerta, type PedidoAlerta } from "../saidas/alertas.ts";
+import { criarPlanilhaDaBusca, registrarBusca, type LinhaVoo, type PernaParaPlanilha } from "../saidas/planilha.ts";
 
 // A extração de preços lê as 4 cores (Economy/PremiumEconomy/Business/First)
 // de cada dia independente do valor de "cabins" mandado na URL — então o
@@ -62,7 +62,6 @@ import { criarPlanilhaDaBusca, registrarBusca, type LinhaVoo, type PernaParaPlan
 // valor abaixo é só o que a busca em si exige pra funcionar.
 const CABINE_PARAM_PADRAO = "Economy";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 type InfoJanela = { atual: number; total: number; inicio: string; fim: string };
 
@@ -685,7 +684,7 @@ if (AUTH_USER && AUTH_PASS) {
 }
 
 app.use(express.json());
-app.use(express.static(path.join(__dirname, "public")));
+app.use(express.static(DIR_PUBLICO));
 // Build do portal de alertas (vcc-alertas-portal) e imagens de alerta já
 // geradas — ver alertas.ts.
 app.use("/portal", express.static(DIR_PORTAL_DIST));

@@ -1,6 +1,6 @@
 import "dotenv/config";
 import type { Page } from "playwright";
-import { abrirSessaoChrome, type SessaoChrome } from "./sessao-chrome.ts";
+import { abrirSessaoChrome, type SessaoChrome } from "../../nucleo/sessao-chrome.ts";
 import {
   LimitadorFrequencia,
   formatarListaPorMes,
@@ -8,7 +8,7 @@ import {
   type OnLog,
   type OnProgresso,
   type SecaoRelatorio,
-} from "./comum.ts";
+} from "../../nucleo/comum.ts";
 
 // Bot da American Airlines (aa.com), busca de prêmios (Award) sem login.
 //

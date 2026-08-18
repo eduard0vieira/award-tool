@@ -1,7 +1,7 @@
 import "dotenv/config";
 import fs from "node:fs";
 import type { BrowserContext, Page } from "playwright";
-import { abrirSessaoChrome, type SessaoChrome } from "./sessao-chrome.ts";
+import { abrirSessaoChrome, type SessaoChrome } from "../../nucleo/sessao-chrome.ts";
 import {
   LimitadorFrequencia,
   formatarListaPorMes,
@@ -9,7 +9,7 @@ import {
   type OnLog,
   type OnProgresso,
   type SecaoRelatorio,
-} from "./comum.ts";
+} from "../../nucleo/comum.ts";
 
 // Bot da LATAM (latamairlines.com/br/pt), tarifas em dinheiro, classe
 // Econômica, sem login.

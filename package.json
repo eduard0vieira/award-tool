@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "tsx index.ts",
-    "server": "tsx watch server.ts",
+    "start": "tsx src/cli.ts",
+    "server": "tsx watch src/servidor/server.ts",
     "tunnel": "ngrok http 5555",
     "chrome": "bash scripts/chrome-aa.sh",
     "chrome:parar": "bash scripts/parar-chrome.sh",

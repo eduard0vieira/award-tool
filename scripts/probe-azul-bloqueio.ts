@@ -4,7 +4,7 @@
 //
 // Aqui: navega, e quando a busca não dispara, fotografa o estado da página
 // (URL, título, marcas de página de bloqueio) em vez de só contar o timeout.
-import { abrirSessaoChrome } from "/Users/eduard0vieira/projetos/award-tool/sessao-chrome.ts";
+import { abrirSessaoChrome } from "../src/nucleo/sessao-chrome.ts";
 import type { Page } from "playwright";
 
 const ORIGEM = "VCP";

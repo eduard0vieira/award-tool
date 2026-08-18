@@ -6,7 +6,7 @@ import {
   iniciarSessao,
   pesquisarAnoCompleto,
   type SecaoRelatorio,
-} from "./bot.ts";
+} from "./fontes/tap/bot-tap.ts";
 
 function formatarSecaoParaTexto(nome: string, secao: SecaoRelatorio): string {
   if (secao.dias.length === 0) {

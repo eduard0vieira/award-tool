@@ -1,7 +1,7 @@
 import { chromium } from "playwright";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { DIR_ALERTAS_GERADOS, DIR_PORTAL_DIST } from "../nucleo/caminhos.ts";
 
 // Conexão com o gerador de alertas (projetos/vcc-alertas-portal): transforma
 // o resultado de uma busca do bot num alerta pronto pra encaminhar no grupo —
@@ -15,10 +15,8 @@ import { fileURLToPath } from "node:url";
 // página, tira screenshot do(s) card(s) e lê a legenda. Os PNGs ficam em
 // ./alertas (servido em /alertas), prontos pra baixar e encaminhar.
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-export const DIR_PORTAL_DIST = path.join(__dirname, "..", "vcc-alertas-portal", "dist");
-export const DIR_ALERTAS = path.join(__dirname, "alertas");
+export { DIR_PORTAL_DIST };
+export const DIR_ALERTAS = DIR_ALERTAS_GERADOS;
 
 // Como o portal nomeia companhia (AIRLINES) e programa (KNOWN_PROGRAMS)
 // pra cada fonte/companhia que o bot busca.
