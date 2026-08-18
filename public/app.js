@@ -797,10 +797,6 @@ function calcularUpgrade(diasExecutiva, diasEconomica) {
     .sort((a, b) => a.data.localeCompare(b.data));
 }
 
-function extrairDiasPorRotulo(secoes, rotulo) {
-  return secoes.find((s) => s.rotulo === rotulo)?.dias || [];
-}
-
 function renderizarUpgrade(card) {
   const { listaUpgradeEl, upgradeVazioEl, pernasParaUpgrade } = card;
   listaUpgradeEl.innerHTML = "";
@@ -1101,17 +1097,14 @@ async function iniciarBuscaSeatspy(programa, origem, destino, idaEVolta, sessao)
     for (const perna of pernas) {
       renderizarPernaSecoes(card.resultadoEl, perna.rotulo, perna.secoes);
       registrarPernaCopia(card, perna.secoes);
-      card.pernasParaUpgrade.push({
-        rotulo: perna.rotulo,
-        executiva: extrairDiasPorRotulo(perna.secoes, "Executiva"),
-        economica: extrairDiasPorRotulo(perna.secoes, "Econômica"),
-      });
     }
     if (!sessao.retomando) salvarNoHistorico(origem, destino, programa, idaEVolta);
 
     card.definirStatus("Pronto", "status-pronto");
     card.resultadoEl.hidden = false;
-    card.subAbasEl.hidden = false;
+    // Sem aba Upgrade: o upgrade é um produto da TAP, comprado com as datas do
+    // AwardTool. Nos programas do SeatSpy a aba prometia uma jogada que não
+    // existe naquelas companhias.
     // pernas[0] = ida, pernas[1] = volta (quando ida e volta). O rótulo
     // "Premium" do SeatSpy vira "Premium Economy" na nomenclatura do portal.
     atualizarAcoesCard(card);
