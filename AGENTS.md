@@ -136,7 +136,9 @@ pedir.
 refatoração e documentação: se algo quebrar, o `git diff` precisa apontar uma
 coisa só.
 
-Mensagem no padrão Conventional Commits, uma linha:
+Mensagem no padrão Conventional Commits, uma linha, **sempre em inglês** — é a
+única parte do repositório que não é em português (código, comentários e
+interface continuam como estão).
 
 ```
 <emoji> <tipo>(<escopo opcional>): <descrição>
@@ -149,10 +151,10 @@ Mensagem no padrão Conventional Commits, uma linha:
   `servidor`, `front`, `planilha`, `alertas`
 
 ```
-✨ feat(latam): confirma milhas com ida e volta na mesma busca
-🐛 fix(smiles): trata 406 como bloqueio e devolve resultado parcial
-♻️ refactor: separa as fontes em src/fontes
-📝 docs: registra o recon da azul
+✨ feat(latam): confirm miles with round-trip in a single search
+🐛 fix(smiles): treat 406 as a block and return partial results
+♻️ refactor: split sources into src/fontes
+📝 docs: record the azul recon
 ```
 
 ---
