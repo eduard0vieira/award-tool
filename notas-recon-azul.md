@@ -8,7 +8,9 @@
 Dá pra buscar em pontos **sem login e sem reputação de perfil**, mas nenhuma chamada
 nossa passa: quem tem que disparar é o próprio site. O jeito que funciona é deixar a
 página fazer a requisição dela e **trocar o corpo no caminho** — e o corpo aceita
-**6 datas de uma vez**, o que põe um ano em ~61 navegações por direção.
+**6 datas de uma vez**. O problema é o volume: **na 9ª navegação seguida a busca para
+de disparar**, e um ano por direção precisaria de 61. É esse limite que decide se o
+módulo existe.
 
 ## 1. Deep link (funciona, e é o melhor achado)
 
@@ -103,16 +105,48 @@ espera; só o que pedimos muda.
 | 6 | **200, 6 datas, 125 KB** |
 | 7, 8, 9, 10, 12 | 400 `{"notifications":["GetTripAvailabilityRequestFailed"]}` |
 
-**Seis é o teto, e é exato.** O `chunks(…, 6)` do projeto antigo não era chute.
+A primeira rodada tinha um vício: as listas maiores incluíam uma data que as menores
+não tinham, então o 400 podia ser da data, não da quantidade. Refiz com **7 datas
+espremidas dentro da mesma faixa já testada como boa** (dias 90–125): **400 do mesmo
+jeito**. **Seis é o teto, e é da quantidade.** O `chunks(…, 6)` do projeto antigo não
+era chute.
 
-**Custo de um ano por direção:** ⌈365/6⌉ = **61 navegações**. Cada uma carrega a
-página inteira, então é da ordem de 6–8 minutos — mais lento que AA (12 requisições)
-e mais rápido que LATAM em milhas (365).
+**`flexibleDays` não faz nada.** Comparei ±3 contra 0 nas mesmas 6 datas: resposta
+byte a byte do mesmo tamanho (125.150) e `lowestPoints` idêntico em todas as datas.
+Não existe aqui o equivalente ao `calendarDayList` do Smiles — cada data custa o que
+custa, e um ano são ⌈365/6⌉ = **61 chamadas por direção**.
 
-Não testei se dá pra fazer a SPA repetir a busca sem recarregar a página. Se der,
-o custo cai bastante — fica como primeira otimização da Fase 1.
+Não testei se dá pra fazer a SPA repetir a busca sem recarregar a página. Fica como
+otimização da Fase 1 — e a seção 7 mostra que ela deixou de ser opcional.
 
-## 7. Forma da resposta e as armadilhas
+## 7. O limite que derruba o plano: 8 navegações seguidas
+
+Medir volume antes de projetar foi a lição cara do Smiles, então testei: 30
+navegações seguidas, 6 datas cada, perfil limpo.
+
+```
+# 1 | 6s  | 200 | 6 trips | 5894ms
+...
+# 8 | 47s | 200 | 6 trips | 4909ms
+# 9 | a busca simplesmente não dispara mais (timeout de 60s)
+```
+
+**Parou na 9ª, aos ~47 segundos.** E continuou parada por mais de 10 minutos de
+tentativas. A página até carrega; o que some é a chamada de disponibilidade.
+
+Isso derruba o desenho ingênuo: **61 navegações seguidas não acontecem.** Um ano por
+direção precisa de outra coisa —
+
+- descobrir se a SPA refaz a busca sem recarregar (talvez o custo esteja na
+  navegação, não na consulta);
+- medir se um intervalo maior entre navegações muda o limite (no Smiles não mudou —
+  o orçamento era de volume, não de ritmo);
+- ou aceitar janelas menores por busca, como se fez no Smiles.
+
+**Nada disso está respondido ainda.** Enquanto não estiver, o módulo não tem custo
+conhecido, e prometer "ano inteiro" seria inventar.
+
+## 8. Forma da resposta e as armadilhas
 
 ```
 data.trips[]                       um por data pedida
@@ -143,7 +177,7 @@ Quatro coisas que precisam de decisão explícita no módulo, não de default:
 4. **Taxa vem partida**: `taxesAndFees` + `convenienceFee`. Somar sem dizer, ou
    mostrar só uma, muda o número que o cliente vê.
 
-## 8. `cabin` vem `null` no doméstico
+## 9. `cabin` vem `null` no doméstico
 
 Em VCP→REC todos os `fares` vieram com `cabin: null` e `productClass.category:
 "Regular"`. A distinção de cabine provavelmente só aparece em rota internacional —
