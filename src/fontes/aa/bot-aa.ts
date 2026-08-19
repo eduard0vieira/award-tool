@@ -92,7 +92,7 @@ export async function iniciarSessaoAA(headless = false): Promise<SessaoAA> {
   if (/access denied/i.test(await sessao.page.title())) {
     throw new Error(
       sessao.viaCdp
-        ? "A AA bloqueou o acesso mesmo pelo seu Chrome. Espere alguns minutos antes de tentar de novo."
+        ? "AA bloqueou o acesso mesmo pelo Chrome do usuário. Aguarde alguns minutos antes de repetir."
         : "A AA bloqueou o acesso ao navegador do bot. Rode `npm run chrome` no terminal pra o bot buscar " +
           "numa aba do seu próprio navegador, que costuma passar.",
     );
@@ -195,7 +195,7 @@ async function abrirPaginaDeResultados(page: Page, params: ParametrosAA, dataIni
   const titulo = await page.title();
   if (/access denied/i.test(titulo)) {
     throw new Error(
-      "A AA bloqueou o acesso (Access Denied). Espere alguns minutos e tente de novo; se persistir, aumente AA_INTERVALO_BUSCAS_MS no .env.",
+      "AA bloqueou o acesso (Access Denied). Aguarde alguns minutos e repita; se persistir, aumente AA_INTERVALO_BUSCAS_MS no .env.",
     );
   }
   if (!page.url().includes("choose-flights")) {

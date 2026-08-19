@@ -376,7 +376,7 @@ async function preencherCredenciais(page: Page, onLog: OnLog): Promise<void> {
     onLog("Login da LATAM: e-mail (e senha, se o campo estava na tela) preenchidos. Confirme na janela do bot.");
   } catch (err) {
     const motivo = err instanceof Error ? err.message.split("\n")[0] : String(err);
-    onLog(`Não consegui preencher o formulário de login (${motivo}) — siga na mão na janela do bot.`);
+    onLog(`Preenchimento automático do login falhou (${motivo}) — conclua na janela do bot.`);
   }
 }
 
@@ -387,7 +387,7 @@ export async function esperarLoginManual(page: Page, onLog: OnLog, onAviso: OnAv
   const minutos = Math.round(ESPERA_LOGIN_MS / 60000);
   const aviso =
     `A LATAM pediu login. Entre na janela do Chrome do bot que está aberta (é a que o bot usa) — ` +
-    `assim que a sessão voltar, a busca continua sozinha. Espero até ${minutos} min.`;
+    `assim que a sessão voltar, a busca continua sozinha. Tempo limite: ${minutos} min.`;
   onAviso(aviso);
   onLog(aviso);
 
@@ -472,7 +472,7 @@ export async function confirmarParEmMilhas(
       await esperarLoginManual(page, onLog, onAviso);
       await page.goto(url, { waitUntil: "domcontentloaded", timeout: 90_000 });
       if (pedindoLogin(page)) {
-        throw new Error("Mesmo depois do login a LATAM voltou pra tela de entrada. Tente a busca de novo.");
+        throw new Error("A LATAM voltou para a tela de entrada mesmo após o login. Refaça a busca.");
       }
     }
 
@@ -489,8 +489,8 @@ export async function confirmarParEmMilhas(
     await esperarPor(() => opcoesCruas !== undefined, 30_000, page);
     if (opcoesCruas === undefined) {
       throw new Error(
-        "Cheguei ao fim do fluxo mas a LATAM não devolveu as combinações de milhas+dinheiro. " +
-          "Rode `npm run recon:latam` pra ver onde parou.",
+        "Fluxo concluído sem as combinações de milhas+dinheiro na resposta da LATAM. " +
+          "Rode `npm run recon:latam` para inspecionar onde o fluxo parou.",
       );
     }
 
@@ -504,7 +504,7 @@ export async function confirmarParEmMilhas(
       imagem = caminhoImagem;
     } catch (err) {
       // O preço é o dado essencial; a imagem não. Falta de print vira aviso.
-      onLog(`Não consegui tirar o print do par: ${err instanceof Error ? err.message : String(err)}`);
+      onLog(`Captura do print do par falhou: ${err instanceof Error ? err.message : String(err)}`);
     }
 
     const melhor = opcoes[0]!;

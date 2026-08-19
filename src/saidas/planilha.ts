@@ -199,7 +199,7 @@ async function criarAba(token: string, titulo: string): Promise<{ gid: number; n
     },
   );
   if (!resposta.ok) {
-    throw new Error(`Não consegui criar a aba da busca (${resposta.status}): ${(await resposta.text()).slice(0, 200)}`);
+    throw new Error(`Falha ao criar a aba da busca (${resposta.status}): ${(await resposta.text()).slice(0, 200)}`);
   }
   const dados = (await resposta.json()) as {
     replies?: { addSheet?: { properties?: { sheetId?: number } } }[];
@@ -246,7 +246,7 @@ export async function criarPlanilhaDaBusca(
       },
     );
     if (!resposta.ok) {
-      throw new Error(`Não consegui escrever na aba da busca (${resposta.status}): ${(await resposta.text()).slice(0, 200)}`);
+      throw new Error(`Falha ao escrever na aba da busca (${resposta.status}): ${(await resposta.text()).slice(0, 200)}`);
     }
 
     const url = `https://docs.google.com/spreadsheets/d/${PLANILHA_ID}/edit#gid=${gid}`;
@@ -381,7 +381,7 @@ export async function registrarBusca(
   try {
     gravarCsv(linhas);
   } catch (err) {
-    onLog(`Não consegui gravar o CSV de buscas: ${err instanceof Error ? err.message : String(err)}`);
+    onLog(`Falha ao gravar o CSV de buscas: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   let cred: Credenciais | null = null;

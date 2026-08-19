@@ -562,7 +562,7 @@ function executarJobLatam(
       try {
       const pares = escolherMelhoresPares(ida, volta, PARES_LATAM, params.margemIdaReais, params.margemVoltaReais);
       if (pares.length === 0) {
-        avisoConfirmacao = "Não achei par de ida e volta dentro da faixa pra confirmar em milhas.";
+        avisoConfirmacao = "Nenhum par de ida e volta dentro da faixa de preço — confirmação em milhas não executada.";
       } else {
         const pasta = `latam-${params.origem}-${params.destino}-${Date.now()}`;
         fs.mkdirSync(path.join(DIR_ALERTAS, pasta), { recursive: true });
@@ -570,7 +570,7 @@ function executarJobLatam(
         const confirmados: ConfirmacaoPar[] = [];
         const falhas: string[] = [];
         for (const [i, par] of pares.entries()) {
-          atualizarAviso(jobId, `Confirmando par ${i + 1} de ${pares.length}: ${par.ida.data} → ${par.volta.data}...`);
+          atualizarAviso(jobId, `Confirmando par ${i + 1}/${pares.length} — ${par.ida.data} → ${par.volta.data}...`);
           const arquivo = `par-${i + 1}.png`;
           try {
             const c = await confirmarParEmMilhas(
@@ -611,10 +611,10 @@ function executarJobLatam(
         if (confirmados.length > 0) {
           confirmacao = { pares: confirmados };
           if (falhas.length > 0) {
-            avisoConfirmacao = `${falhas.length} de ${pares.length} par(es) não confirmaram: ${falhas.join(" · ")}`;
+            avisoConfirmacao = `Confirmação parcial: ${falhas.length} de ${pares.length} pares sem resultado — ${falhas.join(" · ")}`;
           }
         } else {
-          avisoConfirmacao = `Nenhum par confirmou em milhas. ${falhas.join(" · ")}`;
+          avisoConfirmacao = `Confirmação em milhas sem resultado em nenhum dos ${pares.length} pares: ${falhas.join(" · ")}`;
         }
       }
       } catch (err) {
@@ -622,7 +622,7 @@ function executarJobLatam(
         // já custaram a varredura inteira e são úteis por si só.
         const mensagem = err instanceof Error ? err.message : String(err);
         console.error(`[${jobId}] confirmação em milhas falhou: ${mensagem}`);
-        avisoConfirmacao = `A confirmação em milhas falhou (${mensagem}). As datas abaixo continuam válidas.`;
+        avisoConfirmacao = `Confirmação em milhas interrompida: ${mensagem}. As datas abaixo permanecem válidas.`;
       }
       atualizarAviso(jobId, "");
     }

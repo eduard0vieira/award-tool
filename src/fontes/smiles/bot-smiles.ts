@@ -559,7 +559,7 @@ export async function pesquisarAnoSmiles(
       onLog(err.message);
       lacunas.push(
         `a busca foi interrompida pelo bloqueio do Smiles depois de ${dias.length} dia(s) — ` +
-          "o resto do período não chegou a ser consultado; espere uns 30 min pra completar",
+          "o resto do período não chegou a ser consultado; aguarde cerca de 30 min para completar",
       );
     } else {
       throw err;

@@ -66,7 +66,7 @@ export async function abrirSessaoChrome(headless: boolean, rotulo: string): Prom
       if (tentativa === 1) throw err;
     }
   }
-  throw new Error("Não consegui abrir uma aba no navegador do bot.");
+  throw new Error("Falha ao abrir uma aba no navegador do bot.");
 }
 
 function navegadorCompartilhado(headless: boolean, rotulo: string): Promise<NavegadorBot> {
@@ -127,7 +127,7 @@ async function abrirChromePróprio(headless: boolean, rotulo: string): Promise<N
     // que `npm run chrome` faz), não dá pra abrir outro nem tomar o lugar.
     if (/existing browser session|already in use|ProcessSingleton/i.test(mensagem)) {
       throw new Error(
-        "Já existe uma janela do Chrome usando o perfil do bot, e não consegui entrar nela. " +
+        "O perfil do bot já está em uso por outra janela do Chrome, e a conexão com ela falhou. " +
           "Feche com `npm run chrome:parar` e busque de novo — o bot abre a janela dele sozinho, " +
           "não é mais preciso rodar `npm run chrome` antes.",
       );

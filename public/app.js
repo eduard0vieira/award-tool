@@ -696,7 +696,7 @@ function mostrarPergunta(card, jobId, { id, mensagem }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id, continuar }),
       });
-      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).erro || "Não deu pra responder.");
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).erro || "Falha ao enviar a resposta.");
     } catch (err) {
       // Sem isso o card ficaria mudo com os dois botões travados.
       texto.textContent = `${mensagem}\n\n${err.message}`;
