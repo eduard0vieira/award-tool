@@ -95,3 +95,51 @@ importação de cookies) cobre o risco.
 - **Modo milhas**: inviável varrer o ano (365 chamadas/direção). Precisa de intervalo
   escolhido pelo usuário, ou de uma estratégia em duas fases (usar o calendário de
   dinheiro pra escolher os dias candidatos e só então consultar milhas neles).
+
+---
+
+## Ida e volta: o preço do PAR (levantado em 2026-08-18)
+
+**Perna a perna dá um número errado.** Medido em GRU⇄JNB: confirmando cada
+direção sozinha, 119.560 + 123.975 = **243.535 milhas**. O mesmo par comprado
+junto no site: **90.302 milhas + R$ 255,69**. Não é tarifa diferente — a LATAM
+precifica o par.
+
+Esse número **não está** em `/offers/search/redemption`, que é o que o bot lia.
+A tela "Combine suas milhas + dinheiro" só aparece depois de escolher um voo de
+ida **e** um de volta, e o preço vem daqui:
+
+```
+POST https://www.latamairlines.com/bff/air-offers/v2/offers/redemption-options
+
+{
+  "tax": { "amount": 255.69, "currency": "BRL" },
+  "redemptionOptions": [
+    { "id": 1, "totalValueToPay": { "loyalty": { "amount": 90302 }, "money": { "amount": 0 } } },
+    { "id": 2, ... 81272 + 469.56 },
+    { "id": 3, ... 63212 + 1164.87 },
+    { "id": 4, ... 45151 + 1760.89 }
+  ]
+}
+```
+
+**O que a tela mostra é `money.amount + tax.amount`** — conferido nas quatro
+linhas: 469,56 + 255,69 = 725,25; 1.164,87 + 255,69 = 1.420,56; 1.760,89 +
+255,69 = 2.016,58. E as linhas por perna da mesma tela (45.151 + R$ 68,61 e
+45.151 + R$ 187,08) fecham com a opção 1: 45.151 × 2 = 90.302, e 68,61 + 187,08
+= 255,69. Essas duas identidades são o teste barato de que a linha certa foi
+lida.
+
+**São quatro opções, não um preço.** É uma escada de milhas ↔ dinheiro, igual
+ao `amountLevel` da Azul e ao desconto do Smiles: o módulo guarda as quatro e
+deixa a escolha explícita.
+
+Outro achado do caminho: a busca da volta reaparece como
+`/offers/search/redemption?...&outOfferId=<id da ida>` — ou seja, a volta já é
+precificada em função da ida escolhida.
+
+**Custo:** cada par é um fluxo completo (deep link → escolhe ida → escolhe
+volta). `LATAM_PARES` controla quantos (padrão 3).
+
+Fixture: `fixtures/latam-redemption-options-real.json`.
+Recon: `npm run recon:latam GRU JNB <ida> <volta>` (precisa de sessão logada).
