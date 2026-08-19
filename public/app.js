@@ -38,6 +38,8 @@ const formSmiles = document.getElementById("form-busca-smiles");
 const inputSmilesOrigem = document.getElementById("smiles-origem");
 const inputSmilesDestino = document.getElementById("smiles-destino");
 const checkboxSmilesIdaVolta = document.getElementById("smiles-ida-volta");
+const inputSmilesDe = document.getElementById("smiles-de");
+const inputSmilesAte = document.getElementById("smiles-ate");
 const inputSmilesTetoEconomica = document.getElementById("smiles-teto-economica");
 const inputSmilesTetoPremium = document.getElementById("smiles-teto-premium");
 const inputSmilesTetoExecutiva = document.getElementById("smiles-teto-executiva");
@@ -1276,13 +1278,13 @@ function mostrarLinkPlanilha(card, url, rotulo) {
 
 // Smiles: uma direção por job (o endpoint é de ida simples), com as três
 // cabines juntas — o front pede a volta como segundo job, igual à AA.
-async function iniciarBuscaSmiles(origem, destino, tetos, idaEVolta, sessao) {
-  sessao = sessao || novaSessao("smiles", [origem, destino, tetos, idaEVolta]);
+async function iniciarBuscaSmiles(origem, destino, tetos, idaEVolta, periodo, sessao) {
+  sessao = sessao || novaSessao("smiles", [origem, destino, tetos, idaEVolta, periodo]);
   const seta = idaEVolta ? "⇄" : "→";
   const card = criarCardJob(filaSmiles, `Smiles: ${origem} ${seta} ${destino}`);
   const avisosParciais = [];
   let urlPlanilhaVolta = null;
-  const corpoBase = { fonte: "smiles", tetos };
+  const corpoBase = { fonte: "smiles", tetos, periodo };
 
   try {
     const { resultado: pernasIda, avisoParcial: avisoIda, planilhaUrl: planilhaIda } = await buscarNoServidor(
@@ -1839,6 +1841,9 @@ formSmiles.addEventListener("submit", (evento) => {
       executiva: tetoEmMilhas(inputSmilesTetoExecutiva),
     },
     checkboxSmilesIdaVolta.checked,
+    // Vazio nos dois = período padrão do servidor. Não invento data aqui pra
+    // não competir com a regra que já existe lá.
+    { de: inputSmilesDe.value || undefined, ate: inputSmilesAte.value || undefined },
   );
 });
 
