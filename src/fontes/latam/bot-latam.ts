@@ -610,21 +610,28 @@ async function esperarPor(pronto: () => boolean, limiteMs: number, page: Page) {
   while (Date.now() < fim && !pronto()) await page.waitForTimeout(500);
 }
 
-// A partir dos dias do calendário, escolhe os melhores pares ida/volta dentro
-// da faixa "menor + margem", com a volta sempre depois da ida. A margem é
-// separada por direção porque a volta costuma sair mais cara — R$ 100 na ida e
-// R$ 300 na volta, como combinado.
+// A partir dos dias do calendário, escolhe pares ida/volta dentro da faixa
+// "menor + margem", com a volta sempre depois da ida. A margem é separada por
+// direção porque a volta costuma sair mais cara: R$ 100 na ida e R$ 300 na
+// volta, como combinado.
 //
-// Devolve VÁRIOS pares porque o preço do calendário é em dinheiro e o preço em
-// milhas do par só aparece na confirmação: o par mais barato em reais não é
-// necessariamente o mais barato em milhas. Cada data entra em um par só, pra
-// dar três opções de fato diferentes em vez de três variações do mesmo dia.
+// Os pares são ESPALHADOS no período em vez de saírem os três dias mais
+// baratos. Dias vizinhos costumam ter o mesmo preço em pontos — três pares na
+// mesma semana devolvem o mesmo número três vezes e não dizem nada. Com meses
+// diferentes, a amostra mostra se o preço muda ao longo do ano.
+const DISTANCIA_MINIMA_DIAS = Number(process.env.LATAM_DISTANCIA_PARES) || 90;
+
+function distanciaEmDias(a: string, b: string): number {
+  return Math.abs((Date.parse(a) - Date.parse(b)) / 86_400_000);
+}
+
 export function escolherMelhoresPares(
   ida: DiaLatam[],
   volta: DiaLatam[],
   quantos = 3,
   margemIdaReais = 100,
   margemVoltaReais = 300,
+  distanciaMinimaDias = DISTANCIA_MINIMA_DIAS,
 ): { ida: DiaLatam; volta: DiaLatam }[] {
   if (ida.length === 0 || volta.length === 0 || quantos < 1) return [];
 
@@ -641,14 +648,34 @@ export function escolherMelhoresPares(
   const pares: { ida: DiaLatam; volta: DiaLatam }[] = [];
   const voltasUsadas = new Set<string>();
 
-  for (const i of idaCandidatos) {
-    if (pares.length >= quantos) break;
+  const tentarMontar = (i: DiaLatam): boolean => {
     const v = voltaCandidatos.find((x) => x.data > i.data && !voltasUsadas.has(x.data));
-    if (!v) continue;
+    if (!v) return false;
     voltasUsadas.add(v.data);
     pares.push({ ida: i, volta: v });
+    return true;
+  };
+
+  // Primeira passada: só datas distantes o bastante das já escolhidas.
+  for (const i of idaCandidatos) {
+    if (pares.length >= quantos) break;
+    const longeOBastante = pares.every((p) => distanciaEmDias(p.ida.data, i.data) >= distanciaMinimaDias);
+    if (longeOBastante) tentarMontar(i);
   }
-  return pares;
+
+  // Segunda passada: se o período não tiver datas espalhadas o bastante,
+  // completa com as mais baratas que sobraram. Devolver menos pares por causa
+  // do espaçamento seria pior que devolver pares próximos.
+  if (pares.length < quantos) {
+    const jaUsadas = new Set(pares.map((p) => p.ida.data));
+    for (const i of idaCandidatos) {
+      if (pares.length >= quantos) break;
+      if (jaUsadas.has(i.data)) continue;
+      tentarMontar(i);
+    }
+  }
+
+  return pares.sort((a, b) => a.ida.data.localeCompare(b.ida.data));
 }
 
 // Um par só — o que o servidor usava antes de passar a confirmar três.
