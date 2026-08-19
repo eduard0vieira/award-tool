@@ -452,7 +452,7 @@ function executarJobSmiles(
 ) {
   return executarComPool(poolSmiles, jobId, async ({ page }) => {
     const job = jobs.get(jobId)!;
-    const { dias, diasComFalha, lacunas } = await pesquisarAnoSmiles(
+    const { dias, diasComFalha, lacunas, doCache } = await pesquisarAnoSmiles(
       page,
       { origem: params.origem, destino: params.destino },
       params.tetos,
@@ -473,6 +473,11 @@ function executarJobSmiles(
     const partes = [...lacunas];
     if (diasComFalha.length > 0) {
       partes.push(`${diasComFalha.length} dia(s) falharam. O primeiro foi ${diasComFalha[0]!.data}: ${diasComFalha[0]!.erro}`);
+    }
+    // Dado de cache não é dado desta hora. Dizer quantos dias vieram de lá é o
+    // que separa "economizei consulta" de "mostrei preço vencido sem avisar".
+    if (doCache > 0) {
+      partes.push(`${doCache} dia(s) vieram de consulta recente reaproveitada, não de agora`);
     }
     const avisoParcial = partes.length > 0 ? `Cobertura parcial. ${partes.join("; ")}.` : undefined;
 
