@@ -998,11 +998,58 @@ button:disabled {
   transform: scale(1.02);
 }
 
+/* Um par confirmado da LATAM: cabeçalho, voos, a escada de combinações e o
+   print da própria tela da companhia. */
+.par-latam {
+  padding: var(--e3) 0;
+}
+
+.par-latam + .par-latam {
+  margin-top: var(--e3);
+  padding-top: var(--e4);
+  border-top: 1px solid var(--borda);
+}
+
+/* As quatro linhas de milhas+dinheiro. Ficam todas visíveis de propósito:
+   escolher uma seria decidir pelo cliente quanto ele paga em dinheiro. */
+.escada-resgate {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e2);
+  margin: var(--e3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.escada-resgate li {
+  padding: var(--e1) var(--e3);
+  border: 1px solid var(--borda);
+  border-radius: 100px;
+  background: var(--superficie);
+  font-size: 12px;
+  color: var(--texto-suave);
+}
+
+.escada-resgate li:first-child {
+  border-color: var(--borda-forte);
+  color: var(--texto);
+  font-weight: 600;
+}
+
+.par-latam .alerta-acoes {
+  margin-top: var(--e3);
+}
+
 .confirmacao-resumo,
 .confirmacao-detalhe {
   margin: var(--e2) 0;
   font-size: 13px;
   color: var(--texto-suave);
+}
+
+/* Ida e volta em linhas separadas — o texto vem com quebra. */
+.confirmacao-detalhe {
+  white-space: pre-line;
 }
 
 /* Link da planilha da busca. */

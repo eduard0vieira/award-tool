@@ -1514,78 +1514,142 @@ async function iniciarBuscaAA(origem, destino, cabine, maxConexoes, tetoK, idaEV
 
 // Mostra o resultado da confirmação em milhas: o par de datas mais barato,
 // o total e o print de cada perna (o mesmo enquadramento do alerta).
-function mostrarConfirmacaoMilhas(card, c) {
+// A LATAM precifica o PAR, não as pernas somadas: o mesmo GRU⇄JNB que dava
+// 243.535 milhas perna a perna sai por 90.302 comprado junto. Cada par
+// confirmado vem com a escada de combinações milhas+dinheiro que a LATAM
+// oferece — quatro linhas, da opção "tudo em milhas" até "mínimo de milhas".
+function mostrarConfirmacaoMilhas(card, confirmacao) {
+  const pares = confirmacao?.pares ?? [];
+  if (pares.length === 0) return;
+
   const bloco = document.createElement("div");
   bloco.className = "alerta-resultado";
 
   const titulo = document.createElement("div");
   titulo.className = "alerta-titulo";
-  titulo.textContent = "Confirmado em milhas";
+  titulo.textContent = pares.length === 1 ? "Par confirmado em milhas" : `${pares.length} pares confirmados em milhas`;
   bloco.appendChild(titulo);
 
-  const resumo = document.createElement("p");
-  resumo.className = "confirmacao-resumo";
+  for (const par of pares) bloco.appendChild(blocoDoPar(card, par));
+  card.raiz.appendChild(bloco);
+}
+
+function blocoDoPar(card, par) {
   const fmt = (n) => n.toLocaleString("pt-BR");
-  resumo.innerHTML =
-    `<strong>${fmt(c.totalMilhas)} milhas + R$ ${c.totalTaxas.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</strong>` +
-    ` &middot; ida ${c.ida.data} &middot; volta ${c.volta.data}`;
-  bloco.appendChild(resumo);
+  const reais = (n) => `R$ ${n.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
+  const raiz = document.createElement("div");
+  raiz.className = "par-latam";
 
-  // Detalhe de cada perna em texto — é o que garante o alerta mesmo quando o
-  // print falha (a imagem é o passo mais frágil do fluxo).
-  const detalhe = document.createElement("p");
-  detalhe.className = "confirmacao-detalhe";
-  detalhe.textContent =
-    `Ida ${c.ida.data}: ${fmt(c.ida.milhas)} milhas + R$ ${c.ida.taxas} · ${c.ida.voo}\n` +
-    `Volta ${c.volta.data}: ${fmt(c.volta.milhas)} milhas + R$ ${c.volta.taxas} · ${c.volta.voo}`;
-  bloco.appendChild(detalhe);
+  const cabecalho = document.createElement("p");
+  cabecalho.className = "confirmacao-resumo";
+  const melhor = par.opcoes[0];
+  cabecalho.innerHTML =
+    `<strong>${fmt(melhor.milhas)} pontos + ${reais(melhor.totalReais)}</strong>` +
+    ` &middot; ida ${par.dataIda} &middot; volta ${par.dataVolta}`;
+  raiz.appendChild(cabecalho);
 
-  // Um print só, com ida e volta juntas — é ele que vai pro grupo. Pode não
-  // existir se a captura falhou; nesse caso mostra as imagens por perna que
-  // tenham sobrado, e se nem essas houver, fica só o texto acima.
-  const imagens = c.imagem ? [c.imagem] : [c.ida.imagem, c.volta.imagem].filter(Boolean);
-  if (imagens.length > 0) {
-    const galeria = document.createElement("div");
-    galeria.className = "alerta-galeria confirmacao-galeria";
-    for (const src of imagens) {
-      const link = document.createElement("a");
-      link.href = src;
-      link.target = "_blank";
-      link.download = src.split("/").pop();
-      link.title = `${c.ida.voo} | ${c.volta.voo}`;
-      const img = document.createElement("img");
-      img.src = src;
-      img.alt = "Ida e volta confirmadas em milhas";
-      link.appendChild(img);
-      galeria.appendChild(link);
-    }
-    bloco.appendChild(galeria);
+  if (par.vooIda || par.vooVolta) {
+    const detalhe = document.createElement("p");
+    detalhe.className = "confirmacao-detalhe";
+    detalhe.textContent = [par.vooIda && `Ida: ${par.vooIda}`, par.vooVolta && `Volta: ${par.vooVolta}`]
+      .filter(Boolean)
+      .join("\n");
+    raiz.appendChild(detalhe);
   }
 
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.className = "btn-copiar";
-  btn.textContent = "Copiar resumo";
-  const texto =
-    `${origemDestinoDe(card)}\n` +
-    `Ida ${c.ida.data}: ${fmt(c.ida.milhas)} milhas + R$ ${c.ida.taxas} (${c.ida.voo})\n` +
-    `Volta ${c.volta.data}: ${fmt(c.volta.milhas)} milhas + R$ ${c.volta.taxas} (${c.volta.voo})\n` +
-    `Total: ${fmt(c.totalMilhas)} milhas + R$ ${c.totalTaxas}`;
-  btn.addEventListener("click", () => {
-    navigator.clipboard.writeText(texto);
-    btn.textContent = "Copiado!";
-    setTimeout(() => (btn.textContent = "Copiar resumo"), 1500);
-  });
-  bloco.appendChild(btn);
+  // A escada inteira, porque escolher uma linha por conta própria seria decidir
+  // pelo cliente quanto ele paga em dinheiro.
+  const escada = document.createElement("ul");
+  escada.className = "escada-resgate";
+  for (const o of par.opcoes) {
+    const item = document.createElement("li");
+    item.textContent = `${fmt(o.milhas)} pontos + ${reais(o.totalReais)}`;
+    escada.appendChild(item);
+  }
+  raiz.appendChild(escada);
 
-  card.raiz.appendChild(bloco);
+  if (par.imagem) {
+    const galeria = document.createElement("div");
+    galeria.className = "alerta-galeria confirmacao-galeria";
+    const link = document.createElement("a");
+    link.href = par.imagem;
+    link.target = "_blank";
+    link.download = par.imagem.split("/").pop();
+    const img = document.createElement("img");
+    img.src = par.imagem;
+    img.alt = `Par ${par.dataIda} → ${par.dataVolta} confirmado em milhas`;
+    link.appendChild(img);
+    galeria.appendChild(link);
+    raiz.appendChild(galeria);
+  }
+
+  const acoes = document.createElement("div");
+  acoes.className = "alerta-acoes";
+
+  const btnCopiar = document.createElement("button");
+  btnCopiar.type = "button";
+  btnCopiar.className = "btn-copiar";
+  btnCopiar.textContent = "Copiar resumo";
+  const texto =
+    `${par.origem} ⇄ ${par.destino} · ida ${par.dataIda} · volta ${par.dataVolta}\n` +
+    par.opcoes.map((o) => `${fmt(o.milhas)} pontos + ${reais(o.totalReais)}`).join("\n");
+  btnCopiar.addEventListener("click", () => {
+    navigator.clipboard.writeText(texto);
+    btnCopiar.textContent = "Copiado!";
+    setTimeout(() => (btnCopiar.textContent = "Copiar resumo"), 1500);
+  });
+  acoes.appendChild(btnCopiar);
+
+  const btnAlerta = document.createElement("button");
+  btnAlerta.type = "button";
+  btnAlerta.className = "btn-alerta";
+  btnAlerta.textContent = "📢 Gerar alerta";
+  btnAlerta.addEventListener("click", () => gerarAlertaDoPar(card, par, btnAlerta));
+  acoes.appendChild(btnAlerta);
+
+  raiz.appendChild(acoes);
+  return raiz;
+}
+
+// O alerta da LATAM sai do par confirmado, não da lista de datas: o número que
+// vale pro cliente é o do par, e ele só existe depois da confirmação.
+async function gerarAlertaDoPar(card, par, botao) {
+  botao.disabled = true;
+  botao.textContent = "⏳ Gerando...";
+  try {
+    const melhor = par.opcoes[0];
+    const resposta = await fetch("/api/alerta", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        fonte: "LATAM",
+        origem: par.origem,
+        destino: par.destino,
+        classe: "Econômica",
+        menorK: melhor.milhas / 1000,
+        maiorK: melhor.milhas / 1000,
+        textoIda: par.textoIda || "",
+        textoVolta: par.textoVolta || "",
+      }),
+    });
+    const corpo = await resposta.json();
+    if (!resposta.ok) throw new Error(corpo.erro || "Falha ao gerar o alerta.");
+    mostrarAlertaGerado(card, corpo);
+    botao.textContent = "✓ Alerta gerado";
+  } catch (err) {
+    botao.textContent = "📢 Gerar alerta";
+    card.avisoEl.textContent = err.message || "Falha ao gerar o alerta.";
+    card.avisoEl.hidden = false;
+  } finally {
+    botao.disabled = false;
+  }
 }
 
 const origemDestinoDe = (card) => card.rotaEl.textContent || "";
 
 // LATAM: uma busca só devolve ida e volta (o calendário traz as duas
-// direções). Sem botão de alerta: o card do portal fala em milhas e ainda não
-// sabe exibir tarifa em reais.
+// direções, em reais). O alerta sai da confirmação em milhas, que é onde
+// aparece o número que o cliente paga.
 async function iniciarBuscaLatam(origem, destino, tetos, confirmarMilhas, sessao) {
   sessao = sessao || novaSessao("latam", [origem, destino, tetos, confirmarMilhas]);
   const card = criarCardJob(filaLatam, `LATAM: ${origem} ⇄ ${destino}`);
