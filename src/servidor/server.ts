@@ -292,6 +292,7 @@ function executarJob(jobId: string, params: { origem: string; destino: string; t
       (info) => atualizarJanela(jobId, info),
       (mensagem) => atualizarAviso(jobId, mensagem),
       (mensagem) => perguntarAoUsuario(jobId, mensagem),
+      () => job.cancelado === true,
     );
 
     const relatorio = construirRelatorio(todasAsDatas, params.tetos);
@@ -414,6 +415,7 @@ function executarJobAA(
       (msg) => console.log(`[${jobId}] ${msg}`),
       (fracao) => atualizarProgresso(jobId, fracao),
       (mensagem) => atualizarAviso(jobId, mensagem),
+      () => job.cancelado === true,
     );
 
     const secao = {
@@ -456,6 +458,7 @@ function executarJobSmiles(
       params.tetos,
       (msg) => console.log(`[${jobId}] ${msg}`),
       (fracao) => atualizarProgresso(jobId, fracao),
+      () => job.cancelado === true,
     );
 
     const pernas: PernaSeatspy[] = [
@@ -562,6 +565,7 @@ function executarJobLatam(
       (msg) => console.log(`[${jobId}] ${msg}`),
       (fracao) => atualizarProgresso(jobId, fracao),
       (mensagem) => atualizarAviso(jobId, mensagem),
+      () => job.cancelado === true,
     );
 
     const pernas: PernaSeatspy[] = [

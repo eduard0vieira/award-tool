@@ -12,6 +12,11 @@ export type OnJanela = (info: {
 // valem a pena mostrar na tela mesmo sem ser erro nem progresso.
 export type OnAviso = (mensagem: string) => void;
 
+// Consultado nos pontos seguros de cada varredura (entre janelas, entre meses).
+// Verdadeiro = pararam a busca pela tela; devolve o que já veio em vez de
+// continuar gastando consulta numa fonte que ninguém está mais esperando.
+export type DeveParar = () => boolean;
+
 export type DiaFormatado = {
   data: string; // YYYY-MM-DD
   valorK: number;

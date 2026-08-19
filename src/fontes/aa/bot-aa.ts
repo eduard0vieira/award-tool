@@ -4,6 +4,7 @@ import { abrirSessaoChrome, type SessaoChrome } from "../../nucleo/sessao-chrome
 import {
   LimitadorFrequencia,
   formatarListaPorMes,
+  type DeveParar,
   type OnAviso,
   type OnLog,
   type OnProgresso,
@@ -281,6 +282,7 @@ export async function pesquisarAnoAA(
   onLog: OnLog = () => {},
   onProgresso: OnProgresso = () => {},
   onAviso: OnAviso = () => {},
+  deveParar: DeveParar = () => false,
 ): Promise<ResultadoAnoAA> {
   const origem = params.origem.toUpperCase();
   const destino = params.destino.toUpperCase();
@@ -297,6 +299,10 @@ export async function pesquisarAnoAA(
   let foraDoHorizonte = false;
 
   for (let i = 0; i < datas.length; i++) {
+    if (deveParar()) {
+      onLog("Busca cancelada. Devolvendo os meses já consultados.");
+      break;
+    }
     const departureDate = datas[i]!;
     const rotuloMes = departureDate.slice(0, 7); // YYYY-MM
     let sucesso = false;

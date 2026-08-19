@@ -4,6 +4,7 @@ import { abrirSessaoChrome, type SessaoChrome } from "../../nucleo/sessao-chrome
 import {
   LimitadorFrequencia,
   formatarListaPorMes,
+  type DeveParar,
   type OnAviso,
   type OnLog,
   type OnProgresso,
@@ -192,6 +193,7 @@ export async function pesquisarAnoLatam(
   onLog: OnLog = () => {},
   onProgresso: OnProgresso = () => {},
   onAviso: OnAviso = () => {},
+  deveParar: DeveParar = () => false,
 ): Promise<ResultadoAnoLatam> {
   const origem = params.origem.toUpperCase();
   const destino = params.destino.toUpperCase();
@@ -207,6 +209,10 @@ export async function pesquisarAnoLatam(
   onLog(`Buscando ${origem} ⇄ ${destino}. ${chamadas} chamadas cobrem ${MESES_A_VARRER} meses.`);
 
   for (let i = 0; i < chamadas; i++) {
+    if (deveParar()) {
+      onLog("Busca cancelada. Devolvendo o que já veio.");
+      break;
+    }
     const alvo = new Date(hoje.getFullYear(), hoje.getMonth() + i * MESES_POR_CHAMADA, 1);
     const mes = alvo.getMonth() + 1;
     const ano = alvo.getFullYear();

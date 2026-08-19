@@ -1,7 +1,13 @@
 import "dotenv/config";
 import type { Page } from "playwright";
 import { abrirSessaoChrome, type SessaoChrome } from "../../nucleo/sessao-chrome.ts";
-import { LimitadorFrequencia, formatarListaPorMes, type OnLog, type SecaoRelatorio } from "../../nucleo/comum.ts";
+import {
+  LimitadorFrequencia,
+  formatarListaPorMes,
+  type DeveParar,
+  type OnLog,
+  type SecaoRelatorio,
+} from "../../nucleo/comum.ts";
 
 // Bot do Smiles (GOL) — busca de disponibilidade em milhas, sem login.
 //
@@ -443,6 +449,7 @@ export async function pesquisarAnoSmiles(
   tetos: TetosSmiles,
   onLog: OnLog = () => {},
   onProgresso: (fracao: number) => void = () => {},
+  deveParar: DeveParar = () => false,
 ): Promise<ResultadoAnoSmiles> {
   const inicio = hojeMais(1);
   const fim = hojeMais(DIAS_A_VARRER);
@@ -489,6 +496,12 @@ export async function pesquisarAnoSmiles(
   let falhasSeguidas = 0;
   try {
   for (let i = 0; i < amostras.length; i++) {
+    if (deveParar()) {
+      const restantes = amostras.length - i;
+      onLog("Busca cancelada. Devolvendo o que já veio.");
+      if (restantes > 0) lacunas.push(`a busca foi cancelada: ${restantes} sondagem(ns) do período não chegaram a ser feitas`);
+      break;
+    }
     const resposta = await buscar(amostras[i]!);
     if (resposta) {
       falhasSeguidas = 0;

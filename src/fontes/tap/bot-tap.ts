@@ -4,6 +4,7 @@ import {
   LimitadorFrequencia,
   formatarListaPorMes,
   parseValorK,
+  type DeveParar,
   type OnAviso,
   type OnJanela,
   type OnLog,
@@ -378,6 +379,7 @@ export async function pesquisarAnoCompleto(
   onJanela: OnJanela = () => {},
   onAviso: OnAviso = () => {},
   onPergunta?: OnPergunta,
+  deveParar: DeveParar = () => false,
 ): Promise<ResultadoAnoCompleto> {
   const { baseUrl, origem, destino, cabineParam } = opts;
 
@@ -416,6 +418,12 @@ export async function pesquisarAnoCompleto(
     if (janelaFim > limitePeriodo) janelaFim = new Date(limitePeriodo);
 
     onLog(`Janela ${numeroJanela}/${totalJanelas}:`);
+    if (deveParar()) {
+      onLog("Busca cancelada. Devolvendo as janelas já consultadas.");
+      interrompidaPorVoce = true;
+      break;
+    }
+
     onJanela({
       atual: numeroJanela,
       total: totalJanelas,
