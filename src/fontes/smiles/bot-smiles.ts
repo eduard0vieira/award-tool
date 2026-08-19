@@ -70,6 +70,13 @@ export type ParametrosSmiles = {
   destino: string; // IATA
 };
 
+// Período a varrer. Vazio = de amanhã até SMILES_DIAS_VARREDURA dias à frente.
+//
+// Existe porque um ano inteiro raramente cabe no orçamento de IP: em rota sem
+// calendário cada dia custa uma consulta, e a busca acaba entregando um pedaço
+// escolhido pelo bot. Com período, o pedaço é escolhido por quem pediu.
+export type PeriodoSmiles = { de?: string; ate?: string };
+
 export type VooSmiles = {
   cabine: CabineSmiles;
   conexoes: number;
@@ -475,6 +482,32 @@ export type ResultadoAnoSmiles = {
 };
 
 const DIAS_A_VARRER = Number(process.env.SMILES_DIAS_VARREDURA) || 365;
+// Teto de segurança: mesmo pedindo um período maior, a varredura não passa
+// disso. Sem teto, um intervalo digitado errado viraria milhares de consultas.
+const MAX_DIAS_PERIODO = Number(process.env.SMILES_MAX_DIAS_PERIODO) || 365;
+
+// Traduz o período pedido em datas concretas, corrigindo o que não faz sentido
+// em vez de estourar: data no passado vira amanhã, fim antes do início vira o
+// padrão, e intervalo grande demais é cortado no teto.
+function diasNoPeriodo(inicio: string, fim: string): number {
+  return Math.round((Date.parse(fim) - Date.parse(inicio)) / 86_400_000) + 1;
+}
+
+export function limitesDoPeriodo(periodo: PeriodoSmiles = {}): { inicio: string; fim: string } {
+  const amanha = hojeMais(1);
+  const padraoFim = hojeMais(DIAS_A_VARRER);
+
+  const valida = (d?: string) => (d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null);
+  let inicio = valida(periodo.de) ?? amanha;
+  let fim = valida(periodo.ate) ?? padraoFim;
+
+  if (inicio < amanha) inicio = amanha;
+  if (fim < inicio) fim = padraoFim < inicio ? inicio : padraoFim;
+
+  const limite = somarDias(inicio, MAX_DIAS_PERIODO);
+  if (fim > limite) fim = limite;
+  return { inicio, fim };
+}
 const PASSO_AMOSTRAGEM = 7; // o calendário cobre ±3 dias
 // O orçamento por IP é o recurso escasso (~100–150 requisições por janela),
 // então o que protege a busca é pedir MENOS, não pedir mais devagar. Com 52
@@ -507,9 +540,9 @@ export async function pesquisarAnoSmiles(
   onLog: OnLog = () => {},
   onProgresso: (fracao: number) => void = () => {},
   deveParar: DeveParar = () => false,
+  periodo: PeriodoSmiles = {},
 ): Promise<ResultadoAnoSmiles> {
-  const inicio = hojeMais(1);
-  const fim = hojeMais(DIAS_A_VARRER);
+  const { inicio, fim } = limitesDoPeriodo(periodo);
   const teto = tetoMaximo(tetos);
 
   diasDoCache = 0;
@@ -551,7 +584,7 @@ export async function pesquisarAnoSmiles(
 
   onLog(
     `Varrendo ${params.origem.toUpperCase()} → ${params.destino.toUpperCase()}: ` +
-      `${amostras.length} sondagens cobrem ${DIAS_A_VARRER} dias.`,
+      `${amostras.length} sondagens cobrem ${diasNoPeriodo(inicio, fim)} dias (${inicio} a ${fim}).`,
   );
 
   let falhasSeguidas = 0;
