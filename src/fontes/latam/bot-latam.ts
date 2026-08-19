@@ -72,6 +72,12 @@ export type ConfirmacaoPar = {
   dataVolta: string;
   vooIda: string;
   vooVolta: string;
+  // Pontos de CADA perna, como a LATAM precifica dentro do par (no recon:
+  // 45.151 + 45.151 = 90.302, que é a opção 1). `null` quando a resposta da
+  // busca daquela direção não veio: é o card do alerta que fala por perna, e
+  // inventar metade do total seria chutar quando as pernas custam diferente.
+  milhasIda: number | null;
+  milhasVolta: number | null;
   taxaReais: number;
   opcoes: OpcaoResgate[];
   imagem: string;
@@ -535,6 +541,8 @@ export async function confirmarParEmMilhas(
       dataVolta,
       vooIda: descreverPrimeiroVoo(buscaIda, origem, destino),
       vooVolta: descreverPrimeiroVoo(buscaVolta, destino, origem),
+      milhasIda: milhasDoPrimeiroVoo(buscaIda),
+      milhasVolta: milhasDoPrimeiroVoo(buscaVolta),
       taxaReais,
       opcoes,
       imagem,
@@ -542,6 +550,14 @@ export async function confirmarParEmMilhas(
   } finally {
     page.off("response", capturar);
   }
+}
+
+// Pontos da perna escolhida. Dentro do fluxo de ida e volta esse valor já é o
+// do par (a busca da volta chega com `outOfferId` da ida), então ele NÃO é o
+// preço de comprar aquela perna sozinha.
+function milhasDoPrimeiroVoo(busca: OfertaCrua | undefined): number | null {
+  const valor = busca?.content?.[0]?.summary?.lowestPrice?.amount;
+  return typeof valor === "number" && Number.isFinite(valor) ? valor : null;
 }
 
 // O voo que foi escolhido é sempre o primeiro cartão — é nele que clicamos.
