@@ -1150,12 +1150,17 @@ button:disabled {
   gap: var(--e1);
 }
 
-.item-historico-cabine {
+/* Os chips de cabine herdavam as classes `cartao-*`, e com elas a barra
+   colorida de cada cabine. Quatro cores por linha, em dezenas de linhas, viram
+   ruído: aqui a cabine é só um rótulo. */
+.item-historico-cabine,
+.item-historico-cabine[class*="cartao-"] {
   padding: 2px var(--e2);
-  border-radius: var(--raio-p);
+  border: 0;
+  border-radius: 100px;
   background: var(--superficie-alta);
   font-size: 11px;
-  color: var(--texto-suave);
+  color: var(--texto-fraco);
 }
 
 .item-historico-hora,
@@ -1247,7 +1252,7 @@ button:disabled {
 .tag-programa {
   flex: 0 0 auto;
   padding: 2px var(--e2);
-  border: 1px solid var(--cor, var(--borda-forte));
+  border: 1px solid var(--borda);
   border-radius: 100px;
   color: var(--cor, var(--texto-suave));
   font-size: 11px;
@@ -1255,7 +1260,10 @@ button:disabled {
   letter-spacing: -0.005em;
 }
 
-[class*="accent-"] {
+/* A faixa colorida identifica o card de busca de longe. No histórico ela virava
+   uma linha berrante atravessando cada linha da lista — ali a etiqueta do
+   programa já diz de quem é. */
+.job-busca[class*="accent-"] {
   border-top: 2px solid var(--cor, var(--borda));
 }
 
