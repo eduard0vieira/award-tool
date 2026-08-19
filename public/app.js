@@ -1527,7 +1527,9 @@ function mostrarConfirmacaoMilhas(card, confirmacao) {
 
   const titulo = document.createElement("div");
   titulo.className = "alerta-titulo";
-  titulo.textContent = pares.length === 1 ? "Par confirmado em milhas" : `${pares.length} pares confirmados em milhas`;
+  titulo.textContent =
+    (pares.length === 1 ? "1 par conferido em pontos" : `${pares.length} pares conferidos em pontos`) +
+    " — amostra pra saber quanto custa o ida e volta";
   bloco.appendChild(titulo);
 
   for (const par of pares) bloco.appendChild(blocoDoPar(card, par));
@@ -1600,49 +1602,74 @@ function blocoDoPar(card, par) {
   });
   acoes.appendChild(btnCopiar);
 
-  const btnAlerta = document.createElement("button");
-  btnAlerta.type = "button";
-  btnAlerta.className = "btn-alerta";
-  btnAlerta.textContent = "📢 Gerar alerta";
-  btnAlerta.addEventListener("click", () => gerarAlertaDoPar(card, par, btnAlerta));
-  acoes.appendChild(btnAlerta);
-
   raiz.appendChild(acoes);
   return raiz;
 }
 
-// O alerta da LATAM sai do par confirmado, não da lista de datas: o número que
-// vale pro cliente é o do par, e ele só existe depois da confirmação.
-async function gerarAlertaDoPar(card, par, botao) {
-  botao.disabled = true;
-  botao.textContent = "⏳ Gerando...";
-  try {
-    const melhor = par.opcoes[0];
-    const resposta = await fetch("/api/alerta", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        fonte: "LATAM",
-        origem: par.origem,
-        destino: par.destino,
-        classe: "Econômica",
-        menorK: melhor.milhas / 1000,
-        maiorK: melhor.milhas / 1000,
-        textoIda: par.textoIda || "",
-        textoVolta: par.textoVolta || "",
-      }),
-    });
-    const corpo = await resposta.json();
-    if (!resposta.ok) throw new Error(corpo.erro || "Falha ao gerar o alerta.");
-    mostrarAlertaGerado(card, corpo);
-    botao.textContent = "✓ Alerta gerado";
-  } catch (err) {
-    botao.textContent = "📢 Gerar alerta";
-    card.avisoEl.textContent = err.message || "Falha ao gerar o alerta.";
-    card.avisoEl.hidden = false;
-  } finally {
-    botao.disabled = false;
-  }
+// O alerta da LATAM leva TODAS as datas do calendário — os pares confirmados
+// entram só como preço. É a diferença entre "estas são as datas com
+// disponibilidade" e "estes três pares eu conferi": o cliente quer a primeira.
+//
+// A faixa de pontos sai dos pares: o menor e o maior que a confirmação viu.
+// Sem confirmação não há botão — um alerta da LATAM sem o número em pontos
+// seria um card com preço em branco.
+function mostrarBotaoAlertaLatam(card, origem, destino, pernas, confirmacao) {
+  const pares = confirmacao?.pares ?? [];
+  if (pares.length === 0) return;
+
+  const secaoDe = (perna) => perna?.secoes?.find((s) => s.rotulo === "Econômica");
+  const secaoIda = secaoDe(pernas[0]);
+  const secaoVolta = secaoDe(pernas[1]);
+  if (!temDias(secaoIda) && !temDias(secaoVolta)) return;
+
+  const pontos = pares.map((p) => p.opcoes[0].milhas);
+  const menorK = Math.min(...pontos) / 1000;
+  const maiorK = Math.max(...pontos) / 1000;
+
+  const barra = document.createElement("div");
+  barra.className = "alerta-acoes";
+  const rotulo = document.createElement("span");
+  rotulo.className = "alerta-rotulo";
+  rotulo.textContent = "Alerta pro grupo:";
+  barra.appendChild(rotulo);
+
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "btn-alerta";
+  btn.textContent = "📢 Econômica";
+  btn.title = "Todas as datas do calendário, com os pontos vindos dos pares confirmados";
+  btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    btn.textContent = "⏳ Gerando...";
+    try {
+      const resposta = await fetch("/api/alerta", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fonte: "LATAM",
+          origem,
+          destino,
+          classe: "Econômica",
+          menorK,
+          maiorK,
+          textoIda: temDias(secaoIda) ? secaoIda.texto : "",
+          textoVolta: temDias(secaoVolta) ? secaoVolta.texto : "",
+        }),
+      });
+      const corpo = await resposta.json();
+      if (!resposta.ok) throw new Error(corpo.erro || "Falha ao gerar o alerta.");
+      mostrarAlertaGerado(card, corpo);
+      btn.textContent = "✓ Econômica";
+    } catch (err) {
+      btn.textContent = "📢 Econômica";
+      card.avisoEl.textContent = err.message || "Falha ao gerar o alerta.";
+      card.avisoEl.hidden = false;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+  barra.appendChild(btn);
+  card.raiz.querySelector(".job-cabecalho").after(barra);
 }
 
 const origemDestinoDe = (card) => card.rotaEl.textContent || "";
@@ -1665,6 +1692,7 @@ async function iniciarBuscaLatam(origem, destino, tetos, confirmarMilhas, sessao
       registrarPernaCopia(card, perna.secoes);
     }
     if (confirmacao) mostrarConfirmacaoMilhas(card, confirmacao);
+    mostrarBotaoAlertaLatam(card, origem, destino, pernas, confirmacao);
     if (!sessao.retomando) salvarNoHistorico(origem, destino, "LATAM", true);
 
     card.definirStatus("Pronto", "status-pronto");
