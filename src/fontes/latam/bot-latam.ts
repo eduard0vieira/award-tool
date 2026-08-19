@@ -497,15 +497,23 @@ export async function confirmarParEmMilhas(
     const { taxaReais, opcoes } = lerOpcoesResgate(opcoesCruas);
 
     let imagem = "";
+    const tamanhoOriginal = page.viewportSize();
     try {
-      // A página inteira: é ela que mostra as duas pernas e as combinações
-      // juntas. Tentar recortar "o painel das opções" por texto pegava um
-      // elemento mínimo — o print saía como uma tira de poucos pixels.
+      // `fullPage` sozinho não resolve aqui: nesta tela a rolagem é de um
+      // container interno, então a altura do documento é a da janela e o print
+      // sai só do pedaço visível (foi o que gerou a tira de 38px). O jeito que
+      // pega ida, volta e as combinações juntas é abrir a janela alta o
+      // bastante pra tudo caber sem rolagem.
+      await page.setViewportSize({ width: tamanhoOriginal?.width ?? 1280, height: 2000 });
+      await page.evaluate("window.scrollTo(0, 0)");
+      await page.waitForTimeout(1200);
       await page.screenshot({ path: caminhoImagem, fullPage: true });
       imagem = caminhoImagem;
     } catch (err) {
       // O preço é o dado essencial; a imagem não. Falta de print vira aviso.
       onLog(`Captura do print do par falhou: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      if (tamanhoOriginal) await page.setViewportSize(tamanhoOriginal).catch(() => {});
     }
 
     const melhor = opcoes[0]!;
