@@ -359,7 +359,7 @@ function criarItemHistorico(item) {
   if (Date.now() - item.timestamp < TOLERANCIA_MS) {
     const ponto = document.createElement("span");
     ponto.className = "ponto-recente";
-    ponto.title = `Dentro da tolerância de ${TOLERANCIA_DIAS} dias — repetir esse trecho vai gerar aviso.`;
+    ponto.title = `Dentro da tolerância de ${TOLERANCIA_DIAS} dias. Repetir esse trecho vai gerar aviso.`;
     principal.appendChild(ponto);
   }
 
@@ -1129,7 +1129,7 @@ async function iniciarBuscaTap(origem, destino, idaEVolta, tetos, sessao) {
     // trazer o mesmo vazio.
     let relatorioVolta = null;
     if (idaEVolta && interrompidaPorVoce) {
-      avisosParciais.push("A volta não foi buscada — você interrompeu a ida, e a volta gastaria as mesmas buscas no site.");
+      avisosParciais.push("A volta não foi buscada. Você interrompeu a ida, e a volta gastaria as mesmas buscas no site.");
     } else if (idaEVolta) {
       const { resultado, avisoParcial: avisoVolta } = await buscarNoServidor(
         card,

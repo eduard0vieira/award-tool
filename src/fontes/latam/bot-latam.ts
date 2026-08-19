@@ -204,7 +204,7 @@ export async function pesquisarAnoLatam(
 
   const hoje = new Date();
   const chamadas = Math.ceil(MESES_A_VARRER / MESES_POR_CHAMADA);
-  onLog(`Buscando ${origem} ⇄ ${destino} — ${chamadas} chamadas cobrem ${MESES_A_VARRER} meses.`);
+  onLog(`Buscando ${origem} ⇄ ${destino}. ${chamadas} chamadas cobrem ${MESES_A_VARRER} meses.`);
 
   for (let i = 0; i < chamadas; i++) {
     const alvo = new Date(hoje.getFullYear(), hoje.getMonth() + i * MESES_POR_CHAMADA, 1);
@@ -229,7 +229,7 @@ export async function pesquisarAnoLatam(
       falhasSeguidas++;
       if (falhasSeguidas >= MAX_FALHAS_SEGUIDAS) {
         onAviso("");
-        onLog(`${falhasSeguidas} chamadas seguidas falharam — parando e devolvendo o que já veio.`);
+        onLog(`${falhasSeguidas} chamadas seguidas falharam. Parando e devolvendo o que já veio.`);
         break;
       }
     }
@@ -308,7 +308,7 @@ type RespostaResgate = {
 
 export class ErroCampoLatam extends Error {
   constructor(campo: string) {
-    super(`A LATAM respondeu sem "${campo}". O formato mudou — o parser precisa ser conferido antes de confiar no número.`);
+    super(`A LATAM respondeu sem "${campo}". O formato mudou. O parser precisa ser conferido antes de confiar no número.`);
     this.name = "ErroCampoLatam";
   }
 }
@@ -359,7 +359,7 @@ async function preencherCredenciais(page: Page, onLog: OnLog): Promise<void> {
   const email = process.env.LATAM_EMAIL;
   const senha = process.env.LATAM_SENHA;
   if (!email || !senha) {
-    onLog("Sem LATAM_EMAIL/LATAM_SENHA no .env — o login é todo manual na janela do bot.");
+    onLog("Sem LATAM_EMAIL/LATAM_SENHA no .env. O login é todo manual na janela do bot.");
     return;
   }
 
@@ -376,7 +376,7 @@ async function preencherCredenciais(page: Page, onLog: OnLog): Promise<void> {
     onLog("Login da LATAM: e-mail (e senha, se o campo estava na tela) preenchidos. Confirme na janela do bot.");
   } catch (err) {
     const motivo = err instanceof Error ? err.message.split("\n")[0] : String(err);
-    onLog(`Preenchimento automático do login falhou (${motivo}) — conclua na janela do bot.`);
+    onLog(`Preenchimento automático do login falhou (${motivo}). Conclua na janela do bot.`);
   }
 }
 
@@ -386,7 +386,7 @@ export async function esperarLoginManual(page: Page, onLog: OnLog, onAviso: OnAv
 
   const minutos = Math.round(ESPERA_LOGIN_MS / 60000);
   const aviso =
-    `A LATAM pediu login. Entre na janela do Chrome do bot que está aberta (é a que o bot usa) — ` +
+    `A LATAM pediu login. Entre na janela do Chrome do bot que está aberta (é a que o bot usa); ` +
     `assim que a sessão voltar, a busca continua sozinha. Tempo limite: ${minutos} min.`;
   onAviso(aviso);
   onLog(aviso);
@@ -396,7 +396,7 @@ export async function esperarLoginManual(page: Page, onLog: OnLog, onAviso: OnAv
     await page.waitForTimeout(2000);
     if (!pedindoLogin(page)) {
       onAviso("");
-      onLog("Login concluído — retomando a busca em milhas.");
+      onLog("Login concluído. Retomando a busca em milhas.");
       return;
     }
   }

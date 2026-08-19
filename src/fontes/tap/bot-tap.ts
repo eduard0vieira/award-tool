@@ -177,7 +177,7 @@ async function pesquisarJanela(
         );
       }
       const esperaMs = 2 * 60 * 1000 * tentativaLimite; // 2min, 4min, 6min...
-      const mensagem = `AwardTool bloqueou por buscas muito frequentes — esperando ${Math.round(esperaMs / 60000)} min antes de tentar de novo [${tentativaLimite}/${MAX_TENTATIVAS_LIMITE}]...`;
+      const mensagem = `AwardTool bloqueou por buscas muito frequentes. Esperando ${Math.round(esperaMs / 60000)} min antes de tentar de novo [${tentativaLimite}/${MAX_TENTATIVAS_LIMITE}]...`;
       onLog(`  (${mensagem})`);
       onAviso(mensagem);
       await page.waitForTimeout(esperaMs);
@@ -195,10 +195,10 @@ async function pesquisarJanela(
 
     if (tentativa >= MAX_TENTATIVAS_MODAL) {
       throw new Error(
-        `O AwardTool continua recusando essa janela como "muito ampla" mesmo depois de ${MAX_TENTATIVAS_MODAL} tentativas — pode não ser mais o bug de reconhecimento do plano na primeira busca.`,
+        `O AwardTool continua recusando essa janela como "muito ampla" mesmo depois de ${MAX_TENTATIVAS_MODAL} tentativas. Pode não ser mais o bug de reconhecimento do plano na primeira busca.`,
       );
     }
-    onLog(`  (AwardTool não reconheceu o plano Pro nessa tentativa — fechando aviso e buscando de novo [${tentativa}/${MAX_TENTATIVAS_MODAL}]...)`);
+    onLog(`  (AwardTool não reconheceu o plano Pro nessa tentativa. Fechando aviso e buscando de novo [${tentativa}/${MAX_TENTATIVAS_MODAL}]...)`);
     const botaoOk = page.getByRole("button", { name: /got it/i }).first();
     if (await botaoOk.isVisible().catch(() => false)) {
       await botaoOk.click();
@@ -447,7 +447,7 @@ export async function pesquisarAnoCompleto(
           const continuar = await onPergunta(
             `${vaziasSeguidas} janelas seguidas sem nenhum voo (até ${de}–${ate}). ` +
               "Isso acontece quando a rota realmente não tem prêmio no período, mas também " +
-              "quando a fonte do AwardTool cai — e daqui não dá pra distinguir. Continuar a busca?",
+              "quando a fonte do AwardTool cai, e daqui não dá pra distinguir. Continuar a busca?",
           );
           if (!continuar) {
             onLog("Busca interrompida por você depois das janelas vazias.");
@@ -473,7 +473,7 @@ export async function pesquisarAnoCompleto(
         // Desiste de continuar (o problema não parece transitório), mas
         // devolve o que já foi capturado em vez de jogar tudo fora.
         onLog(
-          `${MAX_JANELAS_FALHAS_SEGUIDAS} janelas seguidas falharam — parando a busca aqui. ` +
+          `${MAX_JANELAS_FALHAS_SEGUIDAS} janelas seguidas falharam. Parando a busca aqui. ` +
             `O que já foi capturado até agora (${todasAsDatas.length} data(s)) foi preservado.`,
         );
         break;

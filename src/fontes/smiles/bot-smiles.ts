@@ -245,7 +245,7 @@ function extrairVoo(cru: VooCru, data: string, onLog: OnLog): VooSmiles | null {
   if (!cabine) {
     if (!cabinesDesconhecidas.has(codigoCabine)) {
       cabinesDesconhecidas.add(codigoCabine);
-      onLog(`Atenção: cabine "${codigoCabine}" não mapeada no Smiles — os voos dela ficam fora do relatório.`);
+      onLog(`Atenção: cabine "${codigoCabine}" não mapeada no Smiles. Os voos dela ficam fora do relatório.`);
     }
     return null;
   }
@@ -291,7 +291,7 @@ function taxaDe(smiles: TarifaCrua, origemDados: string, contexto: string, onLog
   }
   if (origemDados === "G3" && !jaAvisouTaxaGol) {
     jaAvisouTaxaGol = true;
-    onLog(`Atenção: voo da GOL sem g3.costTax (${contexto}) — o formato da API pode ter mudado.`);
+    onLog(`Atenção: voo da GOL sem g3.costTax (${contexto}). O formato da API pode ter mudado.`);
   }
   return null;
 }
@@ -305,9 +305,9 @@ function taxaDe(smiles: TarifaCrua, origemDados: string, contexto: string, onLog
 export class ErroBloqueioSmiles extends Error {
   constructor() {
     super(
-      "O Smiles bloqueou temporariamente as consultas deste IP (406). Não adianta repetir: o bloqueio " +
-        "passa sozinho, mas leva mais de 20 minutos. Espere e busque de novo — de preferência com menos " +
-        "dias por busca (SMILES_MAX_DETALHES) ou uma perna de cada vez.",
+      "Smiles bloqueou temporariamente as consultas deste IP (406). Repetir agora não recupera o acesso: " +
+        "o bloqueio expira sozinho, mas leva mais de 20 minutos. Aguarde e refaça a busca, de preferência " +
+        "com menos dias por busca (SMILES_MAX_DETALHES) ou uma perna de cada vez.",
     );
   }
 }
@@ -494,7 +494,7 @@ export async function pesquisarAnoSmiles(
       falhasSeguidas = 0;
     } else if (++falhasSeguidas >= MAX_FALHAS_SEGUIDAS) {
       const restantes = amostras.length - i - 1;
-      onLog(`${falhasSeguidas} sondagens seguidas falharam — parando com o que já veio.`);
+      onLog(`${falhasSeguidas} sondagens seguidas falharam. Parando com o que já veio.`);
       if (restantes > 0) lacunas.push(`a varredura parou cedo: ${restantes} sondagem(ns) do período não chegaram a ser feitas`);
       break;
     }
@@ -508,7 +508,7 @@ export async function pesquisarAnoSmiles(
     // barata pra dizer quais dias valem a pena, então o jeito é preencher os
     // buracos entre as amostras, dia a dia, até o limite — e dizer em voz alta
     // o que sobrou de fora.
-    onLog("Esta rota não devolve calendário — preenchendo os dias entre as sondagens, um a um.");
+    onLog("Esta rota não devolve calendário. Preenchendo os dias entre as sondagens, um a um.");
     const faltando: string[] = [];
     for (let d = inicio; d <= fim; d = somarDias(d, 1)) {
       if (!jaBuscados.has(d)) faltando.push(d);
@@ -539,11 +539,11 @@ export async function pesquisarAnoSmiles(
       // Limite existe, mas nunca em silêncio.
       onLog(`${candidatos.length} dias passaram no teto; detalhando os ${escolhidos.length} mais baratos.`);
       lacunas.push(
-        `${cortados} dia(s) dentro do teto não foram detalhados (limite de ${MAX_DETALHES} por busca) — ` +
+        `${cortados} dia(s) dentro do teto não foram detalhados (limite de ${MAX_DETALHES} por busca). ` +
           `os mais baratos entraram primeiro`,
       );
     } else if (escolhidos.length > 0) {
-      onLog(`${escolhidos.length} dia(s) passaram no teto — buscando cabine e assentos de cada um.`);
+      onLog(`${escolhidos.length} dia(s) passaram no teto. Buscando cabine e assentos de cada um.`);
     }
 
     for (let i = 0; i < escolhidos.length; i++) {
@@ -558,7 +558,7 @@ export async function pesquisarAnoSmiles(
     if (err instanceof ErroBloqueioSmiles) {
       onLog(err.message);
       lacunas.push(
-        `a busca foi interrompida pelo bloqueio do Smiles depois de ${dias.length} dia(s) — ` +
+        `a busca foi interrompida pelo bloqueio do Smiles depois de ${dias.length} dia(s). ` +
           "o resto do período não chegou a ser consultado; aguarde cerca de 30 min para completar",
       );
     } else {

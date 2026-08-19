@@ -249,7 +249,7 @@ function perguntarAoUsuario(jobId: string, mensagem: string): Promise<boolean> {
       resolve(continuar);
     };
     const prazo = setTimeout(() => {
-      console.log(`[${jobId}] ninguém respondeu em ${Math.round(ESPERA_RESPOSTA_MS / 60000)} min — parando a busca.`);
+      console.log(`[${jobId}] ninguém respondeu em ${Math.round(ESPERA_RESPOSTA_MS / 60000)} min. Parando a busca.`);
       encerrar(false);
     }, ESPERA_RESPOSTA_MS);
     job.responder = encerrar;
@@ -284,9 +284,9 @@ function executarJob(jobId: string, params: { origem: string; destino: string; t
     // Parar por decisão sua também produz resultado parcial — e isso precisa
     // estar escrito, senão o relatório curto passa por busca completa.
     const avisoParcial = interrompidaPorVoce
-      ? "Você interrompeu a busca depois das janelas vazias — o resultado abaixo cobre só o período já consultado."
+      ? "Você interrompeu a busca depois das janelas vazias. O resultado abaixo cobre só o período já consultado."
       : janelasComFalha.length > 0
-        ? `${janelasComFalha.length} janela(s) não puderam ser buscadas (ver detalhes no terminal do servidor) — o resultado abaixo é parcial.`
+        ? `${janelasComFalha.length} janela(s) não puderam ser buscadas (ver detalhes no terminal do servidor). O resultado abaixo é parcial.`
         : undefined;
     job.status = "done";
     job.relatorio = relatorio;
@@ -405,7 +405,7 @@ function executarJobAA(
     // errada ou pedido recusado.
     const avisoParcial =
       mesesComFalha.length > 0
-        ? `${mesesComFalha.length} mês(es) não puderam ser buscados — o resultado abaixo é parcial. ` +
+        ? `${mesesComFalha.length} mês(es) não puderam ser buscados. O resultado abaixo é parcial. ` +
           `Primeira falha (${mesesComFalha[0]!.mes}): ${mesesComFalha[0]!.erro}`
         : undefined;
     job.status = "done";
@@ -449,9 +449,9 @@ function executarJobSmiles(
     // deixou de cobrir. O servidor só junta com as falhas de dia.
     const partes = [...lacunas];
     if (diasComFalha.length > 0) {
-      partes.push(`${diasComFalha.length} dia(s) falharam — o primeiro foi ${diasComFalha[0]!.data}: ${diasComFalha[0]!.erro}`);
+      partes.push(`${diasComFalha.length} dia(s) falharam. O primeiro foi ${diasComFalha[0]!.data}: ${diasComFalha[0]!.erro}`);
     }
-    const avisoParcial = partes.length > 0 ? `Cobertura parcial — ${partes.join("; ")}.` : undefined;
+    const avisoParcial = partes.length > 0 ? `Cobertura parcial. ${partes.join("; ")}.` : undefined;
 
     // Planilha própria da busca, no formato do bot antigo (uma linha por voo).
     // Falha aqui não derruba nada: o resultado já está pronto.
@@ -550,7 +550,7 @@ function executarJobLatam(
     ];
     let avisoParcial =
       mesesComFalha.length > 0
-        ? `${mesesComFalha.length} período(s) não puderam ser buscados — o resultado abaixo é parcial.`
+        ? `${mesesComFalha.length} período(s) não puderam ser buscados. O resultado abaixo é parcial.`
         : undefined;
 
     // Fase 2: confirma em milhas os melhores pares de datas. O preço do PAR não
@@ -562,7 +562,7 @@ function executarJobLatam(
       try {
       const pares = escolherMelhoresPares(ida, volta, PARES_LATAM, params.margemIdaReais, params.margemVoltaReais);
       if (pares.length === 0) {
-        avisoConfirmacao = "Nenhum par de ida e volta dentro da faixa de preço — confirmação em milhas não executada.";
+        avisoConfirmacao = "Nenhum par de ida e volta dentro da faixa de preço. Confirmação em milhas não executada.";
       } else {
         const pasta = `latam-${params.origem}-${params.destino}-${Date.now()}`;
         fs.mkdirSync(path.join(DIR_ALERTAS, pasta), { recursive: true });
@@ -570,7 +570,7 @@ function executarJobLatam(
         const confirmados: ConfirmacaoPar[] = [];
         const falhas: string[] = [];
         for (const [i, par] of pares.entries()) {
-          atualizarAviso(jobId, `Confirmando par ${i + 1}/${pares.length} — ${par.ida.data} → ${par.volta.data}...`);
+          atualizarAviso(jobId, `Confirmando par ${i + 1}/${pares.length}. ${par.ida.data} → ${par.volta.data}...`);
           const arquivo = `par-${i + 1}.png`;
           try {
             const c = await confirmarParEmMilhas(
@@ -611,7 +611,7 @@ function executarJobLatam(
         if (confirmados.length > 0) {
           confirmacao = { pares: confirmados };
           if (falhas.length > 0) {
-            avisoConfirmacao = `Confirmação parcial: ${falhas.length} de ${pares.length} pares sem resultado — ${falhas.join(" · ")}`;
+            avisoConfirmacao = `Confirmação parcial: ${falhas.length} de ${pares.length} pares sem resultado. ${falhas.join(" · ")}`;
           }
         } else {
           avisoConfirmacao = `Confirmação em milhas sem resultado em nenhum dos ${pares.length} pares: ${falhas.join(" · ")}`;
@@ -673,7 +673,7 @@ if (AUTH_USER && AUTH_PASS) {
   });
 } else {
   console.warn(
-    "Aviso: BOT_AUTH_USER/BOT_AUTH_PASS não configurados no .env — o servidor fica sem senha. " +
+    "Aviso: BOT_AUTH_USER/BOT_AUTH_PASS não configurados no .env. O servidor fica sem senha. " +
       "Defina os dois antes de expor essa porta publicamente (ex.: via ngrok).",
   );
 }

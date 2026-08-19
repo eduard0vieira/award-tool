@@ -313,7 +313,7 @@ export async function pesquisarAnoAA(
       } catch (err) {
         if (err instanceof ErroForaDoHorizonte) {
           // Fim natural da varredura: a AA ainda não vende esse mês.
-          onLog(`Mês ${rotuloMes} ainda não está à venda — fim da varredura.`);
+          onLog(`Mês ${rotuloMes} ainda não está à venda. Fim da varredura.`);
           foraDoHorizonte = true;
           break;
         }
@@ -322,7 +322,7 @@ export async function pesquisarAnoAA(
         if (pareceBloqueio && tentativa < MAX_TENTATIVAS_BLOQUEIO) {
           const esperaMs = COOLDOWN_BLOQUEIO_MS * tentativa;
           const esperaMin = Math.round(esperaMs / 60000 * 10) / 10;
-          onAviso(`A AA bloqueou temporariamente (403) — esperando ${esperaMin} min antes de tentar de novo...`);
+          onAviso(`A AA bloqueou temporariamente (403). Esperando ${esperaMin} min antes de tentar de novo...`);
           onLog(`Bloqueio 403 no mês ${rotuloMes}; cooldown de ${esperaMin} min (tentativa ${tentativa}).`);
           await page.waitForTimeout(esperaMs);
           onAviso("");
@@ -342,7 +342,7 @@ export async function pesquisarAnoAA(
       falhasSeguidas++;
       if (falhasSeguidas >= MAX_MESES_FALHAS_SEGUIDAS) {
         onLog(
-          `${falhasSeguidas} meses seguidos falharam — parando por aqui e devolvendo o que já foi coletado.`,
+          `${falhasSeguidas} meses seguidos falharam. Parando por aqui e devolvendo o que já foi coletado.`,
         );
         break;
       }

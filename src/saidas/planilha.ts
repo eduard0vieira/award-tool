@@ -145,7 +145,7 @@ function gravarCsv(linhas: LinhaPlanilha[]) {
 // ── Planilha por busca, no formato do bot antigo ──────────────────────────
 //
 // Mesmas colunas (e mesma ordem) do FlightAvailability do cheap-flights, que é
-// o formato que vocês já sabem filtrar. Uma linha por VOO — granularidade mais
+// o formato que vocês já sabem filtrar. Uma linha por VOO. Granularidade mais
 // fina que a do relatório de datas, que agrega por dia/cabine.
 //
 // Aqui cada busca gera uma planilha NOVA, com link próprio, em vez de somar na
@@ -178,8 +178,7 @@ export type LinhaVoo = Record<(typeof COLUNAS_VOO)[number], string | number>;
 // Cada busca ganha uma ABA nova na planilha do usuário, com link próprio.
 //
 // Por que aba e não planilha nova: conta de serviço tem cota de Drive ZERO
-// (`storageQuota.limit: "0"`), então ela não pode ser DONA de arquivo nenhum —
-// criar planilha devolve 403 "storage quota has been exceeded". Isso é
+// (`storageQuota.limit: "0"`), então ela não pode ser DONA de arquivo nenhum. // criar planilha devolve 403 "storage quota has been exceeded". Isso é
 // política do Google e não tem contorno em conta pessoal. A aba entrega o
 // mesmo: dados isolados por busca, link direto, nada se sobrescreve.
 
@@ -314,12 +313,12 @@ function lerCredenciais(): Credenciais | null {
   }
   const cru = JSON.parse(fs.readFileSync(CAMINHO_CREDENCIAIS, "utf8")) as Partial<Credenciais>;
   if (!cru.client_email || !cru.private_key) {
-    throw new Error("O arquivo de credenciais não tem client_email/private_key — não é uma conta de serviço.");
+    throw new Error("O arquivo de credenciais não tem client_email/private_key. Não é uma conta de serviço.");
   }
   return { client_email: cru.client_email, private_key: cru.private_key };
 }
 
-// A aba vazia precisa ganhar o cabeçalho junto do primeiro append — senão
+// A aba vazia precisa ganhar o cabeçalho junto do primeiro append. Senão
 // fica uma planilha com dados e sem nome de coluna, que ninguém sabe ler
 // depois. Só custa uma leitura, e só na primeira vez.
 async function abaVazia(token: string): Promise<boolean> {
@@ -398,7 +397,7 @@ export async function registrarBusca(
     if (!jaAvisouSemSheets) {
       jaAvisouSemSheets = true;
       onLog(
-        "Planilha do Google não configurada (GOOGLE_CREDENCIAIS + PLANILHA_ID no .env) — " +
+        "Planilha do Google não configurada (GOOGLE_CREDENCIAIS + PLANILHA_ID no .env). " +
           `as buscas estão sendo gravadas só em ${path.relative(RAIZ, ARQUIVO_CSV)}.`,
       );
     }

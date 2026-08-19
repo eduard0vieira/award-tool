@@ -266,7 +266,7 @@ export async function pesquisarSeatspy(
     if (res.status() !== 200) {
       const direcao = direcaoPelaOrdem();
       direcoesVazias.add(direcao);
-      onLog(`SeatSpy respondeu com erro (status ${res.status()}) pra ${direcao} — tratando como sem disponibilidade.`);
+      onLog(`SeatSpy respondeu com erro (status ${res.status()}) pra ${direcao}. Tratando como sem disponibilidade.`);
       return;
     }
 
@@ -327,7 +327,7 @@ export async function pesquisarSeatspy(
     const nomeCompanhia = NOME_COMPANHIA[params.companhia];
     if (direcoesVazias.has("ida")) {
       throw new Error(
-        `Nenhuma disponibilidade encontrada para ${origem} → ${destino} — é possível que a ${nomeCompanhia} não opere esse trecho.`,
+        `Nenhuma disponibilidade encontrada para ${origem} → ${destino}. É possível que a ${nomeCompanhia} não opere esse trecho.`,
       );
     }
     if (!porDirecao.has("ida")) {
@@ -336,7 +336,7 @@ export async function pesquisarSeatspy(
     if (params.idaEVolta) {
       if (direcoesVazias.has("volta")) {
         throw new Error(
-          `Nenhuma disponibilidade encontrada para a volta (${destino} → ${origem}) — é possível que a ${nomeCompanhia} não opere esse trecho nessa direção.`,
+          `Nenhuma disponibilidade encontrada para a volta (${destino} → ${origem}). É possível que a ${nomeCompanhia} não opere esse trecho nessa direção.`,
         );
       }
       if (!porDirecao.has("volta")) {
