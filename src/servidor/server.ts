@@ -87,6 +87,7 @@ type Job = {
   // guardada no job pra continuar existindo depois de um F5 — senão a busca
   // esperaria por uma pergunta que ninguém mais vê.
   interrompidaPorVoce?: boolean; // você mandou parar: a perna seguinte nem começa
+  cancelado?: boolean; // pedido de parada: a busca encerra no próximo ponto seguro
   pergunta?: { id: string; mensagem: string } | undefined;
   responder?: ((continuar: boolean) => void) | undefined;
   erro?: string;
@@ -184,13 +185,21 @@ async function executarComPool<S>(
   const job = jobs.get(jobId)!;
   let indiceSlot = -1;
   try {
+    // Cancelar enquanto está na fila é imediato: nem chega a ocupar um slot do
+    // navegador nem a tocar no site.
+    if (job.cancelado) return encerrarCancelado(jobId);
     const { sessao, indice } = await pool.adquirir();
     indiceSlot = indice;
+    if (job.cancelado) {
+      pool.liberar(indice);
+      return encerrarCancelado(jobId);
+    }
     job.status = "running";
     emitirEvento(jobId, { tipo: "iniciou" });
     await trabalho(sessao);
   } catch (err) {
     const mensagemOriginal = err instanceof Error ? err.message : String(err);
+    if (job.cancelado) return encerrarCancelado(jobId);
     const fechouNoMeio = /Target page, context or browser has been closed/i.test(mensagemOriginal);
     job.status = "erro";
     job.erro = fechouNoMeio
@@ -228,6 +237,17 @@ const ESPERA_RESPOSTA_MS = Number(process.env.ESPERA_RESPOSTA_MS) || 15 * 60_000
 // completo no site (deep link → escolhe ida → escolhe volta), então subir isso
 // custa tempo e sessão.
 const PARES_LATAM = Number(process.env.LATAM_PARES) || 3;
+
+// Parada pedida pela tela. Vira "erro" com mensagem própria porque o front já
+// sabe encerrar o card nesse caso; o que muda é o texto, que precisa deixar
+// claro que ninguém falhou.
+function encerrarCancelado(jobId: string) {
+  const job = jobs.get(jobId);
+  if (!job) return;
+  job.status = "erro";
+  job.erro = "Busca cancelada.";
+  emitirEvento(jobId, { tipo: "erro", mensagem: job.erro });
+}
 
 function perguntarAoUsuario(jobId: string, mensagem: string): Promise<boolean> {
   const job = jobs.get(jobId);
@@ -826,6 +846,24 @@ app.post("/api/alerta", async (req: Request, res: Response) => {
 // servidor reiniciou no meio, os jobs sumiram da memória — isto é o que o front
 // consulta pra descartar o que não existe mais, em vez de abrir um SSE que
 // morre com 404.
+app.post("/api/buscar/:jobId/cancelar", (req: Request, res: Response) => {
+  const jobId = String(req.params.jobId);
+  const job = jobs.get(jobId);
+  if (!job) {
+    res.status(404).json({ erro: "Busca não existe mais." });
+    return;
+  }
+  if (job.status === "done" || job.status === "erro") {
+    res.status(409).json({ erro: "Essa busca já terminou." });
+    return;
+  }
+  job.cancelado = true;
+  // Se estava parada esperando resposta de uma pergunta, cancelar responde por
+  // você: seguir esperando seguraria um slot do navegador à toa.
+  if (job.responder) job.responder(false);
+  res.json({ ok: true });
+});
+
 app.post("/api/buscar/:jobId/responder", (req: Request, res: Response) => {
   const job = jobs.get(String(req.params.jobId));
   if (!job) {
