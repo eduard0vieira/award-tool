@@ -473,6 +473,7 @@ function criarCardJob(filaBuscasEl, tituloRota) {
     btnCopiarIdaEl: raiz.querySelector(".btn-copiar-ida"),
     btnCopiarVoltaEl: raiz.querySelector(".btn-copiar-volta"),
     btnMinimizarEl: raiz.querySelector(".btn-minimizar"),
+    btnPararEl: raiz.querySelector(".btn-parar-busca"),
     btnRemoverEl: raiz.querySelector(".btn-remover"),
     pernasParaUpgrade: [],
     // Datas por perna na ordem em que chegam (ida primeiro), pros botões de
@@ -496,6 +497,7 @@ function criarCardJob(filaBuscasEl, tituloRota) {
   function definirStatus(texto, classe) {
     card.statusEl.textContent = texto;
     card.statusEl.className = `job-status ${classe}`;
+    card.btnPararEl.hidden = classe === "status-pronto" || classe === "status-erro";
   }
   card.definirStatus = definirStatus;
 
@@ -512,6 +514,27 @@ function criarCardJob(filaBuscasEl, tituloRota) {
     card.subpainelUpgradeEl.hidden = card.minimizado || abaAtiva !== "upgrade";
     card.subAbasEl.hidden = card.minimizado;
     card.btnMinimizarEl.textContent = card.minimizado ? "Expandir" : "Minimizar";
+  });
+
+  // Parar existe pro clique errado: a busca some da fila antes de gastar
+  // consulta, ou encerra no próximo ponto seguro se já estiver rodando. O botão
+  // some quando a busca termina, porque aí não há o que parar.
+  card.btnPararEl.addEventListener("click", async () => {
+    const jobId = raiz.dataset.jobId;
+    card.btnPararEl.disabled = true;
+    if (!jobId) {
+      // Ainda nem chegou a virar job no servidor: some da tela e pronto.
+      raiz.remove();
+      return;
+    }
+    try {
+      const r = await fetch(`/api/buscar/${jobId}/cancelar`, { method: "POST" });
+      if (!r.ok && r.status !== 409) throw new Error((await r.json().catch(() => ({}))).erro || "Falha ao parar.");
+    } catch (err) {
+      card.btnPararEl.disabled = false;
+      card.avisoEl.textContent = err.message || "Falha ao parar a busca.";
+      card.avisoEl.hidden = false;
+    }
   });
 
   // Remover tira o card da tela E da memória — sem isso ele voltaria no
@@ -751,8 +774,10 @@ function buscarNoServidor(card, corpo, rotuloProgresso, sessao) {
       return;
     }
 
-    // O botão Remover precisa saber qual registro apagar.
+    // O botão Remover precisa saber qual registro apagar, e o Parar precisa do
+    // job pra cancelar no servidor.
     if (sessao) card.raiz.dataset.buscaId = sessao.registro.id;
+    if (jobId) card.raiz.dataset.jobId = jobId;
 
     const guardarResultado = (dados) => {
       if (!sessao) return;
@@ -782,6 +807,7 @@ function buscarNoServidor(card, corpo, rotuloProgresso, sessao) {
       }
 
       ({ jobId } = await resposta.json());
+      card.raiz.dataset.jobId = jobId;
       if (sessao) {
         sessao.registro.passos[sessao.indice - 1] = { jobId };
         persistirSessao(sessao);
