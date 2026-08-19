@@ -774,10 +774,8 @@ function buscarNoServidor(card, corpo, rotuloProgresso, sessao) {
       return;
     }
 
-    // O botão Remover precisa saber qual registro apagar, e o Parar precisa do
-    // job pra cancelar no servidor.
+    // O botão Remover precisa saber qual registro apagar.
     if (sessao) card.raiz.dataset.buscaId = sessao.registro.id;
-    if (jobId) card.raiz.dataset.jobId = jobId;
 
     const guardarResultado = (dados) => {
       if (!sessao) return;
@@ -787,6 +785,9 @@ function buscarNoServidor(card, corpo, rotuloProgresso, sessao) {
     };
 
     let jobId = passo?.jobId;
+    // O botão Parar precisa do job pra cancelar no servidor. Numa busca
+    // retomada o id já existe aqui; numa nova, é preenchido logo depois do POST.
+    if (jobId) card.raiz.dataset.jobId = jobId;
     let resposta;
     if (!jobId) {
       try {
@@ -1632,9 +1633,13 @@ function mostrarBotaoAlertaLatam(card, origem, destino, pernas, confirmacao) {
   const secaoVolta = secaoDe(pernas[1]);
   if (!temDias(secaoIda) && !temDias(secaoVolta)) return;
 
-  const pontos = pares.map((p) => p.opcoes[0].milhas);
-  const menorK = Math.min(...pontos) / 1000;
-  const maiorK = Math.max(...pontos) / 1000;
+  // O card do alerta é POR PERNA: ele mostra um preço no cartão da ida e outro
+  // no da volta. Usar o total do par colocava o preço da viagem inteira nos
+  // dois cartões, dobrando o valor aos olhos de quem lê.
+  const porPerna = pares.flatMap((p) => [p.milhasIda, p.milhasVolta]).filter((v) => typeof v === "number");
+  if (porPerna.length === 0) return;
+  const menorK = Math.min(...porPerna) / 1000;
+  const maiorK = Math.max(...porPerna) / 1000;
 
   const barra = document.createElement("div");
   barra.className = "alerta-acoes";
