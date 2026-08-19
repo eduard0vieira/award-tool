@@ -766,6 +766,13 @@ function buscarNoServidor(card, corpo, rotuloProgresso, sessao) {
     const passo = sessao?.registro.passos[sessao.indice];
     sessao && sessao.indice++;
 
+    // Antes de qualquer saída: o botão Remover precisa saber qual registro
+    // apagar, e a busca recuperada do armazenamento sai logo abaixo. Marcar só
+    // depois deixava justamente essas — as que sobrevivem ao F5 — sem o id, e
+    // então Remover tirava o card da tela mas não da memória: no próximo F5
+    // elas voltavam.
+    if (sessao) card.raiz.dataset.buscaId = sessao.registro.id;
+
     if (passo?.resultado) {
       card.definirStatus("Pronto", "status-pronto");
       atualizarBarra(card.barraEl, 1);
@@ -773,9 +780,6 @@ function buscarNoServidor(card, corpo, rotuloProgresso, sessao) {
       resolve(passo.resultado);
       return;
     }
-
-    // O botão Remover precisa saber qual registro apagar.
-    if (sessao) card.raiz.dataset.buscaId = sessao.registro.id;
 
     const guardarResultado = (dados) => {
       if (!sessao) return;
