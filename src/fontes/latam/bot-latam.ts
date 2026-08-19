@@ -498,9 +498,10 @@ export async function confirmarParEmMilhas(
 
     let imagem = "";
     try {
-      const painel = page.locator("section, div").filter({ hasText: /Selecione a op/i }).last();
-      if ((await painel.count()) > 0) await painel.screenshot({ path: caminhoImagem });
-      else await page.screenshot({ path: caminhoImagem, fullPage: true });
+      // A página inteira: é ela que mostra as duas pernas e as combinações
+      // juntas. Tentar recortar "o painel das opções" por texto pegava um
+      // elemento mínimo — o print saía como uma tira de poucos pixels.
+      await page.screenshot({ path: caminhoImagem, fullPage: true });
       imagem = caminhoImagem;
     } catch (err) {
       // O preço é o dado essencial; a imagem não. Falta de print vira aviso.
