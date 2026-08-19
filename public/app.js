@@ -1531,12 +1531,29 @@ function mostrarConfirmacaoMilhas(card, confirmacao) {
 
   const titulo = document.createElement("div");
   titulo.className = "alerta-titulo";
-  titulo.textContent =
-    (pares.length === 1 ? "1 par conferido em pontos" : `${pares.length} pares conferidos em pontos`) +
-    " — amostra pra saber quanto custa o ida e volta";
+  titulo.textContent = "Ida e volta conferido";
   bloco.appendChild(titulo);
 
   for (const par of pares) bloco.appendChild(blocoDoPar(card, par));
+
+  const btnCopiar = document.createElement("button");
+  btnCopiar.type = "button";
+  btnCopiar.className = "btn-copiar";
+  btnCopiar.textContent = "Copiar";
+  const texto = pares
+    .map(
+      (p) =>
+        `${p.opcoes[0].milhas.toLocaleString("pt-BR")} pts + R$ ` +
+        `${p.opcoes[0].totalReais.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} · ` +
+        `${p.dataIda} → ${p.dataVolta}`,
+    )
+    .join("\n");
+  btnCopiar.addEventListener("click", () => {
+    navigator.clipboard.writeText(texto);
+    btnCopiar.textContent = "Copiado!";
+    setTimeout(() => (btnCopiar.textContent = "Copiar"), 1500);
+  });
+  bloco.appendChild(btnCopiar);
   // Preço perto do topo: é o número que se procura, e no fim do card ele ficava
   // atrás de um ano de datas.
   card.raiz.querySelector(".job-cabecalho").after(bloco);
@@ -1544,72 +1561,33 @@ function mostrarConfirmacaoMilhas(card, confirmacao) {
 
 function blocoDoPar(card, par) {
   const fmt = (n) => n.toLocaleString("pt-BR");
-  const reais = (n) => `R$ ${n.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
-  const raiz = document.createElement("div");
-  raiz.className = "par-latam";
+  const reais = (n) => n.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
+  const dataBR = (iso) => iso.split("-").reverse().slice(0, 2).join("/");
 
-  const cabecalho = document.createElement("p");
-  cabecalho.className = "confirmacao-resumo";
-  const melhor = par.opcoes[0];
-  cabecalho.innerHTML =
-    `<strong>${fmt(melhor.milhas)} pontos + ${reais(melhor.totalReais)}</strong>` +
-    ` &middot; ida ${par.dataIda} &middot; volta ${par.dataVolta}`;
-  raiz.appendChild(cabecalho);
+  const linha = document.createElement("div");
+  linha.className = "par-latam";
 
-  if (par.vooIda || par.vooVolta) {
-    const detalhe = document.createElement("p");
-    detalhe.className = "confirmacao-detalhe";
-    detalhe.textContent = [par.vooIda && `Ida: ${par.vooIda}`, par.vooVolta && `Volta: ${par.vooVolta}`]
-      .filter(Boolean)
-      .join("\n");
-    raiz.appendChild(detalhe);
-  }
+  const valor = document.createElement("strong");
+  valor.className = "par-valor";
+  valor.textContent = `${fmt(par.opcoes[0].milhas)} pts + R$ ${reais(par.opcoes[0].totalReais)}`;
 
-  // A escada inteira, porque escolher uma linha por conta própria seria decidir
-  // pelo cliente quanto ele paga em dinheiro.
-  const escada = document.createElement("ul");
-  escada.className = "escada-resgate";
-  for (const o of par.opcoes) {
-    const item = document.createElement("li");
-    item.textContent = `${fmt(o.milhas)} pontos + ${reais(o.totalReais)}`;
-    escada.appendChild(item);
-  }
-  raiz.appendChild(escada);
+  const datas = document.createElement("span");
+  datas.className = "par-datas";
+  datas.textContent = `${dataBR(par.dataIda)} → ${dataBR(par.dataVolta)}`;
 
+  linha.append(valor, datas);
+
+  // O print da tela da LATAM fica atrás de um link: é comprovação, não algo
+  // pra ficar ocupando a tela toda vez.
   if (par.imagem) {
-    const galeria = document.createElement("div");
-    galeria.className = "alerta-galeria confirmacao-galeria";
     const link = document.createElement("a");
+    link.className = "par-print";
     link.href = par.imagem;
     link.target = "_blank";
-    link.download = par.imagem.split("/").pop();
-    const img = document.createElement("img");
-    img.src = par.imagem;
-    img.alt = `Par ${par.dataIda} → ${par.dataVolta} confirmado em milhas`;
-    link.appendChild(img);
-    galeria.appendChild(link);
-    raiz.appendChild(galeria);
+    link.textContent = "print";
+    linha.appendChild(link);
   }
-
-  const acoes = document.createElement("div");
-  acoes.className = "alerta-acoes";
-
-  const btnCopiar = document.createElement("button");
-  btnCopiar.type = "button";
-  btnCopiar.className = "btn-copiar";
-  btnCopiar.textContent = "Copiar resumo";
-  const texto =
-    `${par.origem} ⇄ ${par.destino} · ida ${par.dataIda} · volta ${par.dataVolta}\n` +
-    par.opcoes.map((o) => `${fmt(o.milhas)} pontos + ${reais(o.totalReais)}`).join("\n");
-  btnCopiar.addEventListener("click", () => {
-    navigator.clipboard.writeText(texto);
-    btnCopiar.textContent = "Copiado!";
-    setTimeout(() => (btnCopiar.textContent = "Copiar resumo"), 1500);
-  });
-  acoes.appendChild(btnCopiar);
-
-  raiz.appendChild(acoes);
-  return raiz;
+  return linha;
 }
 
 // O alerta da LATAM leva TODAS as datas do calendário — os pares confirmados

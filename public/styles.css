@@ -1000,51 +1000,52 @@ button:disabled {
 
 .job-busca > .confirmacao-latam {
   margin: var(--e4) var(--e5) 0;
-  padding: var(--e4);
+  padding: var(--e3) var(--e4) var(--e4);
   border: 1px solid var(--borda);
   border-radius: var(--raio);
   background: var(--fundo);
 }
 
-/* Um par confirmado da LATAM: cabeçalho, voos, a escada de combinações e o
-   print da própria tela da companhia. */
+/* Um par conferido: uma linha, três informações. O resto (voos, escada de
+   combinações, print grande) tirava a atenção do único número que se procura
+   aqui — quanto custa o ida e volta. */
 .par-latam {
-  padding: var(--e3) 0;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--e3);
+  padding: var(--e2) 0;
 }
 
 .par-latam + .par-latam {
-  margin-top: var(--e3);
-  padding-top: var(--e4);
   border-top: 1px solid var(--borda);
 }
 
-/* As quatro linhas de milhas+dinheiro. Ficam todas visíveis de propósito:
-   escolher uma seria decidir pelo cliente quanto ele paga em dinheiro. */
-.escada-resgate {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--e2);
-  margin: var(--e3) 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.escada-resgate li {
-  padding: var(--e1) var(--e3);
-  border: 1px solid var(--borda);
-  border-radius: 100px;
-  background: var(--superficie);
-  font-size: 12px;
-  color: var(--texto-suave);
-}
-
-.escada-resgate li:first-child {
-  border-color: var(--borda-forte);
-  color: var(--texto);
+.par-valor {
+  font-size: 14px;
   font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
-.par-latam .alerta-acoes {
+.par-datas {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--texto-fraco);
+}
+
+.par-print {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--texto-fraco);
+  text-decoration: none;
+}
+
+.par-print:hover {
+  color: var(--marca-forte);
+  text-decoration: underline;
+}
+
+.confirmacao-latam .btn-copiar {
   margin-top: var(--e3);
 }
 
