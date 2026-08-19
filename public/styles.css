@@ -998,6 +998,14 @@ button:disabled {
   transform: scale(1.02);
 }
 
+.job-busca > .confirmacao-latam {
+  margin: var(--e4) var(--e5) 0;
+  padding: var(--e4);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  background: var(--fundo);
+}
+
 /* Um par confirmado da LATAM: cabeçalho, voos, a escada de combinações e o
    print da própria tela da companhia. */
 .par-latam {

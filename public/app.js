@@ -1440,12 +1440,14 @@ function mostrarAlertaGerado(card, { imagens, legenda, imagemCombo, legendaCombo
 // Empilha os blocos gerados na ordem em que saíram, logo depois da barra de
 // botões — e cai pro fim do card se a barra não existir (fonte sem alerta).
 function inserirDepoisDoAlerta(card, bloco) {
+  // Empilha na ordem em que saíram, logo abaixo da barra que os gerou — e nunca
+  // depois do resultado, que pode ter um ano de datas na frente.
   const anteriores = card.raiz.querySelectorAll(":scope > .alerta-resultado");
   const ancora = anteriores.length
     ? anteriores[anteriores.length - 1]
     : card.raiz.querySelector(":scope > .alerta-acoes");
   if (ancora) ancora.after(bloco);
-  else card.raiz.appendChild(bloco);
+  else card.raiz.querySelector(".job-cabecalho").after(bloco);
 }
 
 // AA: uma cabine por busca, cada direção é um job próprio (como na TAP).
@@ -1523,7 +1525,9 @@ function mostrarConfirmacaoMilhas(card, confirmacao) {
   if (pares.length === 0) return;
 
   const bloco = document.createElement("div");
-  bloco.className = "alerta-resultado";
+  // Classe própria: com `alerta-resultado` ele era confundido com um alerta já
+  // gerado, e os alertas novos iam parar depois dele, no fim do card.
+  bloco.className = "confirmacao-latam";
 
   const titulo = document.createElement("div");
   titulo.className = "alerta-titulo";
@@ -1533,7 +1537,9 @@ function mostrarConfirmacaoMilhas(card, confirmacao) {
   bloco.appendChild(titulo);
 
   for (const par of pares) bloco.appendChild(blocoDoPar(card, par));
-  card.raiz.appendChild(bloco);
+  // Preço perto do topo: é o número que se procura, e no fim do card ele ficava
+  // atrás de um ano de datas.
+  card.raiz.querySelector(".job-cabecalho").after(bloco);
 }
 
 function blocoDoPar(card, par) {
