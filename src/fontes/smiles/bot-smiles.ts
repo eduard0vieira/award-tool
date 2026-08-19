@@ -1,6 +1,7 @@
 import "dotenv/config";
 import type { Page } from "playwright";
 import { abrirSessaoChrome, type SessaoChrome } from "../../nucleo/sessao-chrome.ts";
+import { CacheComValidade } from "../../nucleo/cache.ts";
 import {
   LimitadorFrequencia,
   formatarListaPorMes,
@@ -342,12 +343,33 @@ async function chamarApi(page: Page, params: ParametrosSmiles, data: string) {
   );
 }
 
+// Quanto tempo a resposta de um dia continua valendo. Curto de propósito: o
+// alvo é a segunda tentativa depois de um bloqueio, não guardar preço velho.
+// Disponibilidade em milhas muda ao longo do dia, e alerta com dado vencido é
+// pior que alerta que faltou.
+const VALIDADE_CACHE_MS = Number(process.env.SMILES_CACHE_MS) || 3 * 60 * 60_000;
+const cacheDias = new CacheComValidade<RespostaSmiles>(VALIDADE_CACHE_MS);
+
+// Quantos dias da última varredura vieram do cache. Zerado no início de cada
+// varredura pra virar número no relatório em vez de ficar invisível.
+let diasDoCache = 0;
+
+function chaveCache(params: ParametrosSmiles, data: string): string {
+  return `${params.origem.toUpperCase()}-${params.destino.toUpperCase()}-${data}`;
+}
+
 export async function buscarDiaSmiles(
   page: Page,
   params: ParametrosSmiles,
   data: string,
   onLog: OnLog = () => {},
 ): Promise<RespostaSmiles> {
+  const guardado = cacheDias.buscar(chaveCache(params, data));
+  if (guardado) {
+    diasDoCache++;
+    return guardado;
+  }
+
   const resultado = await chamarApi(page, params, data);
 
   if (resultado.status === 406) throw new ErroBloqueioSmiles();
@@ -409,7 +431,9 @@ export async function buscarDiaSmiles(
     );
   }
 
-  return { data, voos, calendario };
+  const resposta = { data, voos, calendario };
+  cacheDias.guardar(chaveCache(params, data), resposta);
+  return resposta;
 }
 
 // ── Fase 2: varredura de um ano ───────────────────────────────────────────
@@ -442,6 +466,9 @@ export type DiaComFalhaSmiles = { data: string; erro: string };
 export type ResultadoAnoSmiles = {
   dias: RespostaSmiles[];
   diasComFalha: DiaComFalhaSmiles[];
+  // Dias que vieram do cache em vez da API. É o que mostra quanto orçamento de
+  // IP a varredura economizou — e avisa que parte do dado não é desta hora.
+  doCache: number;
   // O que a varredura NÃO cobriu, em português, pra virar aviso na tela.
   // Vazio = cobertura completa do período.
   lacunas: string[];
@@ -485,6 +512,7 @@ export async function pesquisarAnoSmiles(
   const fim = hojeMais(DIAS_A_VARRER);
   const teto = tetoMaximo(tetos);
 
+  diasDoCache = 0;
   const dias: RespostaSmiles[] = [];
   const diasComFalha: DiaComFalhaSmiles[] = [];
   const lacunas: string[] = [];
@@ -614,7 +642,10 @@ export async function pesquisarAnoSmiles(
 
   onProgresso(1);
   dias.sort((a, b) => a.data.localeCompare(b.data));
-  return { dias, diasComFalha, lacunas };
+  if (diasDoCache > 0) {
+    onLog(`${diasDoCache} dia(s) vieram do cache (validade de ${Math.round(VALIDADE_CACHE_MS / 60000)} min).`);
+  }
+  return { dias, diasComFalha, lacunas, doCache: diasDoCache };
 }
 
 // ── Relatório no contrato comum ───────────────────────────────────────────
