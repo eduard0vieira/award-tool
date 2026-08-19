@@ -110,7 +110,11 @@ export type DetalheVooSmiles = {
   cabineCru: string; // ECONOMIC / COMFORT / BUSINESS, como a API manda
 };
 
-export type DiaCalendarioSmiles = { data: string; milhas: number };
+// `milhas: null` = o dia aparece no calendário mas sem tarifa, ou seja, sem
+// disponibilidade naquele dia. É ausência com significado, não campo faltando:
+// tratar como erro derrubava a varredura inteira em rotas onde vários dias do
+// calendário vêm assim.
+export type DiaCalendarioSmiles = { data: string; milhas: number | null };
 
 export type RespostaSmiles = {
   data: string; // dia pedido (YYYY-MM-DD)
@@ -288,6 +292,15 @@ function extrairVoo(cru: VooCru, data: string, onLog: OnLog): VooSmiles | null {
 // formato e precisa aparecer — por isso o aviso. Voo de parceira nunca traz,
 // e isso é normal.
 let jaAvisouTaxaGol = false;
+// Um aviso por execução: repetido a cada dia da varredura viraria ruído e
+// esconderia o resto.
+let jaAvisouCalendarioSemMilhas = false;
+
+function avisarUmaVez(onLog: OnLog, mensagem: string) {
+  if (jaAvisouCalendarioSemMilhas) return;
+  jaAvisouCalendarioSemMilhas = true;
+  onLog(mensagem);
+}
 function taxaDe(smiles: TarifaCrua, origemDados: string, contexto: string, onLog: OnLog): number | null {
   const bruto = smiles.g3?.costTax;
   if (typeof bruto === "string" && bruto !== "") {
@@ -373,10 +386,27 @@ export async function buscarDiaSmiles(
 
   const calendario: DiaCalendarioSmiles[] = [];
   for (const dia of segmento.calendarDayList ?? []) {
+    // Só o valor tem permissão de faltar (dia sem tarifa). Se vier presente mas
+    // com tipo errado, continua sendo erro: aí é formato mudado, não ausência.
+    const milhas =
+      dia.miles === undefined || dia.miles === null
+        ? null
+        : exigirNumero(dia.miles, "calendarDayList[].miles", `calendário de ${data}`);
     calendario.push({
       data: exigirTexto(dia.date, "calendarDayList[].date", `calendário de ${data}`),
-      milhas: exigirNumero(dia.miles, "calendarDayList[].miles", `calendário de ${data}`),
+      milhas,
     });
+  }
+
+  // Calendário inteiro sem valor nenhum é outra história: pode ser rota sem
+  // disponibilidade no período, mas também é como um campo renomeado
+  // apareceria. Avisa uma vez em vez de seguir mudo.
+  if (calendario.length > 0 && calendario.every((c) => c.milhas === null)) {
+    avisarUmaVez(
+      onLog,
+      `Atenção: nenhum dia do calendário de ${data} veio com "miles". ` +
+        "Pode ser período sem disponibilidade, mas também pode ser mudança de formato da API.",
+    );
   }
 
   return { data, voos, calendario };
@@ -469,6 +499,9 @@ export async function pesquisarAnoSmiles(
       const resposta = await buscarDiaSmiles(page, params, data, onLog);
       dias.push(resposta);
       for (const c of resposta.calendario) {
+        // Dia sem tarifa não entra: ele não é candidato a nada, e entrar como
+        // zero o faria parecer o dia mais barato do ano.
+        if (c.milhas === null) continue;
         const atual = calendario.get(c.data);
         if (atual == null || c.milhas < atual) calendario.set(c.data, c.milhas);
       }
