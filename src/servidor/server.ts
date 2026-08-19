@@ -50,6 +50,7 @@ import {
   iniciarSessaoSmiles,
   pesquisarAnoSmiles,
   type SessaoSmiles,
+  type PeriodoSmiles,
   type TetosSmiles,
 } from "../fontes/smiles/bot-smiles.ts";
 import { DIR_ALERTAS, DIR_PORTAL_DIST, gerarAlerta, type PedidoAlerta } from "../saidas/alertas.ts";
@@ -247,6 +248,28 @@ function encerrarCancelado(jobId: string) {
   job.status = "erro";
   job.erro = "Busca cancelada.";
   emitirEvento(jobId, { tipo: "erro", mensagem: job.erro });
+}
+
+// O período chega do formulário como mês (AAAA-MM) ou data (AAAA-MM-DD). Aqui
+// vira data: o mês inicial começa no dia 1, o final termina no último dia.
+// Valor inválido é ignorado, não corrigido no chute: quem valida de verdade é
+// `limitesDoPeriodo`, que conhece as regras da varredura.
+function periodoDe(cru: unknown): PeriodoSmiles {
+  const p = cru as { de?: unknown; ate?: unknown } | undefined;
+  const comoData = (v: unknown, fimDoMes: boolean): string | undefined => {
+    if (typeof v !== "string") return undefined;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+    if (!/^\d{4}-\d{2}$/.test(v)) return undefined;
+    if (!fimDoMes) return `${v}-01`;
+    const [ano, mes] = v.split("-").map(Number) as [number, number];
+    return new Date(Date.UTC(ano, mes, 0)).toISOString().slice(0, 10);
+  };
+  const periodo: PeriodoSmiles = {};
+  const de = comoData(p?.de, false);
+  const ate = comoData(p?.ate, true);
+  if (de) periodo.de = de;
+  if (ate) periodo.ate = ate;
+  return periodo;
 }
 
 function perguntarAoUsuario(jobId: string, mensagem: string): Promise<boolean> {
@@ -448,7 +471,7 @@ function executarJobAA(
 // cabines juntas — o front pede a volta como um segundo job, igual à AA.
 function executarJobSmiles(
   jobId: string,
-  params: { origem: string; destino: string; tetos: TetosSmiles },
+  params: { origem: string; destino: string; tetos: TetosSmiles; periodo: PeriodoSmiles },
 ) {
   return executarComPool(poolSmiles, jobId, async ({ page }) => {
     const job = jobs.get(jobId)!;
@@ -459,6 +482,7 @@ function executarJobSmiles(
       (msg) => console.log(`[${jobId}] ${msg}`),
       (fracao) => atualizarProgresso(jobId, fracao),
       () => job.cancelado === true,
+      params.periodo,
     );
 
     const pernas: PernaSeatspy[] = [
@@ -795,6 +819,7 @@ app.post("/api/buscar", (req: Request, res: Response) => {
         premium: tetoDe(tetos?.premium),
         executiva: tetoDe(tetos?.executiva),
       },
+      periodo: periodoDe(req.body?.periodo),
     });
   } else if (ehAA) {
     executarJobAA(jobId, {
