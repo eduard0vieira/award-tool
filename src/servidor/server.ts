@@ -367,6 +367,7 @@ function executarJobSeatspy(
     destino: string;
     idaEVolta: boolean;
     tetos: TetosSeatspy;
+    mostrarAssentos: boolean;
   },
 ) {
   return executarComPool(poolSeatspy, jobId, async ({ page }) => {
@@ -383,13 +384,13 @@ function executarJobSeatspy(
         rotulo: params.idaEVolta
           ? `Ida: ${params.origem} → ${params.destino}`
           : `${params.origem} → ${params.destino}`,
-        secoes: construirRelatorioSeatspy(ida, params.tetos).secoes,
+        secoes: construirRelatorioSeatspy(ida, params.tetos, params.mostrarAssentos).secoes,
       },
     ];
     if (volta) {
       pernas.push({
         rotulo: `Volta: ${params.destino} → ${params.origem}`,
-        secoes: construirRelatorioSeatspy(volta, params.tetos).secoes,
+        secoes: construirRelatorioSeatspy(volta, params.tetos, params.mostrarAssentos).secoes,
       });
     }
 
@@ -797,6 +798,9 @@ app.post("/api/buscar", (req: Request, res: Response) => {
         executiva: tetoDe(tetos?.executiva),
         primeira: tetoDe(tetos?.primeira),
       },
+      // Padrão é mostrar: quem não manda o campo (uma aba antiga aberta, por
+      // exemplo) continua recebendo o relatório com assentos, como antes.
+      mostrarAssentos: req.body?.mostrarAssentos !== false,
     });
   } else if (ehLatam) {
     executarJobLatam(jobId, {
