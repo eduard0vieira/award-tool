@@ -358,7 +358,15 @@ const CABINES = [
   { campo: "primeira", rotulo: "Primeira Classe", corClasse: "cartao-primeira" },
 ] as const;
 
-export function construirRelatorioSeatspy(dias: DiaSeatspy[], tetos: TetosSeatspy = {}): RelatorioSeatspy {
+// `mostrarAssentos = false` tira o número de vagas do relatório inteiro: some
+// do texto que vai pro alerta e some dos dias, então a tela também não mostra.
+// É uma coisa só, não duas: assento escondido na tela mas presente no texto
+// copiado seria a pior combinação possível.
+export function construirRelatorioSeatspy(
+  dias: DiaSeatspy[],
+  tetos: TetosSeatspy = {},
+  mostrarAssentos = true,
+): RelatorioSeatspy {
   const secoes = CABINES.map(({ campo, rotulo, corClasse }) => {
     const teto = tetos[campo];
     const disponiveis = dias.filter((d) => {
@@ -382,9 +390,14 @@ export function construirRelatorioSeatspy(dias: DiaSeatspy[], tetos: TetosSeatsp
 
     const diasFormatados = disponiveis.map((d) => {
       const { milhas, assentos } = d[campo];
-      return { data: d.data, valorK: milhas != null ? Math.round(milhas / 10) / 100 : null, assentos };
+      const dia: { data: string; valorK: number | null; assentos?: number } = {
+        data: d.data,
+        valorK: milhas != null ? Math.round(milhas / 10) / 100 : null,
+      };
+      if (mostrarAssentos) dia.assentos = assentos;
+      return dia;
     });
-    const assentosPorData = new Map(diasFormatados.map((d) => [d.data, d.assentos]));
+    const assentosPorData = new Map(diasFormatados.map((d) => [d.data, d.assentos ?? 0]));
     const valoresConhecidos = diasFormatados.map((d) => d.valorK).filter((v): v is number => v != null);
 
     return {
@@ -395,10 +408,12 @@ export function construirRelatorioSeatspy(dias: DiaSeatspy[], tetos: TetosSeatsp
       dias: diasFormatados,
       texto: formatarListaPorMes(
         diasFormatados.map((d) => d.data),
-        (data) => {
-          const n = assentosPorData.get(data) ?? 0;
-          return n > 0 ? ` (${n})` : "";
-        },
+        mostrarAssentos
+          ? (data) => {
+              const n = assentosPorData.get(data) ?? 0;
+              return n > 0 ? ` (${n})` : "";
+            }
+          : undefined,
       ),
     };
   });
