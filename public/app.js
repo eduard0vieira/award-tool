@@ -14,6 +14,7 @@ const formSeatspy = document.getElementById("form-busca-seatspy");
 const selectSeatspyPrograma = document.getElementById("seatspy-programa");
 const inputSeatspyOrigem = document.getElementById("seatspy-origem");
 const inputSeatspyDestino = document.getElementById("seatspy-destino");
+const checkboxSeatspyMostrarAssentos = document.getElementById("seatspy-mostrar-assentos");
 const checkboxSeatspyIdaVolta = document.getElementById("seatspy-ida-volta");
 const inputSeatspyTetoEconomica = document.getElementById("seatspy-teto-economica");
 const inputSeatspyTetoPremium = document.getElementById("seatspy-teto-premium");
@@ -1208,8 +1209,8 @@ async function iniciarBuscaTap(origem, destino, idaEVolta, tetos, sessao) {
 
 // Idem, mas pro SeatSpy: uma busca só já traz ida e volta juntas (e consome
 // um crédito só), então não tem o passo separado de "buscar volta" da TAP.
-async function iniciarBuscaSeatspy(programa, origem, destino, idaEVolta, sessao) {
-  sessao = sessao || novaSessao("seatspy", [programa, origem, destino, idaEVolta]);
+async function iniciarBuscaSeatspy(programa, origem, destino, idaEVolta, mostrarAssentos, sessao) {
+  sessao = sessao || novaSessao("seatspy", [programa, origem, destino, idaEVolta, mostrarAssentos]);
   const rotuloPrograma = PROGRAMA_LABEL[programa] || programa;
   const seta = idaEVolta ? "⇄" : "→";
   const card = criarCardJob(filaSeatspy, `${rotuloPrograma}: ${origem} ${seta} ${destino}`);
@@ -1223,6 +1224,7 @@ async function iniciarBuscaSeatspy(programa, origem, destino, idaEVolta, sessao)
         origem,
         destino,
         idaEVolta,
+        mostrarAssentos,
         tetos: {
           economica: tetoEmMilhas(inputSeatspyTetoEconomica),
           premium: tetoEmMilhas(inputSeatspyTetoPremium),
@@ -1859,7 +1861,7 @@ formSeatspy.addEventListener("submit", (evento) => {
     return;
   }
   if (!avisoDeRepeticao(programa, origem, destino, idaEVolta)) return;
-  iniciarBuscaSeatspy(programa, origem, destino, idaEVolta);
+  iniciarBuscaSeatspy(programa, origem, destino, idaEVolta, checkboxSeatspyMostrarAssentos.checked);
 });
 
 // As buscas voltam sozinhas depois de um F5. Roda por último: as funções de
