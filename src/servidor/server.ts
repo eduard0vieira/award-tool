@@ -35,6 +35,7 @@ import {
   confirmarParEmMilhas,
   construirRelatorioLatam,
   escolherMelhoresPares,
+  filtrarPorTetos,
   iniciarSessaoLatam,
   pesquisarAnoLatam,
   type ConfirmacaoPar,
@@ -614,9 +615,19 @@ function executarJobLatam(
     let avisoConfirmacao: string | undefined;
     if (params.confirmarMilhas) {
       try {
-      const pares = escolherMelhoresPares(ida, volta, PARES_LATAM, params.margemIdaReais, params.margemVoltaReais);
+      // Só os dias que passaram nos tetos: a confirmação simula uma busca do
+      // grupo, e o grupo só vê o que está no cartão.
+      const pares = escolherMelhoresPares(
+        filtrarPorTetos(ida, params.tetos),
+        filtrarPorTetos(volta, params.tetos),
+        PARES_LATAM,
+        params.margemIdaReais,
+        params.margemVoltaReais,
+      );
       if (pares.length === 0) {
-        avisoConfirmacao = "Nenhum par de ida e volta dentro da faixa de preço. Confirmação em milhas não executada.";
+        avisoConfirmacao =
+          "Nenhum par de ida e volta no resultado com 3 a 14 dias de viagem dentro da faixa de preço. " +
+          "Confirmação em milhas não executada.";
       } else {
         const pasta = `latam-${params.origem}-${params.destino}-${Date.now()}`;
         fs.mkdirSync(path.join(DIR_ALERTAS, pasta), { recursive: true });

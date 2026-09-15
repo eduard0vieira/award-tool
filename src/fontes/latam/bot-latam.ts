@@ -264,11 +264,18 @@ export async function pesquisarAnoLatam(
   return { ida: dedup(ida), volta: dedup(volta), mesesComFalha };
 }
 
-export function construirRelatorioLatam(dias: DiaLatam[], tetos: TetosLatam = {}): SecaoRelatorio {
-  const aceitos = dias.filter((d) => {
+// Os dias que sobrevivem aos tetos — ou seja, exatamente os que o usuário vê no
+// cartão. Fica separado porque a confirmação em milhas precisa da MESMA lista: o
+// par de teste só faz sentido se as duas datas estiverem no resultado.
+export function filtrarPorTetos(dias: DiaLatam[], tetos: TetosLatam = {}): DiaLatam[] {
+  return dias.filter((d) => {
     if (tetos.somenteMenorTarifa && !d.menorTarifa) return false;
     return tetos.tetoReais == null || d.valor <= tetos.tetoReais;
   });
+}
+
+export function construirRelatorioLatam(dias: DiaLatam[], tetos: TetosLatam = {}): SecaoRelatorio {
+  const aceitos = filtrarPorTetos(dias, tetos);
 
   if (aceitos.length === 0) {
     return { menor: null, maior: null, dias: [], texto: "Nenhuma tarifa encontrada nesse período." };
@@ -614,6 +621,11 @@ async function esperarPor(pronto: () => boolean, limiteMs: number, page: Page) {
 // "menor + margem", com a volta sempre depois da ida. A margem é separada por
 // direção porque a volta costuma sair mais cara: R$ 100 na ida e R$ 300 na
 // volta, como combinado.
+//
+// Quem chama precisa passar os dias JÁ filtrados pelos tetos (`filtrarPorTetos`):
+// o par é a simulação de uma busca do grupo, então as duas datas têm que estar
+// no resultado que o grupo vê. Confirmar uma data que o cartão não mostra
+// devolve um print que não corresponde a nada.
 //
 // Os pares são ESPALHADOS no período em vez de saírem os três dias mais
 // baratos. Dias vizinhos costumam ter o mesmo preço em pontos — três pares na
