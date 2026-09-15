@@ -141,7 +141,7 @@ Mensagem no padrão Conventional Commits, uma linha, **sempre em inglês** — �
 interface continuam como estão).
 
 ```
-<emoji> <tipo>(<escopo opcional>): <descrição>
+<tipo>(<escopo opcional>): <descrição>
 ```
 
 - Tipos válidos: `feat`, `fix`, `chore`, `refactor`, `docs`, `style`, `test`,
@@ -149,12 +149,14 @@ interface continuam como estão).
 - Tipo e escopo em minúsculas; descrição no imperativo, curta e sem ponto final
 - Escopo é a fonte ou a área: `smiles`, `latam`, `aa`, `tap`, `seatspy`,
   `servidor`, `front`, `planilha`, `alertas`
+- Sem emoji, sem corpo e sem trailer de atribuição (`Co-Authored-By` ou link de
+  sessão). Os commits antigos com emoji ficam como estão; daqui pra frente, não
 
 ```
-✨ feat(latam): confirm miles with round-trip in a single search
-🐛 fix(smiles): treat 406 as a block and return partial results
-♻️ refactor: split sources into src/fontes
-📝 docs: record the azul recon
+feat(latam): confirm miles with round-trip in a single search
+fix(smiles): treat 406 as a block and return partial results
+refactor: split sources into src/fontes
+docs: record the azul recon
 ```
 
 ---
