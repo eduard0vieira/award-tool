@@ -689,15 +689,24 @@ export function escolherMelhoresPares(
   }
 
   // Segunda passada: se o período não tiver datas espalhadas o bastante,
-  // completa com as mais baratas que sobraram. Devolver menos pares por causa
-  // do espaçamento seria pior que devolver pares próximos.
-  if (pares.length < quantos) {
-    const jaUsadas = new Set(pares.map((p) => p.ida.data));
-    for (const i of idaCandidatos) {
-      if (pares.length >= quantos) break;
-      if (jaUsadas.has(i.data)) continue;
-      tentarMontar(i);
-    }
+  // completa com o que sobrou. Devolver menos pares por causa do espaçamento
+  // seria pior que devolver pares próximos.
+  //
+  // Mas aqui vale espalhar dentro do pouco que existe: pegar as três mais
+  // baratas de um resultado de um mês só devolve três dias seguidos, que dão o
+  // mesmo número três vezes. Então a escolha é sempre a data MAIS LONGE das já
+  // escolhidas, e o preço só desempata.
+  const restantes = idaCandidatos.filter((i) => !pares.some((p) => p.ida.data === i.data));
+  while (pares.length < quantos && restantes.length > 0) {
+    const [escolhida] = restantes
+      .map((i) => ({
+        i,
+        distancia: pares.length === 0 ? 0 : Math.min(...pares.map((p) => distanciaEmDias(p.ida.data, i.data))),
+      }))
+      .sort((a, b) => b.distancia - a.distancia || a.i.valor - b.i.valor || a.i.data.localeCompare(b.i.data));
+    if (!escolhida) break;
+    restantes.splice(restantes.indexOf(escolhida.i), 1);
+    tentarMontar(escolhida.i);
   }
 
   return pares.sort((a, b) => a.ida.data.localeCompare(b.ida.data));
