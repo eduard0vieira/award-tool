@@ -633,6 +633,13 @@ async function esperarPor(pronto: () => boolean, limiteMs: number, page: Page) {
 // diferentes, a amostra mostra se o preço muda ao longo do ano.
 const DISTANCIA_MINIMA_DIAS = Number(process.env.LATAM_DISTANCIA_PARES) || 90;
 
+// O par também tem que parecer uma viagem de verdade. Ida num dia e volta no
+// seguinte é barato de achar e não serve de amostra: ninguém do grupo vai passar
+// um dia no país. E viagem longa demais sai de outra faixa de preço, então o
+// teto de duas semanas mantém a comparação justa.
+const ESTADA_MINIMA_DIAS = Number(process.env.LATAM_ESTADA_MINIMA) || 3;
+const ESTADA_MAXIMA_DIAS = Number(process.env.LATAM_ESTADA_MAXIMA) || 14;
+
 function distanciaEmDias(a: string, b: string): number {
   return Math.abs((Date.parse(a) - Date.parse(b)) / 86_400_000);
 }
@@ -644,6 +651,8 @@ export function escolherMelhoresPares(
   margemIdaReais = 100,
   margemVoltaReais = 300,
   distanciaMinimaDias = DISTANCIA_MINIMA_DIAS,
+  estadaMinimaDias = ESTADA_MINIMA_DIAS,
+  estadaMaximaDias = ESTADA_MAXIMA_DIAS,
 ): { ida: DiaLatam; volta: DiaLatam }[] {
   if (ida.length === 0 || volta.length === 0 || quantos < 1) return [];
 
@@ -661,7 +670,11 @@ export function escolherMelhoresPares(
   const voltasUsadas = new Set<string>();
 
   const tentarMontar = (i: DiaLatam): boolean => {
-    const v = voltaCandidatos.find((x) => x.data > i.data && !voltasUsadas.has(x.data));
+    const v = voltaCandidatos.find((x) => {
+      if (voltasUsadas.has(x.data) || x.data <= i.data) return false;
+      const estada = distanciaEmDias(i.data, x.data);
+      return estada >= estadaMinimaDias && estada <= estadaMaximaDias;
+    });
     if (!v) return false;
     voltasUsadas.add(v.data);
     pares.push({ ida: i, volta: v });
