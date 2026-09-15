@@ -15,26 +15,58 @@ busca morrer, e eles não têm a mesma causa nem a mesma espera.
 - Não existe "tentar de novo": insistir só queima o que sobrou do saldo.
 - No código: `ErroOrcamentoSmiles`.
 
-## 403 — negado na borda
+## 403 — negado na borda (resolvido em 2026-09-15)
 
 - Quem responde é o Akamai, com uma página HTML de `Access Denied` no lugar do
   JSON. O corpo traz um `Reference #…` — é o único pedaço útil pra suporte.
-- Apareceu em 2026-09-15, numa varredura que até então dava 406.
-- **Não há duração medida.** A mensagem do bot não promete tempo de espera de
-  propósito; o número do 406 não vale aqui.
-- No código: `ErroAcessoNegadoSmiles`.
+- **Causa: o header `channel: APP`.** Nada a ver com IP, cookie ou rota.
+- No código: `ErroAcessoNegadoSmiles`, que continua valendo se voltar a
+  acontecer por outro motivo.
 
-## O discriminador que falta medir
+### Como foi medido
 
-Se o 403 é do IP inteiro ou só do caminho de busca, dá pra separar assim: a raiz
-da API (`GET /`) responde **406** quando está tudo normal. Se ela passar a
-responder **403**, a borda está negando a origem inteira — bloqueio de IP. Se a
-raiz continuar 406 e só `/v1/airlines/search` der 403, o bloqueio é do padrão da
-chamada, e trocar de IP pode não resolver.
+Primeiro descartando o que parecia óbvio:
 
-`renovarSessaoSmiles()` guarda esse status ao abrir a sessão (`statusRaizAoAbrir`)
-e a mensagem do 403 diz quando a raiz já vinha negada. Falta rodar com a raiz
-403 pelo menos uma vez pra confirmar a leitura.
+| teste | resultado |
+|---|---|
+| navegador → raiz e busca, nos 3 ambientes (prd/green/blue) | 403 HTML em todos |
+| **fora do navegador** (`fetch` do Node, mesmo IP) | **406** — o IP está liberado |
+| `www.smiles.com.br` no mesmo Chrome | 200 |
+| limpar os 5 cookies do Akamai e repetir | 403 de novo |
+| entrar pelo site primeiro, pro sensor validar o `_abck` | 403 de novo |
+
+Com IP, cookie e rota descartados, sobrou o que a gente manda. Mesma URL,
+mesmos cookies, uma chamada atrás da outra:
+
+| headers | resultado |
+|---|---|
+| `x-api-key` + `channel: APP` | **403, HTML de bloqueio** |
+| `x-api-key` sozinho | 200 · 8 voos · **calendário vazio** |
+| `x-api-key` + `channel: WEB` | 200 · 40 voos · **6 dias de calendário** |
+
+Ou seja: o 403 não é bloqueio no sentido de "espere passar". É uma regra nova
+que recusa quem se diz app iOS vindo de um Chrome — contradição fácil de
+detectar. E `WEB` não é só o que passa, é o único valor que traz o
+`calendarDayList`, que é a base da varredura de 7 em 7 dias.
+
+O `user-agent` falso de iOS saiu junto: `fetch` ignora esse header por
+especificação, então ele nunca chegou a sair do bot.
+
+### Três negativas que se parecem no log
+
+| resposta | o que é |
+|---|---|
+| `406` JSON | orçamento de requisições por IP |
+| `403` **HTML** `Access Denied` | a borda recusou esta requisição |
+| `403` **JSON** `Missing Authentication Token` | resposta normal do API Gateway pra rota que não existe — é o que a raiz devolve sempre, não é bloqueio |
+
+O número sozinho não diz nada; o corpo diz. `renovarSessaoSmiles()` guarda o
+status da raiz ao abrir a sessão (`statusRaizAoAbrir`) e a mensagem do 403 usa
+isso pra dizer se a origem inteira já vinha negada.
+
+`npx tsx scripts/probe-smiles-bloqueio.ts` refaz essa medição em ~4
+requisições: compara a chamada de fora do navegador com as variantes de header
+e diz qual delas ainda passa.
 
 ## Um efeito colateral que já enganou o log
 
