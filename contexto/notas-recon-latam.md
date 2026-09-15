@@ -143,3 +143,25 @@ volta). `LATAM_PARES` controla quantos (padrão 3).
 
 Fixture: `fixtures/latam-redemption-options-real.json`.
 Recon: `npm run recon:latam GRU JNB <ida> <volta>` (precisa de sessão logada).
+
+## Como o par de teste é escolhido (2026-09-15)
+
+A confirmação em milhas roda em 3 pares de datas. Ela não é uma varredura: é
+uma **simulação de uma busca do grupo**, feita pra ver se o preço em pontos
+muda ao longo do ano. Daí as regras:
+
+1. **As duas datas têm que estar no resultado que o cartão mostra.** O par sai
+   de `filtrarPorTetos(dias, tetos)`, a mesma lista que vira relatório. Antes
+   ele saía do calendário cru: apareceu um print de dezembro num resultado que
+   só tinha setembro, porque dezembro passava na margem (`menor + R$ 100`) mas
+   não passava no teto — ficava fora do cartão e dentro do teste.
+2. **Estada de 3 a 14 dias** (`LATAM_ESTADA_MINIMA` / `LATAM_ESTADA_MAXIMA`).
+   Ida num dia e volta no seguinte é fácil de achar e não é viagem de ninguém;
+   acima de duas semanas o preço já é de outra faixa.
+3. **Datas espalhadas.** Primeira passada exige 90 dias entre as idas
+   (`LATAM_DISTANCIA_PARES`). Quando o resultado não tem esse alcance, a
+   segunda passada pega sempre a data mais longe das já escolhidas em vez das
+   mais baratas — três dias seguidos devolveriam o mesmo número três vezes.
+
+Se nada satisfizer as regras, a confirmação não roda e o aviso diz por quê. É
+melhor que devolver um print que não corresponde ao resultado.
