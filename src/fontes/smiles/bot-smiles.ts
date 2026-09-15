@@ -167,8 +167,16 @@ export async function iniciarSessaoSmiles(headless = false): Promise<SessaoSmile
 // Precisa ser refeito no meio da varredura: os cookies têm validade curta e,
 // quando vencem, TODA chamada seguinte vira 406 — foi o que fazia a busca
 // morrer no meio depois de dezenas de dias já respondidos.
+// Status da raiz na última abertura de sessão. 406 é o esperado; 403 significa
+// que a borda já negava a origem inteira antes de qualquer busca — é o que
+// separa "bloqueio deste IP" de "bloqueio do caminho de busca".
+let statusRaizAoAbrir: number | null = null;
+
 export async function renovarSessaoSmiles(page: Page): Promise<void> {
-  await page.goto(`${HOST_API}/`, { waitUntil: "domcontentloaded", timeout: 60000 }).catch(() => {});
+  const resposta = await page
+    .goto(`${HOST_API}/`, { waitUntil: "domcontentloaded", timeout: 60000 })
+    .catch(() => null);
+  statusRaizAoAbrir = resposta?.status() ?? null;
   await page.waitForTimeout(3000);
 }
 
@@ -323,20 +331,71 @@ function taxaDe(smiles: TarifaCrua, origemDados: string, contexto: string, onLog
   return null;
 }
 
-// 406 aqui NÃO é cookie vencido — medido: o bloqueio dura mais de 20 min e
-// replantar os cookies não recupera. É orçamento de requisições por IP numa
-// janela móvel (as sondas gastaram ~99 e a seguinte bloqueou na 40ª).
+// Bloqueio do Smiles: não é falha de um dia, é o fim da varredura. Existem dois
+// sabores, com causas e esperas diferentes, então cada um tem sua própria
+// mensagem — e "resumoLacuna" é o que entra no relatório parcial.
+export class ErroBloqueioSmiles extends Error {
+  readonly resumoLacuna: string;
+
+  constructor(mensagem: string, resumoLacuna: string) {
+    super(mensagem);
+    this.resumoLacuna = resumoLacuna;
+  }
+}
+
+// 406 NÃO é cookie vencido — medido: o bloqueio dura mais de 20 min e replantar
+// os cookies não recupera. É orçamento de requisições por IP numa janela móvel
+// (as sondas gastaram ~99 e a seguinte bloqueou na 40ª).
 //
 // Por isso não existe "tentar de novo": insistir só queima mais saldo. O jeito
 // é parar a varredura na hora, devolver o que já veio e dizer quanto esperar.
-export class ErroBloqueioSmiles extends Error {
+export class ErroOrcamentoSmiles extends ErroBloqueioSmiles {
   constructor() {
     super(
       "Smiles bloqueou temporariamente as consultas deste IP (406). Repetir agora não recupera o acesso: " +
         "o bloqueio expira sozinho, mas leva mais de 20 minutos. Aguarde e refaça a busca, de preferência " +
         "com menos dias por busca (SMILES_MAX_DETALHES) ou uma perna de cada vez.",
+      "aguarde cerca de 30 min para completar",
     );
   }
+}
+
+// 403 vem antes da API: quem responde é a borda (Akamai), com página HTML de
+// "Access Denied" no lugar do JSON. Diferente do 406, não há duração medida
+// aqui, então a mensagem não promete tempo de espera.
+//
+// Vale o mesmo tratamento do 406: parar na hora. Cada dia seguinte tomaria o
+// mesmo 403, e insistir só reforça o padrão que disparou o bloqueio.
+export class ErroAcessoNegadoSmiles extends ErroBloqueioSmiles {
+  constructor(referencia: string | null) {
+    super(
+      "Smiles negou o acesso na borda (403): a resposta é uma página de bloqueio, não a API. " +
+        (statusRaizAoAbrir === 403
+          ? "A raiz da API já respondia 403 quando a sessão abriu, então o bloqueio vale para este IP inteiro. "
+          : "") +
+        "Não há tempo medido de espera para esse caso. Aguarde antes de repetir e, se voltar logo, " +
+        "vale trocar de IP ou reduzir o ritmo (SMILES_MAX_DETALHES)." +
+        (referencia ? ` Referência Akamai: ${referencia}.` : ""),
+      "a borda do Smiles passou a negar as chamadas (403); o resto do período não chegou a ser consultado",
+    );
+  }
+}
+
+// Corpo de erro pronto pra virar mensagem. Página de bloqueio é HTML e vinha
+// inteira pro log, uma vez por dia da varredura: vira uma linha curta, com a
+// referência do Akamai quando existe (é o único pedaço útil pra suporte).
+function resumirCorpo(texto: string): string {
+  const limpo = texto.trim();
+  if (limpo.startsWith("<")) {
+    const ref = referenciaAkamai(limpo);
+    return ref ? `a resposta veio em HTML, referência ${ref}` : "a resposta veio em HTML, não em JSON";
+  }
+  return limpo.slice(0, 200);
+}
+
+function referenciaAkamai(texto: string): string | null {
+  const achado = texto.match(/Reference\s*(?:&#32;)?\s*#([\w.]+)/i);
+  return achado ? achado[1]! : null;
 }
 
 async function chamarApi(page: Page, params: ParametrosSmiles, data: string) {
@@ -379,7 +438,9 @@ export async function buscarDiaSmiles(
 
   const resultado = await chamarApi(page, params, data);
 
-  if (resultado.status === 406) throw new ErroBloqueioSmiles();
+  if (resultado.status === 406) throw new ErroOrcamentoSmiles();
+
+  if (resultado.status === 403) throw new ErroAcessoNegadoSmiles(referenciaAkamai(resultado.texto));
 
   if (resultado.status === 452) {
     // Código próprio deles pra aeroporto inválido — vale mensagem específica,
@@ -390,7 +451,7 @@ export async function buscarDiaSmiles(
     );
   }
   if (resultado.status !== 200) {
-    throw new Error(`O Smiles respondeu ${resultado.status} para ${data}. ${resultado.texto.slice(0, 200)}`);
+    throw new Error(`O Smiles respondeu ${resultado.status} para ${data}. ${resumirCorpo(resultado.texto)}`);
   }
 
   let corpo: RespostaCrua;
@@ -665,8 +726,7 @@ export async function pesquisarAnoSmiles(
     if (err instanceof ErroBloqueioSmiles) {
       onLog(err.message);
       lacunas.push(
-        `a busca foi interrompida pelo bloqueio do Smiles depois de ${dias.length} dia(s). ` +
-          "o resto do período não chegou a ser consultado; aguarde cerca de 30 min para completar",
+        `a busca foi interrompida pelo bloqueio do Smiles depois de ${dias.length} dia(s): ${err.resumoLacuna}`,
       );
     } else {
       throw err;
