@@ -37,11 +37,24 @@ const HOST_API = "https://api-air-flightsearch-prd.smiles.com.br";
 
 // Chave de cliente do aplicativo — identificador público de app, não
 // credencial de conta. Nenhum login entra nesta fonte.
-const HEADERS_APP: Record<string, string> = {
+//
+// `channel` é o header que decide se a chamada passa. Medido em 2026-09-15,
+// mesma URL e mesmos cookies, um atrás do outro:
+//
+//   channel: APP  → 403, página HTML de bloqueio do Akamai
+//   channel: WEB  → 200, 40 voos e os 6 dias de calendário
+//   sem channel   → 200, mas 8 voos e calendário vazio
+//
+// Faz sentido: dizer "sou o app iOS" numa requisição que sai de um Chrome é uma
+// contradição fácil de detectar. WEB é o que o site manda, e é o único valor que
+// traz o calendário — que é a base da varredura.
+//
+// O `user-agent` falso de iOS saiu junto: `fetch` ignora esse header por
+// especificação, então ele nunca chegou a sair daqui.
+const HEADERS_API: Record<string, string> = {
   "x-api-key": "aJqPU7xNHl9qN3NVZnPaJ208aPo2Bh2p2ZV844tw",
-  channel: "APP",
+  channel: "WEB",
   accept: "application/json, text/plain, */*",
-  "user-agent": "ios - com.br.smiles/1.107.0",
   "accept-language": "pt-BR,pt;q=0.9",
 };
 
@@ -405,7 +418,7 @@ async function chamarApi(page: Page, params: ParametrosSmiles, data: string) {
       const res = await fetch(url, { headers });
       return { status: res.status, texto: await res.text() };
     },
-    { url: urlBusca(params, data), headers: HEADERS_APP },
+    { url: urlBusca(params, data), headers: HEADERS_API },
   );
 }
 
