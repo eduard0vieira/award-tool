@@ -49,11 +49,13 @@ function urlBusca(ambiente: string): string {
 
 // Chave de cliente do app (vinha no código antigo). É identificador público de
 // aplicativo, não credencial de conta — nenhum dado de login entra aqui.
+// `channel: WEB` desde 2026-09-15: com `APP` a borda responde 403 com página de
+// bloqueio, e sem `channel` nenhum a resposta vem sem calendário. Ver
+// contexto/notas-bloqueio-smiles.md.
 const HEADERS_APP: Record<string, string> = {
   "x-api-key": "aJqPU7xNHl9qN3NVZnPaJ208aPo2Bh2p2ZV844tw",
-  channel: "APP",
+  channel: "WEB",
   accept: "application/json, text/plain, */*",
-  "user-agent": "ios - com.br.smiles/1.107.0",
   "accept-language": "pt-BR,pt;q=0.9",
 };
 
