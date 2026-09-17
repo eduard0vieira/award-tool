@@ -121,3 +121,36 @@ não pelo status.
 - Confirmar o valor de cabine da Premium Economy (`"PREMIUM_ECONOMY"` é o
   productType; o valor aceito no request pode ser outro).
 - Mensagem/formato de erro de rota inexistente e de rate-limit da AA.
+
+## Link de emissão por dia (2026-09-17)
+
+Cada dia do relatório da AA sai com um deep link pra página de resultados
+daquela data — é o mesmo endereço que o site gera numa busca feita na mão:
+
+```
+https://www.aa.com/booking/search?locale=en_US&pax=N&adult=N
+  &type=OneWay&searchType=Award&cabin=<CABINE>&carriers=ALL
+  &slices=[{"orig":"GRU","origNearby":false,"dest":"MIA","destNearby":false,"date":"2026-11-20"}]
+```
+
+O `cabin` da URL **não aceita os mesmos valores do request**: no corpo do
+calendário a Executiva é `BUSINESS,FIRST`, mas na URL vale `BUSINESS`. Por isso
+existe `CABINE_AA_LINK` separado de `CABINE_AA_REQUEST`.
+
+Conferido no Chrome do usuário em 2026-09-17 (GRU → MIA, 20/11/2026):
+
+- `cabin=BUSINESS` → redireciona pra `booking/choose-flights/1` com a data certa
+  e só a coluna Business. O voo direto AA930 apareceu por 171.5K, o mesmo número
+  do carrossel do dia.
+- `cabin=PREMIUM_ECONOMY` → idem, com as colunas Main/Premium Economy/Business.
+
+Duas coisas que valem lembrar:
+
+1. O link abre no navegador **do usuário**, não no perfil do bot. Perfil novo em
+   folha leva `Access Denied` da AA; o navegador do dia a dia passa normal.
+2. A sessão da busca (`sid`) é criada pela própria AA no redirecionamento, então
+   o link não vence — pode ser guardado e clicado depois.
+
+`abrirPaginaDeResultados()` (o passo que planta os cookies do bot) usa a mesma
+função de URL, mas **sem cabine**: ali a página só serve pra abrir sessão, e
+quem filtra é o request do calendário.
