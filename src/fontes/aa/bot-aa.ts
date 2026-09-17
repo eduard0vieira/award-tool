@@ -49,6 +49,43 @@ const CABINE_AA_REQUEST: Record<CabineAA, string> = {
   primeira: "FIRST",
 };
 
+// Valores aceitos no parâmetro `cabin` da URL de busca — não são os mesmos do
+// request: lá "executiva" vira "BUSINESS,FIRST", que na URL não é aceito.
+// Conferido no navegador em 2026-09-17: com BUSINESS a página de resultados
+// abre já filtrada na Executiva, e com PREMIUM_ECONOMY idem.
+const CABINE_AA_LINK: Record<CabineAA, string> = {
+  economica: "COACH",
+  premium: "PREMIUM_ECONOMY",
+  executiva: "BUSINESS",
+  primeira: "FIRST",
+};
+
+// A URL da busca de prêmios. Serve pra duas coisas: o bot abrir a página de
+// resultados (que planta os cookies) e o front oferecer o link de emissão do
+// dia. É o mesmo endereço que o site gera quando alguém busca na mão.
+function urlBuscaAA(
+  params: { origem: string; destino: string; passageiros: number; cabine?: CabineAA },
+  data: string,
+): string {
+  const slices = JSON.stringify([
+    { orig: params.origem, origNearby: false, dest: params.destino, destNearby: false, date: data },
+  ]);
+  return (
+    `https://www.aa.com/booking/search?locale=en_US&pax=${params.passageiros}&adult=${params.passageiros}` +
+    `&type=OneWay&searchType=Award&cabin=${params.cabine ? CABINE_AA_LINK[params.cabine] : ""}&carriers=ALL&slices=` +
+    encodeURIComponent(slices)
+  );
+}
+
+// Link de emissão de um dia: abre a página de resultados da AA já com rota,
+// data, cabine e número de passageiros preenchidos.
+export function linkEmissaoAA(
+  params: { origem: string; destino: string; passageiros: number; cabine: CabineAA },
+  data: string,
+): string {
+  return urlBuscaAA(params, data);
+}
+
 // A AA aceita no máximo 9 passageiros por busca (conferido: com 10 ela
 // responde 400 dizendo "Total number of passengers must be between 1 and 9").
 export const MAX_PASSAGEIROS_AA = 9;
@@ -181,13 +218,9 @@ type RespostaCalendario = {
 // Abre a página de resultados via deep-link — é ela que estabelece os
 // cookies/contexto que as chamadas de calendário reutilizam.
 async function abrirPaginaDeResultados(page: Page, params: ParametrosAA, dataInicial: string, onLog: OnLog) {
-  const slices = JSON.stringify([
-    { orig: params.origem, origNearby: false, dest: params.destino, destNearby: false, date: dataInicial },
-  ]);
-  const url =
-    `https://www.aa.com/booking/search?locale=en_US&pax=${params.passageiros}&adult=${params.passageiros}` +
-    "&type=OneWay&searchType=Award&cabin=&carriers=ALL&slices=" +
-    encodeURIComponent(slices);
+  // Sem cabine de propósito: aqui a página só serve pra plantar os cookies que
+  // as chamadas de calendário reutilizam, e o filtro quem aplica é o request.
+  const url = urlBuscaAA(params, dataInicial);
 
   onLog(`Abrindo busca de prêmios ${params.origem} → ${params.destino}...`);
   await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
@@ -364,7 +397,11 @@ export async function pesquisarAnoAA(
 
 // Relatório de uma cabine só (a busca da AA é por cabine). Teto em milhas
 // absolutas (ex.: 60000); dias mais caros ficam de fora.
-export function construirRelatorioAA(dias: DiaAA[], tetoMilhas: number | null): SecaoRelatorio {
+export function construirRelatorioAA(
+  dias: DiaAA[],
+  tetoMilhas: number | null,
+  params?: { origem: string; destino: string; passageiros: number; cabine: CabineAA },
+): SecaoRelatorio {
   const aceitos = dias.filter((d) => tetoMilhas == null || d.milhas <= tetoMilhas);
 
   if (aceitos.length === 0) {
@@ -374,6 +411,7 @@ export function construirRelatorioAA(dias: DiaAA[], tetoMilhas: number | null): 
   const diasFormatados = aceitos.map((d) => ({
     data: d.data,
     valorK: Math.round(d.milhas / 10) / 100, // 171500 -> 171.5
+    ...(params ? { link: linkEmissaoAA(params, d.data) } : {}),
   }));
   const valores = diasFormatados.map((d) => d.valorK);
 
