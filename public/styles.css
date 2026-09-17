@@ -1044,7 +1044,8 @@ button:disabled {
   transform: scale(1.02);
 }
 
-.job-busca > .confirmacao-latam {
+.job-busca > .confirmacao-latam,
+.job-busca > .exemplo-aa {
   margin: var(--e4) var(--e5) 0;
   padding: var(--e3) var(--e4) var(--e4);
   border: 1px solid var(--borda);
@@ -1079,14 +1080,17 @@ button:disabled {
   color: var(--texto-fraco);
 }
 
-.par-print {
+.par-print,
+.par-abrir {
   margin-left: auto;
   font-size: 12px;
   color: var(--texto-fraco);
   text-decoration: none;
 }
 
-.par-print:hover {
+.par-print:hover,
+.par-abrir:hover,
+.par-abrir:focus-visible {
   color: var(--marca-forte);
   text-decoration: underline;
 }

@@ -1494,6 +1494,58 @@ function inserirDepoisDoAlerta(card, bloco) {
   else card.raiz.querySelector(".job-cabecalho").after(bloco);
 }
 
+// Um atalho clicável no topo do card: o dia mais barato de cada perna, com o
+// link que abre a emissão daquela data no site. Mesmo formato do bloco da
+// LATAM — valor, data e link à direita. Todos os dias do resultado continuam
+// clicáveis; isto só evita ter que descer um ano de datas pra achar um.
+function mostrarExemploEmissaoAA(card, pernas) {
+  const linhas = pernas
+    .map(({ rotulo, secao }) => ({ rotulo, dia: diaMaisBaratoComLink(secao) }))
+    .filter(({ dia }) => dia);
+  if (linhas.length === 0) return;
+
+  const bloco = document.createElement("div");
+  bloco.className = "exemplo-aa";
+
+  const titulo = document.createElement("div");
+  titulo.className = "alerta-titulo";
+  titulo.textContent = "Ir direto pra emissão";
+  bloco.appendChild(titulo);
+
+  for (const { rotulo, dia } of linhas) {
+    const linha = document.createElement("div");
+    linha.className = "par-latam";
+
+    const valor = document.createElement("strong");
+    valor.className = "par-valor";
+    valor.textContent = `${dia.valorK}K`;
+
+    const datas = document.createElement("span");
+    datas.className = "par-datas";
+    datas.textContent = `${rotulo} · ${dia.data.split("-").reverse().slice(0, 2).join("/")}`;
+
+    const link = document.createElement("a");
+    link.className = "par-abrir";
+    link.href = dia.link;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.textContent = "abrir no site";
+
+    linha.append(valor, datas, link);
+    bloco.appendChild(linha);
+  }
+
+  card.raiz.querySelector(".job-cabecalho").after(bloco);
+}
+
+// O dia mais barato que tem link. No empate fica o primeiro, que é o mais
+// próximo — os dias vêm em ordem cronológica.
+function diaMaisBaratoComLink(secao) {
+  const comLink = (secao?.dias ?? []).filter((d) => d.link);
+  if (comLink.length === 0) return null;
+  return comLink.reduce((menor, d) => (d.valorK < menor.valorK ? d : menor));
+}
+
 // AA: uma cabine por busca, cada direção é um job próprio (como na TAP).
 // Sem aba Upgrade (não há cruzamento de cabines numa busca de cabine única).
 async function iniciarBuscaAA(origem, destino, cabine, maxConexoes, tetoK, idaEVolta, passageiros = 1, sessao) {
@@ -1546,6 +1598,12 @@ async function iniciarBuscaAA(origem, destino, cabine, maxConexoes, tetoK, idaEV
       card.avisoEl.hidden = false;
     }
     atualizarAcoesCard(card);
+    // Antes da barra de alerta: as duas entram logo abaixo do cabeçalho, e a
+    // última a entrar é a que fica no topo.
+    mostrarExemploEmissaoAA(card, [
+      { rotulo: `${origem} → ${destino}`, secao: secaoIda },
+      ...(secaoVolta ? [{ rotulo: `${destino} → ${origem}`, secao: secaoVolta }] : []),
+    ]);
     mostrarBotoesAlerta(card, "aa", origem, destino, [
       { classe: CABINE_AA_LABEL[cabine] || cabine, secaoIda, secaoVolta },
     ]);
