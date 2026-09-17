@@ -873,12 +873,13 @@ function buscarNoServidor(card, corpo, rotuloProgresso, sessao) {
 
 function formatarPorMes(dias) {
   const grupos = new Map();
-  for (const { data, assentos } of dias) {
+  for (const { data, assentos, link } of dias) {
     const [ano, mes, dia] = data.split("-");
     const chave = `${ano}-${mes}`;
     if (!grupos.has(chave)) grupos.set(chave, []);
     // assentos só existe no SeatSpy (vagas do voo cotado, como no hover deles).
-    grupos.get(chave).push({ dia, assentos });
+    // link só existe na AA (emissão daquela data); data vai junto pro title.
+    grupos.get(chave).push({ dia, assentos, link, data });
   }
   return Array.from(grupos.keys())
     .sort()
@@ -1048,10 +1049,18 @@ function renderizarColuna(colunaEl, secao, corClasse) {
 
     const linha = document.createElement("div");
     linha.className = "linha-cartoes";
-    for (const { dia, assentos } of grupo.dias) {
-      const cartao = document.createElement("span");
-      cartao.className = `cartao ${corClasse}`;
+    for (const { dia, assentos, link, data } of grupo.dias) {
+      // Com link o dia vira âncora de verdade (abre em aba nova, dá pra copiar
+      // o endereço); sem link continua sendo o mesmo span de antes.
+      const cartao = document.createElement(link ? "a" : "span");
+      cartao.className = `cartao ${corClasse}${link ? " cartao-link" : ""}`;
       cartao.textContent = dia;
+      if (link) {
+        cartao.href = link;
+        cartao.target = "_blank";
+        cartao.rel = "noopener noreferrer";
+        cartao.title = `Abrir a emissão de ${data} no site`;
+      }
       if (assentos > 0) {
         const vagas = document.createElement("small");
         vagas.className = "cartao-vagas";
