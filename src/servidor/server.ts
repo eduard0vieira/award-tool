@@ -445,7 +445,13 @@ function executarJobAA(
 
     const secao = {
       rotulo: CABINE_AA_LABEL[params.cabine],
-      ...construirRelatorioAA(dias, params.tetoMilhas),
+      // Com os parâmetros, cada dia sai com o link de emissão daquela data.
+      ...construirRelatorioAA(dias, params.tetoMilhas, {
+        origem: params.origem,
+        destino: params.destino,
+        passageiros: params.passageiros,
+        cabine: params.cabine,
+      }),
     };
     // O motivo da primeira falha vai junto: sem ele o usuário via só "parcial"
     // e teria que abrir o terminal do servidor pra saber se foi bloqueio, rota
