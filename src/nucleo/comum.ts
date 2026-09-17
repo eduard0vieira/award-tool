@@ -20,6 +20,10 @@ export type DeveParar = () => boolean;
 export type DiaFormatado = {
   data: string; // YYYY-MM-DD
   valorK: number;
+  // Deep link pra emissão daquele dia, quando a fonte sabe montar um. O front
+  // transforma o cartão do dia em link; sem ele o cartão continua sendo texto.
+  // Não entra no `texto` de copiar: o grupo recebe datas, não URLs.
+  link?: string;
 };
 
 export type SecaoRelatorio = {
