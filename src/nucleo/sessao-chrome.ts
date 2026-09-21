@@ -146,3 +146,12 @@ export function sessaoViva(s: SessaoChrome): boolean {
   if (s.page.isClosed()) return false;
   return s.navegador.browser?.isConnected() ?? true;
 }
+
+// Fecha só a ABA. O navegador fica de pé de propósito: ele é um só, dividido
+// entre AA, LATAM e Smiles (ver o topo do arquivo), então fechá-lo aqui
+// derrubaria as buscas das outras fontes. Quando é a janela do usuário (CDP),
+// fechar seria pior ainda.
+export async function fecharSessaoChrome(s: SessaoChrome): Promise<void> {
+  if (s.page.isClosed()) return;
+  await s.page.close();
+}

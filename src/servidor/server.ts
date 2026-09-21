@@ -45,7 +45,7 @@ import {
 import { formatarListaPorMes, type SecaoRelatorio } from "../nucleo/comum.ts";
 import { DIR_PUBLICO } from "../nucleo/caminhos.ts";
 import { PoolSessoes } from "../nucleo/pool-sessoes.ts";
-import { sessaoViva } from "../nucleo/sessao-chrome.ts";
+import { fecharSessaoChrome, sessaoViva } from "../nucleo/sessao-chrome.ts";
 import {
   construirRelatorioSmiles,
   iniciarSessaoSmiles,
@@ -111,39 +111,73 @@ const CONCORRENCIA_LATAM = Number(process.env.CONCORRENCIA_LATAM) || 2;
 // e uma varredura de ano já são ~112 requisições — mesma prudência.
 const CONCORRENCIA_SMILES = Number(process.env.CONCORRENCIA_SMILES) || 2;
 
-const poolAwardtool = new PoolSessoes<Sessao>(
-  CONCORRENCIA_AWARDTOOL,
-  (headless) => iniciarSessao(headless),
-  (s) => s.browser.isConnected() && !s.page.isClosed(),
-);
+// Minutos sem uso até o slot fechar a sessão e devolver a RAM. Uma sessão do
+// SeatSpy parada custa ~450 MB, e o servidor costuma ficar dias de pé; reabrir
+// custa ~6s, pagos uma vez por rajada de buscas. 0 desliga o fechamento.
+const OCIOSIDADE_MINUTOS = lerOciosidadeMinutos();
+
+function lerOciosidadeMinutos(): number {
+  const bruto = process.env.OCIOSIDADE_MINUTOS;
+  if (bruto === undefined || bruto.trim() === "") return 10;
+  const minutos = Number(bruto);
+  // Sem isso, "dez" viraria NaN e o timer dispararia na hora: toda busca pagaria
+  // a reabertura e nada no log diria o porquê.
+  if (!Number.isFinite(minutos) || minutos < 0) {
+    throw new Error(`OCIOSIDADE_MINUTOS inválido: "${bruto}". Use minutos (ex.: 10) ou 0 para desligar.`);
+  }
+  return minutos;
+}
+
+const poolAwardtool = new PoolSessoes<Sessao>({
+  rotulo: "awardtool",
+  tamanho: CONCORRENCIA_AWARDTOOL,
+  criarSessao: (headless) => iniciarSessao(headless),
+  sessaoViva: (s) => s.browser.isConnected() && !s.page.isClosed(),
+  fecharSessao: (s) => s.browser.close(),
+  minutosOcioso: OCIOSIDADE_MINUTOS,
+});
 
 // Mesma ideia, mas pro SeatSpy (site próprio, login próprio — independente
 // das sessões do AwardTool).
-const poolSeatspy = new PoolSessoes<SessaoSeatspy>(
-  CONCORRENCIA_SEATSPY,
-  (headless) => iniciarSessaoSeatspy(headless),
-  (s) => s.browser.isConnected() && !s.page.isClosed(),
-);
+const poolSeatspy = new PoolSessoes<SessaoSeatspy>({
+  rotulo: "seatspy",
+  tamanho: CONCORRENCIA_SEATSPY,
+  criarSessao: (headless) => iniciarSessaoSeatspy(headless),
+  sessaoViva: (s) => s.browser.isConnected() && !s.page.isClosed(),
+  fecharSessao: (s) => s.browser.close(),
+  minutosOcioso: OCIOSIDADE_MINUTOS,
+});
 
 // A sessão da AA pode ser uma aba no Chrome do próprio usuário (ver
 // iniciarSessaoAA) — daí o browser poder ser null e a checagem olhar a aba.
-const poolAA = new PoolSessoes<SessaoAA>(
-  CONCORRENCIA_AA,
-  (headless) => iniciarSessaoAA(headless),
+// AA, LATAM e Smiles dividem o mesmo Chrome, então a ociosidade fecha só a
+// aba de cada slot (ver fecharSessaoChrome).
+const poolAA = new PoolSessoes<SessaoAA>({
+  rotulo: "aa",
+  tamanho: CONCORRENCIA_AA,
+  criarSessao: (headless) => iniciarSessaoAA(headless),
   sessaoViva,
-);
+  fecharSessao: fecharSessaoChrome,
+  minutosOcioso: OCIOSIDADE_MINUTOS,
+});
 
-const poolLatam = new PoolSessoes<SessaoLatam>(
-  CONCORRENCIA_LATAM,
-  (headless) => iniciarSessaoLatam(headless),
+const poolLatam = new PoolSessoes<SessaoLatam>({
+  rotulo: "latam",
+  tamanho: CONCORRENCIA_LATAM,
+  criarSessao: (headless) => iniciarSessaoLatam(headless),
   sessaoViva,
-);
+  fecharSessao: fecharSessaoChrome,
+  minutosOcioso: OCIOSIDADE_MINUTOS,
+});
 
-const poolSmiles = new PoolSessoes<SessaoSmiles>(
-  CONCORRENCIA_SMILES,
-  (headless) => iniciarSessaoSmiles(headless),
+const poolSmiles = new PoolSessoes<SessaoSmiles>({
+  rotulo: "smiles",
+  tamanho: CONCORRENCIA_SMILES,
+  criarSessao: (headless) => iniciarSessaoSmiles(headless),
   sessaoViva,
-);
+  fecharSessao: fecharSessaoChrome,
+  minutosOcioso: OCIOSIDADE_MINUTOS,
+});
 
 function emitirEvento(jobId: string, dado: object) {
   const job = jobs.get(jobId);
