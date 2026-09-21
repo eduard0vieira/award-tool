@@ -65,7 +65,7 @@ src/
   nucleo/                    o que toda fonte usa
     comum.ts                    82  limitador de frequência, formatação de datas, tipos
     sessao-chrome.ts           148  um Chrome por processo (CDP ou perfil próprio)
-    pool-sessoes.ts             58  reaproveita sessões logadas entre buscas
+    pool-sessoes.ts            125  reaproveita sessões logadas entre buscas
     caminhos.ts                 22  todo caminho de disco sai daqui
   saidas/                    o que vira entregável
     alertas.ts                 157  gera a imagem do alerta a partir do resultado
@@ -224,6 +224,11 @@ print. A premissa é que voo barato em dinheiro é voo barato em milhas.
 
 **Pool de sessões** — cada fonte tem um pool que reaproveita a sessão logada entre
 buscas, porque refazer login a cada busca é lento e chama atenção do anti-bot.
+Sessão parada também custa: uma do SeatSpy medida aqui fica em ~450 MB ociosa, e o
+servidor fica dias de pé. Por isso o slot fecha a sessão depois de
+`OCIOSIDADE_MINUTOS` sem uso e recria na busca seguinte — reabrir custa ~6s (launch
++ login), pagos uma vez por rajada. AA, LATAM e Smiles dividem um Chrome só, então
+para elas a ociosidade fecha apenas a aba.
 
 ---
 
@@ -234,6 +239,7 @@ LOGIN_URL, EMAIL_ACCOUNT, PASSWORD_ACCOUNT        # AwardTool
 SEATSPY_LOGIN_URL, SEATSPY_EMAIL, SEATSPY_PASSWORD
 BOT_AUTH_USER, BOT_AUTH_PASS                      # Basic Auth do servidor
 CONCORRENCIA_*                                    # jobs simultâneos por fonte
+OCIOSIDADE_MINUTOS                                # fecha a sessão parada (0 desliga)
 *_INTERVALO_BUSCAS_MS                             # limitador de frequência
 AA_CHROME_PERFIL, AA_CDP_PORTA                    # perfil/porta do Chrome do bot
 ```
