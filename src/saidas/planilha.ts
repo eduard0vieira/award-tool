@@ -142,6 +142,17 @@ function gravarCsv(linhas: LinhaPlanilha[]) {
   fs.appendFileSync(ARQUIVO_CSV, conteudo, "utf8");
 }
 
+// Planilha por busca em arquivo local, pra quando o Google não está
+// configurado (ou pra ter o dado em disco de qualquer jeito).
+export function gravarCsvDeVoos(linhas: LinhaVoo[], caminho: string): void {
+  const conteudo =
+    `${COLUNAS_VOO.join(",")}\n` +
+    linhas.map((l) => COLUNAS_VOO.map((c) => escaparCsv(l[c] ?? "")).join(",")).join("\n") +
+    "\n";
+  fs.mkdirSync(path.dirname(caminho), { recursive: true });
+  fs.writeFileSync(caminho, conteudo, "utf8");
+}
+
 // ── Planilha por busca, no formato do bot antigo ──────────────────────────
 //
 // Mesmas colunas (e mesma ordem) do FlightAvailability do cheap-flights, que é
@@ -171,9 +182,20 @@ export const COLUNAS_VOO = [
   "tax",
   "class_of_service",
   "url",
+  // Acrescentada no fim de propósito: as colunas anteriores mantêm a posição,
+  // então filtro antigo continua valendo. Existe porque a Iberia dá preço POR
+  // DIA (calendário) e não por voo — pôr esse número em `points` afirmaria que
+  // aquele itinerário custa isso, inclusive no de 29h via Casablanca que quase
+  // certamente não é o mais barato do dia. Fontes que têm preço por voo deixam
+  // esta coluna vazia.
+  "day_avios",
 ] as const;
 
-export type LinhaVoo = Record<(typeof COLUNAS_VOO)[number], string | number>;
+// `day_avios` é opcional pra não obrigar as fontes que têm preço por voo a
+// preencher coluna que não é delas — elas saem vazias, e o tipo diz isso.
+export type LinhaVoo = Record<Exclude<(typeof COLUNAS_VOO)[number], "day_avios">, string | number> & {
+  day_avios?: string | number;
+};
 
 // Cada busca ganha uma ABA nova na planilha do usuário, com link próprio.
 //
