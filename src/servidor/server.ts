@@ -43,7 +43,7 @@ import {
   type TetosLatam,
 } from "../fontes/latam/bot-latam.ts";
 import { formatarListaPorMes, type SecaoRelatorio } from "../nucleo/comum.ts";
-import { DIR_PUBLICO } from "../nucleo/caminhos.ts";
+import { DIR_PLANILHAS, DIR_PUBLICO } from "../nucleo/caminhos.ts";
 import { PoolSessoes } from "../nucleo/pool-sessoes.ts";
 import { fecharSessaoChrome, sessaoViva } from "../nucleo/sessao-chrome.ts";
 import {
@@ -54,8 +54,24 @@ import {
   type PeriodoSmiles,
   type TetosSmiles,
 } from "../fontes/smiles/bot-smiles.ts";
+import {
+  construirRelatorioIberia,
+  detalharDias as detalharDiasIberia,
+  filtrarVoos,
+  iniciarSessaoIberia,
+  linkEmissaoIberia,
+  pesquisarAnoIberia,
+  type FiltrosVoo,
+  type SessaoIberia,
+} from "../fontes/iberia/bot-iberia.ts";
 import { DIR_ALERTAS, DIR_PORTAL_DIST, gerarAlerta, type PedidoAlerta } from "../saidas/alertas.ts";
-import { criarPlanilhaDaBusca, registrarBusca, type LinhaVoo, type PernaParaPlanilha } from "../saidas/planilha.ts";
+import {
+  criarPlanilhaDaBusca,
+  gravarCsvDeVoos,
+  registrarBusca,
+  type LinhaVoo,
+  type PernaParaPlanilha,
+} from "../saidas/planilha.ts";
 
 // A extração de preços lê as 4 cores (Economy/PremiumEconomy/Business/First)
 // de cada dia independente do valor de "cabins" mandado na URL — então o
@@ -82,6 +98,7 @@ type Job = {
   avisoParcial?: string; // preenchido quando alguma janela falhou e foi pulada
   pernas?: PernaSeatspy[]; // resultado das buscas via SeatSpy
   secaoAA?: SecaoRelatorio & { rotulo: string }; // resultado das buscas na AA (uma cabine por busca)
+  secaoIberia?: SecaoRelatorio & { rotulo: string }; // Iberia: um valor por dia, sem dimensão de cabine
   confirmacao?: ConfirmacaoLatam; // confirmação em milhas do melhor par (LATAM)
   planilhaUrl?: string; // planilha da busca (uma nova por busca — ver planilha.ts)
   tetosAplicados?: { executivaK: number; economicaK: number }; // guardado pra sobreviver a um F5
@@ -110,6 +127,9 @@ const CONCORRENCIA_LATAM = Number(process.env.CONCORRENCIA_LATAM) || 2;
 // Smiles: sem login, mas a chamada sai de dentro do navegador (ver bot-smiles)
 // e uma varredura de ano já são ~112 requisições — mesma prudência.
 const CONCORRENCIA_SMILES = Number(process.env.CONCORRENCIA_SMILES) || 2;
+// Iberia: login que cai sozinho em poucos minutos e um site que já cortou
+// rajada uma vez — a mais conservadora das fontes com navegador.
+const CONCORRENCIA_IBERIA = Number(process.env.CONCORRENCIA_IBERIA) || 1;
 
 // Minutos sem uso até o slot fechar a sessão e devolver a RAM. Uma sessão do
 // SeatSpy parada custa ~450 MB, e o servidor costuma ficar dias de pé; reabrir
@@ -174,6 +194,15 @@ const poolSmiles = new PoolSessoes<SessaoSmiles>({
   rotulo: "smiles",
   tamanho: CONCORRENCIA_SMILES,
   criarSessao: (headless) => iniciarSessaoSmiles(headless),
+  sessaoViva,
+  fecharSessao: fecharSessaoChrome,
+  minutosOcioso: OCIOSIDADE_MINUTOS,
+});
+
+const poolIberia = new PoolSessoes<SessaoIberia>({
+  rotulo: "iberia",
+  tamanho: CONCORRENCIA_IBERIA,
+  criarSessao: (headless) => iniciarSessaoIberia(headless),
   sessaoViva,
   fecharSessao: fecharSessaoChrome,
   minutosOcioso: OCIOSIDADE_MINUTOS,
@@ -509,6 +538,154 @@ function executarJobAA(
   });
 }
 
+// Iberia: uma direção por job, como AA e Smiles. Sem seletor de cabine — a
+// grade de Avios devolve um valor por dia, o mais barato, sem dizer de qual
+// cabine ele é (ver `contexto/notas-recon-iberia.md`, seções 10 e 13).
+function executarJobIberia(
+  jobId: string,
+  params: {
+    origem: string;
+    destino: string;
+    tetoAvios: number | null;
+    passageiros: number;
+    // Quantos dias (os mais baratos) detalhar voo a voo. 0 desliga. Cada dia
+    // custa um carregamento de página, então isto é o que separa uma busca de
+    // 40 segundos de uma de vários minutos.
+    detalharDias: number;
+    filtros: FiltrosVoo;
+  },
+) {
+  return executarComPool(poolIberia, jobId, async ({ page }) => {
+    const job = jobs.get(jobId)!;
+    const resultado = await pesquisarAnoIberia(
+      page,
+      { origem: params.origem, destino: params.destino, passageiros: params.passageiros },
+      (msg) => console.log(`[${jobId}] ${msg}`),
+      (fracao) => atualizarProgresso(jobId, fracao),
+      (mensagem) => atualizarAviso(jobId, mensagem),
+      () => job.cancelado === true,
+    );
+
+    // Cada caso do resultado vira uma saída diferente na tela. "Erro" nunca
+    // desce como relatório vazio: o usuário precisa saber que a busca não saiu.
+    if (resultado.tipo === "erro") throw new Error(resultado.motivo);
+
+    const dias = resultado.tipo === "sem_disponibilidade" ? [] : resultado.dias;
+    const secao = {
+      rotulo: "Avios",
+      ...construirRelatorioIberia(dias, params.tetoAvios, {
+        origem: params.origem,
+        destino: params.destino,
+        passageiros: params.passageiros,
+      }),
+    };
+    const avisoParcial =
+      resultado.tipo === "parcial"
+        ? `Cobertura parcial: ${resultado.motivo}`
+        : undefined;
+
+    // Planilha por voo: é o que diz QUAL voo e QUAL companhia opera o dia — a
+    // grade só dá data e preço. Falha aqui não derruba o resultado de datas,
+    // que já está pronto.
+    let planilhaUrl: string | null = null;
+    const avisosPlanilha: string[] = [];
+    if (params.detalharDias > 0 && secao.dias.length > 0) {
+      const aviosPorData = new Map(dias.map((d) => [d.data, d.avios]));
+      const escolhidos = [...secao.dias]
+        .sort((a, b) => (aviosPorData.get(a.data) ?? 0) - (aviosPorData.get(b.data) ?? 0))
+        .slice(0, params.detalharDias)
+        .map((d) => d.data);
+      if (secao.dias.length > escolhidos.length) {
+        avisosPlanilha.push(
+          `A planilha de voos traz os ${escolhidos.length} dia(s) mais baratos; ` +
+            `os outros ${secao.dias.length - escolhidos.length} ficaram sem detalhe.`,
+        );
+      }
+
+      const { voos, diasComFalha } = await detalharDiasIberia(
+        page,
+        { origem: params.origem, destino: params.destino, passageiros: params.passageiros },
+        escolhidos,
+        (msg) => console.log(`[${jobId}] ${msg}`),
+        (fracao) => atualizarProgresso(jobId, 0.7 + 0.3 * fracao),
+        () => job.cancelado === true,
+      );
+      if (diasComFalha.length > 0) {
+        avisosPlanilha.push(
+          `${diasComFalha.length} dia(s) não puderam ser detalhados. ` +
+            `Primeira falha (${diasComFalha[0]!.data}): ${diasComFalha[0]!.erro}`,
+        );
+      }
+
+      const filtrados = filtrarVoos(voos, params.filtros);
+      if (voos.length > filtrados.length) {
+        avisosPlanilha.push(`${voos.length - filtrados.length} voo(s) ficaram fora pelos filtros pedidos.`);
+      }
+
+      const linhas: LinhaVoo[] = filtrados.map((v) => ({
+        departure_date: v.data,
+        arrival_date: v.chegadaData,
+        departure_station: v.origem,
+        departure_time: v.partidaHora,
+        arrival_station: v.destino,
+        connections: v.escalas,
+        connecting_airports: v.aeroportosConexao,
+        points: "", // a Iberia não dá preço por voo; o do dia vai em day_avios
+        duration: v.duracaoMinutos,
+        cabin_category: v.cabines,
+        operation_carriers: v.companhias,
+        program: "IBERIA",
+        source_fare: v.tarifa,
+        available_seats: v.assentos ?? "",
+        aircraft: v.aeronaves,
+        tax: "",
+        class_of_service: v.classesServico,
+        url: linkEmissaoIberia(
+          { origem: params.origem, destino: params.destino, passageiros: params.passageiros },
+          v.data,
+        ),
+        day_avios: aviosPorData.get(v.data) ?? "",
+      }));
+
+      if (linhas.length > 0) {
+        const carimbo = new Date().toISOString().slice(0, 16).replace("T", " ");
+        try {
+          gravarCsvDeVoos(
+            linhas,
+            path.join(
+              DIR_PLANILHAS,
+              `iberia-${params.origem}-${params.destino}-${carimbo.replace(/[: ]/g, "-")}.csv`,
+            ),
+          );
+        } catch (err) {
+          avisosPlanilha.push(`Não consegui gravar o CSV de voos: ${err instanceof Error ? err.message : String(err)}`);
+        }
+        planilhaUrl = await criarPlanilhaDaBusca(
+          { titulo: `Iberia ${params.origem}-${params.destino} ${carimbo}`, linhas },
+          (msg) => console.log(`[${jobId}] ${msg}`),
+        );
+      } else {
+        avisosPlanilha.push("Nenhum voo sobrou depois dos filtros — a planilha de voos não foi gerada.");
+      }
+    }
+
+    const avisoFinal = [avisoParcial, ...avisosPlanilha].filter(Boolean).join(" ") || undefined;
+
+    job.status = "done";
+    job.secaoIberia = secao;
+    if (avisoFinal) job.avisoParcial = avisoFinal;
+    if (planilhaUrl) job.planilhaUrl = planilhaUrl;
+    registrarNaPlanilha(jobId, {
+      fonte: "IBERIA",
+      origem: params.origem,
+      destino: params.destino,
+      pernas: [{ rotulo: `${params.origem} → ${params.destino}`, secoes: [secao] }],
+      tetos: { Avios: params.tetoAvios == null ? null : Math.round(params.tetoAvios / 10) / 100 },
+    });
+    emitirEvento(jobId, { tipo: "done", secaoIberia: secao, avisoParcial: avisoFinal, planilhaUrl });
+  });
+}
+
 // Smiles: uma direção por job (o endpoint é de ida simples), com as três
 // cabines juntas — o front pede a volta como um segundo job, igual à AA.
 function executarJobSmiles(
@@ -821,6 +998,7 @@ app.post("/api/buscar", (req: Request, res: Response) => {
   const ehAA = fonte === "aa";
   const ehLatam = fonte === "latam";
   const ehSmiles = fonte === "smiles";
+  const ehIberia = fonte === "iberia";
   if (ehSeatspy && !Object.hasOwn(NOME_COMPANHIA, companhia)) {
     res.status(400).json({
       erro: `companhia deve ser uma destas para buscas no SeatSpy: ${Object.keys(NOME_COMPANHIA).join(", ")}.`,
@@ -875,6 +1053,18 @@ app.post("/api/buscar", (req: Request, res: Response) => {
         executiva: tetoDe(tetos?.executiva),
       },
       periodo: periodoDe(req.body?.periodo),
+    });
+  } else if (ehIberia) {
+    executarJobIberia(jobId, {
+      origem: String(origem).toUpperCase(),
+      destino: String(destino).toUpperCase(),
+      tetoAvios: tetoDe(teto),
+      passageiros: passageirosDe(req.body?.passageiros),
+      detalharDias: Math.min(Math.max(Number(req.body?.detalharDias) || 0, 0), 20),
+      filtros: {
+        maxEscalas: maxConexoes === 0 || maxConexoes === 1 || maxConexoes === 2 ? maxConexoes : null,
+        cabines: Array.isArray(req.body?.cabines) && req.body.cabines.length > 0 ? req.body.cabines : null,
+      },
     });
   } else if (ehAA) {
     executarJobAA(jobId, {
@@ -1022,6 +1212,8 @@ app.get("/api/buscar/:jobId/eventos", (req: Request, res: Response) => {
     };
     const dado = job.pernas
       ? { tipo: "done", ...comum, pernas: job.pernas, confirmacao: job.confirmacao }
+      : job.secaoIberia
+        ? { tipo: "done", ...comum, secaoIberia: job.secaoIberia, avisoParcial: job.avisoParcial }
       : job.secaoAA
         ? { tipo: "done", ...comum, secaoAA: job.secaoAA, avisoParcial: job.avisoParcial }
         : { tipo: "done", ...comum, relatorio: job.relatorio, avisoParcial: job.avisoParcial };
