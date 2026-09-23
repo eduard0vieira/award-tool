@@ -669,7 +669,17 @@ function executarJobIberia(
       }
     }
 
-    const avisoFinal = [avisoParcial, ...avisosPlanilha].filter(Boolean).join(" ") || undefined;
+    // Quem escolheu uma cabine precisa ver, junto do resultado, que os valores
+    // NÃO são daquela cabine: o calendário da Iberia ignora `preferredCabin`
+    // (medido — as seis variações devolvem resposta idêntica). Sem este aviso,
+    // "Executiva" ao lado de 18.000 Avios vira promessa errada pro cliente.
+    const avisoCabine = params.filtros.cabines?.length
+      ? `Atenção: o valor de cada data é o mais barato do dia em QUALQUER cabine — ` +
+        `a Iberia não dá preço por cabine no calendário. O filtro de ` +
+        `${params.filtros.cabines.join("/")} agiu só sobre a planilha de voos.`
+      : undefined;
+
+    const avisoFinal = [avisoCabine, avisoParcial, ...avisosPlanilha].filter(Boolean).join(" ") || undefined;
 
     job.status = "done";
     job.secaoIberia = secao;

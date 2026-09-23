@@ -452,3 +452,28 @@ Caminhos ainda não tentados, para quem pegar isso:
   headers reais (incluindo `origin`/`referer`) com os que ele manda;
 - aceitar uma vez a tela `RemoteAccessAuthorizationPage` do Salesforce na mão e
   ver se a queda de sessão para.
+
+## 15. `preferredCabin` é ignorado pelo calendário (2026-09-23)
+
+Medido com `scripts/probe-cabine-iberia.ts`: mesma rota, mesma data, mesmo
+token, só mudando o campo do corpo.
+
+```
+preferredCabin=(vazio):   100 dias, 42 com preço, 18000 a 35100 Avios
+preferredCabin=BUSINESS:  100 dias, 42 com preço, 18000 a 35100 Avios
+preferredCabin=ECONOMY:   idem   | TOURIST: idem | PREMIUMTOURIST: idem | FIRST: idem
+```
+
+Resposta **idêntica** nas seis. O `/calendar/grid` não sabe responder por
+cabine — o valor é sempre o mais barato do dia, seja qual for a classe.
+
+Consequência para o produto, e ela é séria: **não existe "datas de executiva"
+com preço de executiva nesta fonte.** O seletor de cabine do front só filtra a
+planilha de voos (via `bookingClass` das ofertas do `/availability`). Por isso
+o job agora devolve um aviso explícito junto do resultado quando uma cabine é
+escolhida — número de econômica anunciado como executiva é erro que chega no
+cliente.
+
+Caminho possível, não explorado: descobrir se um dia tem prêmio em executiva
+exige o `/availability` daquele dia (~15s cada). Serve para uma lista curta de
+datas, não para varrer um ano.
