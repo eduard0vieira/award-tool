@@ -1919,7 +1919,11 @@ async function iniciarBuscaIberia(
   };
 
   try {
-    const { resultado: secaoIda, avisoParcial: avisoIda } = await buscarNoServidor(
+    const {
+      resultado: secaoIda,
+      avisoParcial: avisoIda,
+      planilhaUrl: planilhaIda,
+    } = await buscarNoServidor(
       card,
       { ...corpoBase, origem, destino },
       idaEVolta ? "Buscando ida..." : "Buscando...",
@@ -1931,13 +1935,19 @@ async function iniciarBuscaIberia(
     registrarPernaCopia(card, [secaoIda]);
     if (!sessao.retomando) salvarNoHistorico(origem, destino, "IBERIA", false, {});
 
+    let planilhaVolta = null;
     if (idaEVolta) {
-      const { resultado: secaoVolta, avisoParcial: avisoVolta } = await buscarNoServidor(
+      const {
+        resultado: secaoVolta,
+        avisoParcial: avisoVolta,
+        planilhaUrl: urlVolta,
+      } = await buscarNoServidor(
         card,
         { ...corpoBase, origem: destino, destino: origem },
         "Buscando volta...",
         sessao,
       );
+      planilhaVolta = urlVolta;
       if (avisoVolta) avisosParciais.push(avisoVolta);
       renderizarPernaSecoes(card.resultadoEl, `Volta: ${destino} → ${origem}`, [
         { ...secaoVolta, corClasse: "cartao-economica" },
@@ -1953,6 +1963,11 @@ async function iniciarBuscaIberia(
       card.avisoEl.hidden = false;
     }
     atualizarAcoesCard(card);
+    // Sem isto a planilha por voo era criada e o card não dizia nada: o
+    // arquivo existia em planilhas/ e a aba no Google também, mas de fora
+    // parecia que nada tinha sido gerado.
+    mostrarLinkPlanilha(card, planilhaIda, idaEVolta ? "ida" : "busca");
+    mostrarLinkPlanilha(card, planilhaVolta, "volta");
   } catch (erro) {
     card.definirStatus("Erro", "status-erro");
     card.avisoEl.textContent = erro.message || "Erro inesperado.";
