@@ -17,6 +17,7 @@
       <button type="button" class="aba-btn" data-aba="aa">American</button>
       <button type="button" class="aba-btn" data-aba="latam">LATAM</button>
       <button type="button" class="aba-btn" data-aba="smiles">Smiles</button>
+      <button type="button" class="aba-btn" data-aba="iberia">Iberia</button>
       <button type="button" class="aba-btn" data-aba="historico">Histórico</button>
     </nav>
 
@@ -190,6 +191,76 @@
       <p id="aa-aviso" class="aviso" hidden></p>
 
       <div id="aa-fila-buscas" class="fila-buscas"></div>
+    </section>
+
+    <!-- Iberia (Avios). Sem seletor de cabine de propósito: o calendário de
+         resgate da Iberia devolve UM valor por dia, o mais barato, e não diz de
+         qual cabine ele é. Oferecer o seletor aqui prometeria um filtro que a
+         fonte não tem. Ver contexto/notas-recon-iberia.md, seções 10 e 13. -->
+    <section id="painel-iberia" class="painel" hidden>
+      <form id="form-busca-iberia">
+        <div class="campo">
+          <label for="iberia-origem">Origem</label>
+          <input id="iberia-origem" placeholder="GRU" maxlength="3" required autocomplete="off" />
+        </div>
+        <div class="campo">
+          <label for="iberia-destino">Destino</label>
+          <input id="iberia-destino" placeholder="MAD" maxlength="3" required autocomplete="off" />
+        </div>
+        <div class="campo">
+          <label for="iberia-teto">Teto de Avios (K) por passageiro</label>
+          <input id="iberia-teto" type="number" min="1" step="0.5" placeholder="ex.: 40" autocomplete="off" />
+        </div>
+        <!-- Os três campos abaixo só agem sobre a planilha de voos: o
+             calendário que gera as datas não tem cabine nem escalas. Com
+             "Não detalhar", a busca é só o calendário e leva ~40s. -->
+        <div class="campo">
+          <label for="iberia-detalhar">Detalhar voos dos dias mais baratos</label>
+          <select id="iberia-detalhar">
+            <option value="0" selected>Não detalhar (só as datas)</option>
+            <option value="3">3 dias</option>
+            <option value="5">5 dias</option>
+            <option value="10">10 dias</option>
+            <option value="20">20 dias</option>
+          </select>
+        </div>
+        <div class="campo">
+          <label for="iberia-conexoes">Conexões (na planilha de voos)</label>
+          <select id="iberia-conexoes">
+            <option value="">Todos os voos</option>
+            <option value="0">Só voo direto</option>
+            <option value="1">Até 1 conexão</option>
+            <option value="2">Até 2 conexões</option>
+          </select>
+        </div>
+        <div class="campo">
+          <label for="iberia-cabine">Cabine (na planilha de voos)</label>
+          <select id="iberia-cabine">
+            <option value="">Todas</option>
+            <option value="ECONOMY">Econômica</option>
+            <option value="PREMIUMTOURIST">Premium Economy</option>
+            <option value="BUSINESS">Executiva</option>
+            <option value="FIRST">Primeira</option>
+          </select>
+        </div>
+        <label class="checkbox">
+          <input type="checkbox" id="iberia-ida-volta" checked />
+          Ida e volta
+        </label>
+        <button type="submit">Buscar</button>
+      </form>
+
+      <p class="aviso" style="display:block">
+        O valor de cada dia é o mais barato daquele dia, seja qual for a cabine
+        ou o roteamento — inclusive itinerários longos com escala em parceiras.
+        Para saber qual voo e qual companhia opera cada data, peça o detalhe
+        abaixo: ele gera a planilha por voo (com escalas, companhia e vagas) e
+        custa cerca de 15 segundos por dia detalhado.
+      </p>
+
+      <p id="iberia-aviso" class="aviso" hidden></p>
+
+      <div id="iberia-fila-buscas" class="fila-buscas"></div>
     </section>
 
     <!-- Aba LATAM (latamairlines.com, tarifas em dinheiro, Econômica, sem

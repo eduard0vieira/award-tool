@@ -35,6 +35,17 @@ const checkboxAaIdaVolta = document.getElementById("aa-ida-volta");
 const avisoAa = document.getElementById("aa-aviso");
 const filaAa = document.getElementById("aa-fila-buscas");
 
+const formIberia = document.getElementById("form-busca-iberia");
+const inputIberiaOrigem = document.getElementById("iberia-origem");
+const inputIberiaDestino = document.getElementById("iberia-destino");
+const inputIberiaTeto = document.getElementById("iberia-teto");
+const selectIberiaDetalhar = document.getElementById("iberia-detalhar");
+const selectIberiaConexoes = document.getElementById("iberia-conexoes");
+const selectIberiaCabine = document.getElementById("iberia-cabine");
+const checkboxIberiaIdaVolta = document.getElementById("iberia-ida-volta");
+const avisoIberia = document.getElementById("iberia-aviso");
+const filaIberia = document.getElementById("iberia-fila-buscas");
+
 const formSmiles = document.getElementById("form-busca-smiles");
 const inputSmilesOrigem = document.getElementById("smiles-origem");
 const inputSmilesDestino = document.getElementById("smiles-destino");
@@ -63,6 +74,7 @@ const abasBtns = document.querySelectorAll(".aba-btn");
 const painelTap = document.getElementById("painel-tap");
 const painelSeatspy = document.getElementById("painel-seatspy");
 const painelAa = document.getElementById("painel-aa");
+const painelIberia = document.getElementById("painel-iberia");
 const painelSmiles = document.getElementById("painel-smiles");
 const painelLatam = document.getElementById("painel-latam");
 const painelHistorico = document.getElementById("painel-historico");
@@ -82,6 +94,9 @@ const PROGRAMA_LABEL = {
   AA: "American Airlines",
   LATAM: "LATAM",
   SMILES: "Smiles",
+  // `IB` é a Iberia vista pelo SeatSpy; `IBERIA` é a busca direta no site
+  // dela. São fontes diferentes e o histórico precisa distinguir.
+  IBERIA: "Iberia (Avios)",
   AF: "Air France",
   B6: "JetBlue",
   BA: "British Airways",
@@ -110,6 +125,7 @@ abasBtns.forEach((btn) => {
     painelSeatspy.hidden = aba !== "seatspy";
     painelAa.hidden = aba !== "aa";
     painelSmiles.hidden = aba !== "smiles";
+    painelIberia.hidden = aba !== "iberia";
     painelLatam.hidden = aba !== "latam";
     painelHistorico.hidden = aba !== "historico";
     if (aba === "historico") renderizarHistorico();
@@ -654,6 +670,7 @@ const RETOMAR_POR_FONTE = {
   smiles: (...a) => iniciarBuscaSmiles(...a),
   aa: (...a) => iniciarBuscaAA(...a),
   latam: (...a) => iniciarBuscaLatam(...a),
+  iberia: (...a) => iniciarBuscaIberia(...a),
 };
 
 async function restaurarBuscas() {
@@ -853,7 +870,7 @@ function buscarNoServidor(card, corpo, rotuloProgresso, sessao) {
         // termina em segundos.
         card.progressoLabelEl.textContent = "";
         const dados = {
-          resultado: dado.pernas || dado.secaoAA || dado.relatorio,
+          resultado: dado.pernas || dado.secaoAA || dado.secaoIberia || dado.relatorio,
           planilhaUrl: dado.planilhaUrl,
           avisoParcial: dado.avisoParcial,
           tetosAplicados: dado.tetosAplicados,
@@ -1867,6 +1884,95 @@ formLatam.addEventListener("submit", (evento) => {
       somenteMenorTarifa: checkboxLatamMenorTarifa.checked,
     },
     checkboxLatamConfirmarMilhas.checked,
+  );
+});
+
+// Iberia: uma direção por job, como a AA. Sem cabine — a grade devolve um
+// valor por dia e não diz de qual cabine é, então não há o que escolher.
+async function iniciarBuscaIberia(
+  origem,
+  destino,
+  tetoAvios,
+  idaEVolta,
+  detalharDias = 0,
+  maxConexoes = null,
+  cabine = "",
+  sessao,
+) {
+  sessao =
+    sessao ||
+    novaSessao("iberia", [origem, destino, tetoAvios, idaEVolta, detalharDias, maxConexoes, cabine]);
+  const seta = idaEVolta ? "⇄" : "→";
+  const card = criarCardJob(filaIberia, `Iberia (Avios): ${origem} ${seta} ${destino}`);
+  const avisosParciais = [];
+  const corpoBase = {
+    fonte: "iberia",
+    teto: tetoAvios,
+    detalharDias,
+    maxConexoes,
+    cabines: cabine ? [cabine] : [],
+  };
+
+  try {
+    const { resultado: secaoIda, avisoParcial: avisoIda } = await buscarNoServidor(
+      card,
+      { ...corpoBase, origem, destino },
+      idaEVolta ? "Buscando ida..." : "Buscando...",
+      sessao,
+    );
+    if (avisoIda) avisosParciais.push(avisoIda);
+    const rotuloIda = idaEVolta ? `Ida: ${origem} → ${destino}` : `${origem} → ${destino}`;
+    renderizarPernaSecoes(card.resultadoEl, rotuloIda, [{ ...secaoIda, corClasse: "cartao-economica" }]);
+    registrarPernaCopia(card, [secaoIda]);
+    if (!sessao.retomando) salvarNoHistorico(origem, destino, "IBERIA", false, {});
+
+    if (idaEVolta) {
+      const { resultado: secaoVolta, avisoParcial: avisoVolta } = await buscarNoServidor(
+        card,
+        { ...corpoBase, origem: destino, destino: origem },
+        "Buscando volta...",
+        sessao,
+      );
+      if (avisoVolta) avisosParciais.push(avisoVolta);
+      renderizarPernaSecoes(card.resultadoEl, `Volta: ${destino} → ${origem}`, [
+        { ...secaoVolta, corClasse: "cartao-economica" },
+      ]);
+      registrarPernaCopia(card, [secaoVolta]);
+      promoverUltimaParaIdaEVolta(origem, destino, "IBERIA");
+    }
+
+    card.definirStatus("Pronto", "status-pronto");
+    card.resultadoEl.hidden = false;
+    if (avisosParciais.length > 0) {
+      card.avisoEl.textContent = avisosParciais.join(" ");
+      card.avisoEl.hidden = false;
+    }
+    atualizarAcoesCard(card);
+  } catch (erro) {
+    card.definirStatus("Falhou", "status-erro");
+    card.avisoEl.textContent = erro.message;
+    card.avisoEl.hidden = false;
+  }
+}
+
+formIberia.addEventListener("submit", (evento) => {
+  evento.preventDefault();
+  limparAviso(avisoIberia);
+  const origem = inputIberiaOrigem.value.trim().toUpperCase();
+  const destino = inputIberiaDestino.value.trim().toUpperCase();
+  if (!origem || !destino) {
+    mostrarAviso(avisoIberia, "Preencha origem e destino.");
+    return;
+  }
+  const tetoK = parseFloat(inputIberiaTeto.value);
+  iniciarBuscaIberia(
+    origem,
+    destino,
+    Number.isFinite(tetoK) && tetoK > 0 ? tetoK * 1000 : null,
+    checkboxIberiaIdaVolta.checked,
+    Number(selectIberiaDetalhar.value) || 0,
+    selectIberiaConexoes.value === "" ? null : Number(selectIberiaConexoes.value),
+    selectIberiaCabine.value,
   );
 });
 
