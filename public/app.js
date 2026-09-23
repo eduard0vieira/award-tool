@@ -847,6 +847,11 @@ function buscarNoServidor(card, corpo, rotuloProgresso, sessao) {
       } else if (dado.tipo === "done") {
         fonte.close();
         tirarPergunta(card);
+        // Sem isso o rótulo fica congelado no último "Buscando..." depois de a
+        // busca acabar — o card diz "Pronto" e "Buscando volta..." ao mesmo
+        // tempo. Vale pra todas as fontes; só ficou visível na Iberia, que
+        // termina em segundos.
+        card.progressoLabelEl.textContent = "";
         const dados = {
           resultado: dado.pernas || dado.secaoAA || dado.relatorio,
           planilhaUrl: dado.planilhaUrl,
