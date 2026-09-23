@@ -215,17 +215,21 @@
              calendário que gera as datas não tem cabine nem escalas. Com
              "Não detalhar", a busca é só o calendário e leva ~40s. -->
         <div class="campo">
-          <label for="iberia-detalhar">Detalhar voos dos dias mais baratos</label>
+          <label for="iberia-detalhar">Quantas datas detalhar voo a voo</label>
           <select id="iberia-detalhar">
-            <option value="0" selected>Não detalhar (só as datas)</option>
-            <option value="3">3 dias</option>
-            <option value="5">5 dias</option>
-            <option value="10">10 dias</option>
-            <option value="20">20 dias</option>
+            <option value="0" selected>Nenhuma — só a lista de datas (~40s)</option>
+            <option value="3">As 3 datas mais baratas (~1 min a mais)</option>
+            <option value="5">As 5 mais baratas (~1min30 a mais)</option>
+            <option value="10">As 10 mais baratas (~3 min a mais)</option>
+            <option value="20">As 20 mais baratas (~5 min a mais)</option>
           </select>
+          <small class="dica">
+            Só as datas detalhadas entram na planilha por voo, com companhia,
+            escalas e vagas. As demais continuam na lista de datas.
+          </small>
         </div>
         <div class="campo">
-          <label for="iberia-conexoes">Conexões (na planilha de voos)</label>
+          <label for="iberia-conexoes">Conexões (só filtra as datas detalhadas)</label>
           <select id="iberia-conexoes">
             <option value="">Todos os voos</option>
             <option value="0">Só voo direto</option>
@@ -234,7 +238,7 @@
           </select>
         </div>
         <div class="campo">
-          <label for="iberia-cabine">Cabine (na planilha de voos)</label>
+          <label for="iberia-cabine">Cabine (só filtra as datas detalhadas)</label>
           <select id="iberia-cabine">
             <option value="">Todas</option>
             <option value="ECONOMY">Econômica</option>

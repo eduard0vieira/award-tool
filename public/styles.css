@@ -263,6 +263,20 @@ main > h1 {
   color: var(--texto-suave);
 }
 
+/* Texto de ajuda abaixo de um campo, quando o rótulo sozinho não explica o
+   que a opção custa ou sobre o que ela age. */
+.campo .dica {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--texto-suave);
+}
+
+/* O campo com dica precisa de mais largura que os 200px padrão dos selects,
+   senão a explicação vira uma coluna estreita de três palavras. */
+.campo:has(.dica) {
+  flex-basis: 280px;
+}
+
 input,
 select {
   width: 100%;
