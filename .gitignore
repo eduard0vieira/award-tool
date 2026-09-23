@@ -22,3 +22,7 @@ planilhas/
 # Recon da LATAM: as fotos saem de uma sessão logada e podem mostrar nome,
 # número de conta e saldo. Ficam fora do git.
 fixtures/latam-rt/
+
+# Capturas de diagnóstico do recon: mostram a tela logada (nome do titular,
+# saldo de milhas). Ficam em disco pra depurar, nunca no repositório.
+fixtures/*.png

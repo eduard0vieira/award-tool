@@ -13,6 +13,7 @@
     "planilha:configurar": "bash scripts/configurar-planilha.sh",
     "formatar": "tsx scripts/formatar-datas.ts",
     "recon:iberia": "tsx scripts/recon-iberia.ts",
+    "iberia": "tsx scripts/buscar-iberia.ts",
     "recon:latam": "tsx scripts/recon-latam-rt.ts"
   },
   "keywords": [],
