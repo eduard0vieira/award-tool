@@ -517,6 +517,11 @@ function criarCardJob(filaBuscasEl, tituloRota) {
     card.statusEl.textContent = texto;
     card.statusEl.className = `job-status ${classe}`;
     card.btnPararEl.hidden = classe === "status-pronto" || classe === "status-erro";
+    // Busca que termina em erro nunca chega no `atualizarAcoesCard`, e a barra
+    // de ações fica escondida: o card vira um bloco morto na tela, sem Remover
+    // nem Minimizar, e só sai com F5. Os botões de copiar seguem escondidos,
+    // porque não há o que copiar. Vale pra todas as fontes.
+    if (classe === "status-erro") card.acoesEl.hidden = false;
   }
   card.definirStatus = definirStatus;
 
@@ -1949,9 +1954,13 @@ async function iniciarBuscaIberia(
     }
     atualizarAcoesCard(card);
   } catch (erro) {
-    card.definirStatus("Falhou", "status-erro");
-    card.avisoEl.textContent = erro.message;
+    card.definirStatus("Erro", "status-erro");
+    card.avisoEl.textContent = erro.message || "Erro inesperado.";
     card.avisoEl.hidden = false;
+  } finally {
+    // Igual às outras fontes: a barra de progresso some quando a busca acaba,
+    // dando ou não certo.
+    card.progressoEl.hidden = true;
   }
 }
 
