@@ -11,6 +11,7 @@
     "chrome": "bash scripts/chrome-aa.sh",
     "chrome:parar": "bash scripts/parar-chrome.sh",
     "planilha:configurar": "bash scripts/configurar-planilha.sh",
+    "formatar": "tsx scripts/formatar-datas.ts",
     "recon:iberia": "tsx scripts/recon-iberia.ts",
     "recon:latam": "tsx scripts/recon-latam-rt.ts"
   },
