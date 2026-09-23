@@ -877,6 +877,7 @@ function buscarNoServidor(card, corpo, rotuloProgresso, sessao) {
         const dados = {
           resultado: dado.pernas || dado.secaoAA || dado.secaoIberia || dado.relatorio,
           planilhaUrl: dado.planilhaUrl,
+          arquivoLocal: dado.arquivoLocal,
           avisoParcial: dado.avisoParcial,
           tetosAplicados: dado.tetosAplicados,
           confirmacao: dado.confirmacao,
@@ -1301,6 +1302,16 @@ async function iniciarBuscaSeatspy(programa, origem, destino, idaEVolta, mostrar
 
 // Link da planilha daquela busca (uma planilha nova por busca — ver
 // planilha.ts). Vira um bloco clicável no card, junto do resultado.
+// O Google Sheets pode estar fora ou desconfigurado; o CSV local sempre existe
+// quando houve voo. Mostrar o caminho evita a pergunta "cadê a planilha?".
+function mostrarArquivoLocal(card, caminho, rotulo) {
+  if (!caminho) return;
+  const bloco = document.createElement("p");
+  bloco.className = "link-planilha";
+  bloco.textContent = `💾 Planilha da ${rotulo} em ${caminho}`;
+  card.raiz.appendChild(bloco);
+}
+
 function mostrarLinkPlanilha(card, url, rotulo) {
   if (!url) return;
   const bloco = document.createElement("p");
@@ -1923,6 +1934,7 @@ async function iniciarBuscaIberia(
       resultado: secaoIda,
       avisoParcial: avisoIda,
       planilhaUrl: planilhaIda,
+      arquivoLocal: arquivoIda,
     } = await buscarNoServidor(
       card,
       { ...corpoBase, origem, destino },
@@ -1936,11 +1948,13 @@ async function iniciarBuscaIberia(
     if (!sessao.retomando) salvarNoHistorico(origem, destino, "IBERIA", false, {});
 
     let planilhaVolta = null;
+    let arquivoDaVolta = null;
     if (idaEVolta) {
       const {
         resultado: secaoVolta,
         avisoParcial: avisoVolta,
         planilhaUrl: urlVolta,
+        arquivoLocal: arquivoVolta,
       } = await buscarNoServidor(
         card,
         { ...corpoBase, origem: destino, destino: origem },
@@ -1948,6 +1962,7 @@ async function iniciarBuscaIberia(
         sessao,
       );
       planilhaVolta = urlVolta;
+      arquivoDaVolta = arquivoVolta;
       if (avisoVolta) avisosParciais.push(avisoVolta);
       renderizarPernaSecoes(card.resultadoEl, `Volta: ${destino} → ${origem}`, [
         { ...secaoVolta, corClasse: "cartao-economica" },
@@ -1968,6 +1983,8 @@ async function iniciarBuscaIberia(
     // parecia que nada tinha sido gerado.
     mostrarLinkPlanilha(card, planilhaIda, idaEVolta ? "ida" : "busca");
     mostrarLinkPlanilha(card, planilhaVolta, "volta");
+    mostrarArquivoLocal(card, arquivoIda, idaEVolta ? "ida" : "busca");
+    mostrarArquivoLocal(card, arquivoDaVolta, "volta");
   } catch (erro) {
     card.definirStatus("Erro", "status-erro");
     card.avisoEl.textContent = erro.message || "Erro inesperado.";

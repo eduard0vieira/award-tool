@@ -548,9 +548,9 @@ function executarJobIberia(
     destino: string;
     tetoAvios: number | null;
     passageiros: number;
-    // Quantos dias (os mais baratos) detalhar voo a voo. 0 desliga. Cada dia
-    // custa um carregamento de página, então isto é o que separa uma busca de
-    // 40 segundos de uma de vários minutos.
+    // Quantos dias (os mais baratos) detalhar voo a voo. 0 desliga; -1 é TODAS
+    // as datas — o modo "igual ao bot antigo", que custa ~15s por data e pode
+    // passar de uma hora num ano inteiro. Cada dia é um carregamento de página.
     detalharDias: number;
     filtros: FiltrosVoo;
   },
@@ -571,7 +571,7 @@ function executarJobIberia(
     if (resultado.tipo === "erro") throw new Error(resultado.motivo);
 
     const dias = resultado.tipo === "sem_disponibilidade" ? [] : resultado.dias;
-    const secao = {
+    let secao = {
       rotulo: "Avios",
       ...construirRelatorioIberia(dias, params.tetoAvios, {
         origem: params.origem,
@@ -588,12 +588,14 @@ function executarJobIberia(
     // grade só dá data e preço. Falha aqui não derruba o resultado de datas,
     // que já está pronto.
     let planilhaUrl: string | null = null;
+    let arquivoLocal: string | null = null;
     const avisosPlanilha: string[] = [];
     if (params.detalharDias > 0 && secao.dias.length > 0) {
       const aviosPorData = new Map(dias.map((d) => [d.data, d.avios]));
+      const todas = params.detalharDias === -1;
       const escolhidos = [...secao.dias]
         .sort((a, b) => (aviosPorData.get(a.data) ?? 0) - (aviosPorData.get(b.data) ?? 0))
-        .slice(0, params.detalharDias)
+        .slice(0, todas ? secao.dias.length : params.detalharDias)
         .map((d) => d.data);
       if (secao.dias.length > escolhidos.length) {
         avisosPlanilha.push(
@@ -620,6 +622,24 @@ function executarJobIberia(
       const filtrados = filtrarVoos(voos, params.filtros);
       if (voos.length > filtrados.length) {
         avisosPlanilha.push(`${voos.length - filtrados.length} voo(s) ficaram fora pelos filtros pedidos.`);
+      }
+
+      // Com TODAS as datas detalhadas, o filtro pode valer também pra lista de
+      // datas: sobra só o dia que tem voo passando nele. Com detalhe parcial
+      // isso seria mentira — esconderia datas boas que só não foram olhadas.
+      const temFiltro = Boolean(params.filtros.cabines?.length) || params.filtros.maxEscalas != null;
+      if (todas && temFiltro) {
+        const comVoo = new Set(filtrados.map((v) => v.data));
+        const antes = secao.dias.length;
+        secao = { rotulo: secao.rotulo, ...construirRelatorioIberia(dias.filter((d) => comVoo.has(d.data)), params.tetoAvios, {
+          origem: params.origem,
+          destino: params.destino,
+          passageiros: params.passageiros,
+        }) };
+        avisosPlanilha.push(
+          `As datas foram filtradas pelo que o detalhe encontrou: ${secao.dias.length} de ${antes} têm voo ` +
+            `dentro do que você pediu.`,
+        );
       }
 
       const linhas: LinhaVoo[] = filtrados.map((v) => ({
@@ -649,14 +669,13 @@ function executarJobIberia(
 
       if (linhas.length > 0) {
         const carimbo = new Date().toISOString().slice(0, 16).replace("T", " ");
+        const nomeArquivo = `iberia-${params.origem}-${params.destino}-${carimbo.replace(/[: ]/g, "-")}.csv`;
         try {
-          gravarCsvDeVoos(
-            linhas,
-            path.join(
-              DIR_PLANILHAS,
-              `iberia-${params.origem}-${params.destino}-${carimbo.replace(/[: ]/g, "-")}.csv`,
-            ),
-          );
+          gravarCsvDeVoos(linhas, path.join(DIR_PLANILHAS, nomeArquivo));
+          // O arquivo local é o que SEMPRE existe; o Google pode estar fora ou
+          // desconfigurado. Sem mandar isto pra tela, uma planilha gravada com
+          // sucesso parecia não ter sido gerada.
+          arquivoLocal = `planilhas/${nomeArquivo}`;
         } catch (err) {
           avisosPlanilha.push(`Não consegui gravar o CSV de voos: ${err instanceof Error ? err.message : String(err)}`);
         }
@@ -692,7 +711,7 @@ function executarJobIberia(
       pernas: [{ rotulo: `${params.origem} → ${params.destino}`, secoes: [secao] }],
       tetos: { Avios: params.tetoAvios == null ? null : Math.round(params.tetoAvios / 10) / 100 },
     });
-    emitirEvento(jobId, { tipo: "done", secaoIberia: secao, avisoParcial: avisoFinal, planilhaUrl });
+    emitirEvento(jobId, { tipo: "done", secaoIberia: secao, avisoParcial: avisoFinal, planilhaUrl, arquivoLocal });
   });
 }
 
@@ -1070,7 +1089,9 @@ app.post("/api/buscar", (req: Request, res: Response) => {
       destino: String(destino).toUpperCase(),
       tetoAvios: tetoDe(teto),
       passageiros: passageirosDe(req.body?.passageiros),
-      detalharDias: Math.min(Math.max(Number(req.body?.detalharDias) || 0, 0), 20),
+      // -1 = todas as datas (modo bot antigo). Fora isso, 0 a 40.
+      detalharDias:
+        Number(req.body?.detalharDias) === -1 ? -1 : Math.min(Math.max(Number(req.body?.detalharDias) || 0, 0), 40),
       filtros: {
         maxEscalas: maxConexoes === 0 || maxConexoes === 1 || maxConexoes === 2 ? maxConexoes : null,
         cabines: Array.isArray(req.body?.cabines) && req.body.cabines.length > 0 ? req.body.cabines : null,
