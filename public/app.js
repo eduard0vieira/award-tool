@@ -1227,7 +1227,7 @@ async function iniciarBuscaTap(origem, destino, idaEVolta, tetos, sessao) {
     card.resultadoEl.hidden = false;
     card.subAbasEl.hidden = false;
     if (avisosParciais.length > 0) {
-      card.avisoEl.textContent = avisosParciais.join(" ");
+      card.avisoEl.textContent = [...new Set(avisosParciais)].join(" ");
       card.avisoEl.hidden = false;
     }
     atualizarAcoesCard(card);
@@ -1365,7 +1365,7 @@ async function iniciarBuscaSmiles(origem, destino, tetos, idaEVolta, periodo, se
     card.definirStatus("Pronto", "status-pronto");
     card.resultadoEl.hidden = false;
     if (avisosParciais.length > 0) {
-      card.avisoEl.textContent = avisosParciais.join(" ");
+      card.avisoEl.textContent = [...new Set(avisosParciais)].join(" ");
       card.avisoEl.hidden = false;
     }
     atualizarAcoesCard(card);
@@ -1632,7 +1632,7 @@ async function iniciarBuscaAA(origem, destino, cabine, maxConexoes, tetoK, idaEV
     card.definirStatus("Pronto", "status-pronto");
     card.resultadoEl.hidden = false;
     if (avisosParciais.length > 0) {
-      card.avisoEl.textContent = avisosParciais.join(" ");
+      card.avisoEl.textContent = [...new Set(avisosParciais)].join(" ");
       card.avisoEl.hidden = false;
     }
     atualizarAcoesCard(card);
@@ -1974,7 +1974,7 @@ async function iniciarBuscaIberia(
     card.definirStatus("Pronto", "status-pronto");
     card.resultadoEl.hidden = false;
     if (avisosParciais.length > 0) {
-      card.avisoEl.textContent = avisosParciais.join(" ");
+      card.avisoEl.textContent = [...new Set(avisosParciais)].join(" ");
       card.avisoEl.hidden = false;
     }
     atualizarAcoesCard(card);

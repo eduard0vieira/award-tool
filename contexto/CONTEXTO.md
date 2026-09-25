@@ -243,3 +243,13 @@ OCIOSIDADE_MINUTOS                                # fecha a sessão parada (0 de
 *_INTERVALO_BUSCAS_MS                             # limitador de frequência
 AA_CHROME_PERFIL, AA_CDP_PORTA                    # perfil/porta do Chrome do bot
 ```
+
+## AA: o código 309 do calendário
+
+`POST /booking/api/search/calendar` responde **HTTP 200 com `error: "309"` e
+`calendarMonths: []`** quando não há prêmio naquele mês para a rota. É ausência
+de dado, não falha — medido em 2026-09-25 com HEL→NRT executiva, onde setembro
+a janeiro dão 309 e julho/2027 dá 23 dias a 75.000.
+
+Tratá-lo como erro fazia a varredura desistir depois de três meses seguidos e
+devolver "nenhuma disponibilidade" para o ano inteiro numa rota sazonal.

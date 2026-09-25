@@ -287,6 +287,17 @@ async function buscarMes(page: Page, params: ParametrosAA, departureDate: string
   } catch {
     throw new Error(`Calendário devolveu uma resposta que não é JSON (mês de ${departureDate}).`);
   }
+  // O 309 NÃO é falha: é "não há prêmio nesse mês nesta rota". Vem com HTTP
+  // 200, `calendarMonths: []` e `lowestMonthlyPrice: 0` — calendário vazio bem
+  // formado. Medido em 2026-09-25 com HEL→NRT executiva: setembro a janeiro
+  // respondem 309 e julho/2027 responde 23 dias a 75.000.
+  //
+  // Tratá-lo como erro custou caro: como a varredura desiste depois de três
+  // meses seguidos falhando, uma rota sazonal morria nos primeiros meses e
+  // devolvia "nenhuma disponibilidade" para o ano INTEIRO, escondendo dezenas
+  // de datas que existiam. Ausência de dado e falha de busca são estados
+  // diferentes — esta linha é essa distinção.
+  if (corpo.error === "309") return [];
   if (corpo.error) {
     throw new Error(`Calendário devolveu erro: ${corpo.error}`);
   }
