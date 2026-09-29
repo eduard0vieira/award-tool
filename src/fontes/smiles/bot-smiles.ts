@@ -431,7 +431,7 @@ export class ErroForaDaJanelaSmiles extends Error {
 //
 // Tratar tudo como aeroporto fez uma varredura de GRU→MRU acusar sigla errada
 // em datas que só não estavam à venda ainda.
-function erro452(texto: string, params: ParametrosSmiles, data: string): Error {
+export function erro452(texto: string, params: ParametrosSmiles, data: string): Error {
   let corpo: { errorMessage?: unknown; error?: unknown } = {};
   try {
     corpo = JSON.parse(texto);
@@ -476,32 +476,10 @@ function chaveCache(params: ParametrosSmiles, data: string): string {
   return `${params.origem.toUpperCase()}-${params.destino.toUpperCase()}-${data}`;
 }
 
-export async function buscarDiaSmiles(
-  page: Page,
-  params: ParametrosSmiles,
-  data: string,
-  onLog: OnLog = () => {},
-): Promise<RespostaSmiles> {
-  const guardado = cacheDias.buscar(chaveCache(params, data));
-  if (guardado) {
-    diasDoCache++;
-    return guardado;
-  }
-
-  const resultado = await chamarApi(page, params, data);
-
-  if (resultado.status === 406) throw new ErroOrcamentoSmiles();
-
-  if (resultado.status === 403) throw new ErroAcessoNegadoSmiles(referenciaAkamai(resultado.texto));
-
-  if (resultado.status === 452) throw erro452(resultado.texto, params, data);
-  if (resultado.status !== 200) {
-    throw new Error(`O Smiles respondeu ${resultado.status} para ${data}. ${resumirCorpo(resultado.texto)}`);
-  }
-
+export function lerRespostaSmiles(texto: string, data: string, onLog: OnLog = () => {}): RespostaSmiles | null {
   let corpo: RespostaCrua;
   try {
-    corpo = JSON.parse(resultado.texto) as RespostaCrua;
+    corpo = JSON.parse(texto) as RespostaCrua;
   } catch {
     throw new Error(`O Smiles devolveu uma resposta que não é JSON para ${data}.`);
   }
@@ -509,8 +487,8 @@ export async function buscarDiaSmiles(
   const segmento = corpo.requestedFlightSegmentList?.[0];
   if (!segmento) {
     // Sem segmento nenhum = rota sem resultado nesse dia. É resposta legítima,
-    // não erro — mas devolvida vazia de forma explícita.
-    return { data, voos: [], calendario: [] };
+    // não erro — quem chama devolve vazia de forma explícita.
+    return null;
   }
 
   const voos: VooSmiles[] = [];
@@ -544,7 +522,34 @@ export async function buscarDiaSmiles(
     );
   }
 
-  const resposta = { data, voos, calendario };
+  return { data, voos, calendario };
+}
+
+export async function buscarDiaSmiles(
+  page: Page,
+  params: ParametrosSmiles,
+  data: string,
+  onLog: OnLog = () => {},
+): Promise<RespostaSmiles> {
+  const guardado = cacheDias.buscar(chaveCache(params, data));
+  if (guardado) {
+    diasDoCache++;
+    return guardado;
+  }
+
+  const resultado = await chamarApi(page, params, data);
+
+  if (resultado.status === 406) throw new ErroOrcamentoSmiles();
+
+  if (resultado.status === 403) throw new ErroAcessoNegadoSmiles(referenciaAkamai(resultado.texto));
+
+  if (resultado.status === 452) throw erro452(resultado.texto, params, data);
+  if (resultado.status !== 200) {
+    throw new Error(`O Smiles respondeu ${resultado.status} para ${data}. ${resumirCorpo(resultado.texto)}`);
+  }
+
+  const resposta = lerRespostaSmiles(resultado.texto, data, onLog);
+  if (!resposta) return { data, voos: [], calendario: [] };
   cacheDias.guardar(chaveCache(params, data), resposta);
   return resposta;
 }
