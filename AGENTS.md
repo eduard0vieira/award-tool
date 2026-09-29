@@ -1,209 +1,210 @@
 # AGENTS.md
 
-Regras permanentes para agentes trabalhando neste repositório.
-Tarefas específicas vêm no chat. Isto aqui vale sempre.
+Permanent rules for agents working in this repository.
+Specific tasks come in the chat. This always applies.
 
-Leia também o `docs/CONTEXT.md` — ele descreve a arquitetura, as fontes e o
-estado real do sistema. Este documento cobre **como escrever código aqui**.
-
----
-
-## O que é este projeto
-
-Ferramenta interna de uma agência de viagens que trabalha com emissão por milhas.
-Varre disponibilidade de passagens-prêmio em várias fontes e devolve as datas
-disponíveis no formato usado para avisar o grupo de clientes.
-
-Não é software genérico: o resultado vai direto para cliente pagante. **Um dado
-errado num alerta custa credibilidade real com o cliente.** Prefira falhar visível
-a entregar resultado plausível e errado.
+Also read `docs/CONTEXT.md`: it describes the architecture, the sources and the
+real state of the system. This document covers **how to write code here**.
 
 ---
 
-## Princípio central: falha nunca se disfarça de resultado
+## What this project is
 
-Esta é a regra mais importante do repositório. A maior parte dos bugs históricos
-deste projeto tem uma causa única: **dado ausente virou valor default e a falha
-passou por resultado válido.**
+Internal tool of a travel agency that issues tickets with miles. It sweeps award
+availability across several sources and returns the available dates in the
+format used to notify the clients' group.
 
-Exemplos reais que já aconteceram:
+It is not generic software: the result goes straight to paying clients. **One
+wrong piece of data in an alert costs real credibility with the client.** Prefer
+failing visibly to delivering a plausible, wrong result.
 
-- `_safe_int(default=4)` — assento inventado foi para o alerta do cliente
-- `except: pass` num filtro de data — o filtro ficou desligado sem ninguém saber
-- Campo `Direct` inexistente → default `False` → todos os voos descartados,
-  sem erro
-- `hasMore` não lido — primeira página tratada como resultado completo
-- Status HTTP 400 significando duas coisas diferentes, tratado como uma só —
-  "pedido recusado" saiu como "nenhuma disponibilidade"
+---
 
-Regras que derivam disso:
+## Core principle: a failure never disguises itself as a result
 
-1. **Campo vindo de fonte externa não tem valor default.** Se o campo esperado
-   não existe, isso é erro, com mensagem nomeando o campo e o contexto. Nunca
-   substitua por palpite.
-2. **Nenhum `catch` silencioso.** Todo catch captura erro específico, loga com
-   contexto e propaga ou marca o resultado como parcial. `catch {}` e
-   `catch (e) {}` vazios estão proibidos.
-3. **Resultado incompleto se declara incompleto.** Se qualquer página, mês ou
-   requisição falhou, o resultado carrega isso explicitamente e não vira alerta.
-4. **Ausência de dado e falha na busca são estados diferentes.** "Não tem
-   disponibilidade" nunca pode ser representado igual a "a busca quebrou".
+This is the most important rule of the repository. Most of this project's
+historical bugs share a single cause: **missing data became a default value and
+the failure passed as a valid result.**
 
-Modele isso no tipo, não em convenção:
+Real examples that already happened:
+
+- `_safe_int(default=4)`: a made-up seat count went into the client's alert
+- `except: pass` in a date filter: the filter was switched off without anyone
+  knowing
+- Missing `Direct` field → default `False` → every flight discarded, no error
+- `hasMore` not read: the first page treated as the complete result
+- HTTP 400 meaning two different things, handled as one: "request refused" went
+  out as "no availability"
+
+Rules that follow from it:
+
+1. **A field coming from an external source has no default value.** If the
+   expected field does not exist, that is an error, with a message naming the
+   field and the context. Never replace it with a guess.
+2. **No silent `catch`.** Every catch captures a specific error, logs it with
+   context, and either propagates it or marks the result as partial. Empty
+   `catch {}` and `catch (e) {}` are forbidden.
+3. **An incomplete result declares itself incomplete.** If any page, month or
+   request failed, the result says so explicitly and does not become an alert.
+4. **No data and a failed search are different states.** "No availability" can
+   never be represented the same way as "the search broke".
+
+Model this in the type, not by convention:
 
 ```ts
-type ResultadoFonte =
-  | { tipo: "ok"; secao: SecaoRelatorio }
-  | { tipo: "sem_disponibilidade" }
-  | { tipo: "parcial"; secao: SecaoRelatorio; motivo: string }
-  | { tipo: "erro"; motivo: string; http?: number };
+type SourceResult =
+  | { kind: "ok"; section: ReportSection }
+  | { kind: "no_availability" }
+  | { kind: "partial"; section: ReportSection; reason: string }
+  | { kind: "error"; reason: string; http?: number };
 ```
 
-União discriminada em vez de `null`. O compilador obriga a tratar cada caso.
+A discriminated union instead of `null`. The compiler forces every case to be
+handled.
 
 ---
 
-## Nunca programe contra schema imaginado
+## Never code against an imagined schema
 
-Toda integração com fonte externa começa por **salvar uma resposta real em disco**
-e ler o que veio de verdade. Documentação e suposição não valem como base.
+Every integration with an external source starts by **saving a real response to
+disk** and reading what actually came. Documentation and assumptions are not a
+valid basis.
 
-Uma implementação inteira deste projeto já foi escrita contra um schema imaginado,
-com suíte de testes completa em cima das mesmas suposições. Todos os testes
-passavam. O código estava errado. **Teste escrito contra a suposição do próprio
-código não testa nada.**
+A whole implementation of this project was once written against an imagined
+schema, with a complete test suite built on the same assumptions. Every test
+passed. The code was wrong. **A test written against the code's own assumption
+tests nothing.**
 
-Fixture vem de resposta real, sempre.
-
----
-
-## Contratos que não se quebram
-
-**Formato da string de datas.** `"Ago 2026: 07 (9), 25 (3)"` — mês abreviado em
-português, dia com zero à esquerda, assentos entre parênteses. É contrato com o
-`vcc-alertas-portal` e com o gerador de alertas. Não invente formato novo, não
-altere `formatarListaPorMes`.
-
-**Tipo comum de saída.** Toda fonte devolve `SecaoRelatorio` (`src/nucleo/comum.ts`). É o que
-faz as fontes caberem no mesmo front e no mesmo gerador. Não crie tipo paralelo.
-
-**Limitador de frequência entre requisições.** Existe porque as fontes pagas
-limitam consulta e porque anti-bot detecta rajada. Não remova, não reduza sem
-pedir.
+Fixtures come from real responses, always.
 
 ---
 
-## Segurança e dados
+## Contracts that do not break
 
-- Credenciais só em `.env`, nunca no código, nunca no commit. `.env.example` leva
-  apenas o nome da chave.
-- Nunca commite cookie, token, dado de cliente ou resposta de API contendo
-  informação pessoal.
-- Fixtures de teste vão anonimizadas.
-- O servidor tem Basic Auth porque é exposto por túnel. Não remova nem enfraqueça.
+**Date string format.** `"Ago 2026: 07 (9), 25 (3)"`: month abbreviated in
+Portuguese, zero-padded day, seats in parentheses. It is a contract with
+`vcc-alertas-portal` and with the alert generator. Do not invent a new format,
+do not change `formatDatesByMonth`.
 
----
+**Common output type.** Every source returns `ReportSection`
+(`src/core/common.ts`). It is what makes the sources fit the same front and the
+same generator. Do not create a parallel type.
 
-## Idioma
-
-**Código em inglês**: identificadores, nomes de arquivo, comentários e descrições
-de teste.
-
-Continuam em português, porque traduzir quebraria o produto ou um contrato:
-
-- Texto voltado ao usuário: telas, mensagens de erro exibidas, legendas de alerta
-- Contratos de fio: campos do JSON da API (`origem`, `tetos`, `secaoAA`…),
-  payloads do SSE e o formato `"Ago 2026: 07 (9)"`
-
-O código antigo em português é renomeado numa fase própria, nunca de carona em
-outra tarefa. Até lá, a mistura é esperada: código novo em inglês chamando
-`pesquisarAnoAA` é normal.
+**Rate limiter between requests.** It exists because the paid sources limit
+queries and because anti-bot systems detect bursts. Do not remove it, do not
+reduce it without asking.
 
 ---
 
-## Comentários
+## Security and data
 
-O padrão é **nenhum**. Um comentário precisa se justificar para existir.
-
-- Não comente o que o código já diz. Se o trecho precisa de explicação para ser
-  entendido, melhore o nome ou extraia uma função
-- Comente só o que o código não consegue dizer: o porquê de uma decisão não
-  óbvia, uma armadilha que já mordeu, a razão de uma ordem de operações importar
-- Nada de JSDoc cerimonial, cabeçalho de função, narração passo a passo ou
-  marcador de seção
-- Contexto longo (o que foi medido, o que ficou de fora) vai no chat ou em
-  `docs/`, não no arquivo
+- Credentials only in `.env`, never in the code, never in a commit.
+  `.env.example` carries only the key names.
+- Never commit cookies, tokens, client data or API responses containing personal
+  information.
+- Test fixtures are anonymized.
+- The server has Basic Auth because it is exposed through a tunnel. Do not
+  remove or weaken it.
 
 ---
 
-## Convenções de código
+## Language
 
-- TypeScript + Node. O servidor é **NestJS** e roda via loader SWC
-  (`@swc-node/register`), porque o Nest depende de metadados de decorator que o
-  `tsx` (esbuild) não gera. `scripts/` e `src/cli.ts` continuam via `tsx`
-- Todo corpo de requisição tem um DTO validado com class-validator
-- Controller não tem regra de negócio: recebe, valida e delega
-- DTOs e services são importados como valor, nunca com `import type`: com
-  `verbatimModuleSyntax` o import de tipo apaga o metadado e a validação é pulada
-  em silêncio
-- Cada fonte tem duas partes: o bot puro em `src/fontes/<programa>/`, que não
-  sabe que o Nest existe, e o módulo Nest em `src/servidor/sources/<programa>/`,
-  que o embrulha. `src/nucleo/` não importa fonte nenhuma
-- Front é HTML + JS puro até a migração planejada para React. Nenhum outro
-  framework ou bundler entra antes dela
-- Todo caminho de disco sai de `src/nucleo/caminhos.ts` — nunca calcule com
-  `__dirname` no próprio arquivo
-- Fontes com login usam o pool de sessões; fontes com API oficial não precisam de
-  navegador nenhum
+**Everything is in English**: identifiers, file and folder names, comments, test
+descriptions, the API's JSON fields and SSE payloads, environment variables and
+documentation.
+
+These stay in Portuguese, because translating them would break the product or a
+contract:
+
+- User-facing text: screens, displayed error messages, notices, alert captions
+- The date format `"Ago 2026: 07 (9)"` and the fields the alert portal reads
+- The spreadsheet column headers, which existing sheets already use
 
 ---
 
-## Sempre pergunte antes de
+## Comments
 
-- Instalar dependência nova (especialmente módulo nativo que exige compilação)
-- Adicionar banco, fila externa, cache ou qualquer infraestrutura
-- Refatorar código fora do escopo da tarefa atual
-- Criar abstração nova ou camada de indireção
-- Mexer numa fonte existente enquanto trabalha em outra
-- Alterar `src/nucleo/comum.ts`, o formato de saída ou qualquer contrato acima
+The default is **none**. A comment has to justify its existence.
+
+- Do not comment what the code already says. If a piece needs explaining to be
+  understood, improve the name or extract a function
+- Only comment what the code cannot say: the why of a non-obvious decision, a
+  trap that already bit, the reason an order of operations matters
+- No ceremonial JSDoc, function headers, step-by-step narration or section
+  markers
+- Long context (what was measured, what was left out) goes in the chat or in
+  `docs/`, not in the file
+
+---
+
+## Code conventions
+
+- TypeScript + Node. The server is **NestJS** and runs through the SWC loader
+  (`@swc-node/register`), because Nest depends on decorator metadata that `tsx`
+  (esbuild) does not emit. `scripts/` and `src/cli.ts` still run through `tsx`
+- Every request body has a DTO validated with class-validator
+- Controllers hold no business rules: they receive, validate and delegate
+- DTOs and services are imported as values, never with `import type`: with
+  `verbatimModuleSyntax` a type import erases the metadata and validation is
+  skipped silently
+- Each source has two parts: the pure scraper in `src/scrapers/<program>/`,
+  which does not know Nest exists, and the Nest module in
+  `src/server/sources/<program>/`, which wraps it. `src/core/` imports no source
+- The front is plain HTML + JS until the planned migration to React. No other
+  framework or bundler comes in before it
+- Every disk path comes from `src/core/paths.ts`; never compute one with
+  `__dirname` in the file itself
+- Sources with a login use the session pool; sources with an official API need
+  no browser at all
+
+---
+
+## Always ask before
+
+- Installing a new dependency (especially a native module that needs compiling)
+- Adding a database, external queue, cache or any infrastructure
+- Refactoring code outside the scope of the current task
+- Creating a new abstraction or layer of indirection
+- Touching an existing source while working on another
+- Changing `src/core/common.ts`, the output format or any contract above
 
 ---
 
 ## Commits
 
-**Um commit por mudança, mesmo pequena.** Nada de commit que junta conserto,
-refatoração e documentação: se algo quebrar, o `git diff` precisa apontar uma
-coisa só.
+**One commit per change, however small.** No commit mixing a fix, a refactor and
+documentation: if something breaks, `git diff` must point at a single thing.
 
-Mensagem no padrão Conventional Commits, uma linha, **sempre em inglês**, assim
-como nomes de branch, títulos e descrições de PR.
+Conventional Commits message, one line, **always in English**, as are branch
+names, PR titles and PR descriptions.
 
 ```
-<tipo>(<escopo opcional>): <descrição>
+<type>(<optional scope>): <description>
 ```
 
-- Tipos válidos: `feat`, `fix`, `chore`, `refactor`, `docs`, `style`, `test`,
+- Valid types: `feat`, `fix`, `chore`, `refactor`, `docs`, `style`, `test`,
   `perf`, `ci`, `build`
-- Tipo e escopo em minúsculas; descrição no imperativo, curta e sem ponto final
-- Escopo é a fonte ou a área: `smiles`, `latam`, `aa`, `tap`, `seatspy`,
-  `servidor`, `front`, `planilha`, `alertas`
-- Sem emoji, sem corpo e sem trailer de atribuição (`Co-Authored-By` ou link de
-  sessão). Os commits antigos com emoji ficam como estão; daqui pra frente, não
+- Type and scope in lowercase; description in the imperative, short, no final
+  period
+- The scope is the source or the area: `smiles`, `latam`, `aa`, `tap`,
+  `seatspy`, `iberia`, `server`, `front`, `spreadsheet`, `alerts`
+- No emoji, no body and no attribution trailer (`Co-Authored-By` or session
+  link). Old commits with emoji stay as they are; from here on, no
 
 ```
 feat(latam): confirm miles with round-trip in a single search
 fix(smiles): treat 406 as a block and return partial results
-refactor: split sources into src/fontes
+refactor: split sources into src/scrapers
 docs: record the azul recon
 ```
 
 ---
 
-## Como trabalhar
+## How to work
 
-Uma fase por vez. Ao fim de cada fase, pare, mostre o que mudou e o resultado do
-critério de aceite. Não avance sem confirmação.
+One phase at a time. At the end of each phase, stop, show what changed and the
+result of the acceptance criterion. Do not move on without confirmation.
 
-Se algo estiver ficando mais complexo do que parece razoável, **pare e diga por
-quê** em vez de seguir. Complexidade inesperada normalmente significa que a
-premissa está errada.
+If something is getting more complex than seems reasonable, **stop and say why**
+instead of pushing on. Unexpected complexity usually means the premise is wrong.
