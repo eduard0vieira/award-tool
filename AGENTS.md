@@ -3,7 +3,7 @@
 Regras permanentes para agentes trabalhando neste repositório.
 Tarefas específicas vêm no chat. Isto aqui vale sempre.
 
-Leia também o `contexto/CONTEXTO.md` — ele descreve a arquitetura, as fontes e o
+Leia também o `docs/CONTEXT.md` — ele descreve a arquitetura, as fontes e o
 estado real do sistema. Este documento cobre **como escrever código aqui**.
 
 ---
@@ -132,7 +132,7 @@ O padrão é **nenhum**. Um comentário precisa se justificar para existir.
 - Nada de JSDoc cerimonial, cabeçalho de função, narração passo a passo ou
   marcador de seção
 - Contexto longo (o que foi medido, o que ficou de fora) vai no chat ou em
-  `contexto/`, não no arquivo
+  `docs/`, não no arquivo
 
 ---
 
