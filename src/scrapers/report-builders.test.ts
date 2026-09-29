@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { aaBookingLink, buildAaReport } from "../scrapers/aa/aa.scraper.ts";
-import { buildSeatspyReport, type CabinAvailability } from "../scrapers/seatspy/seatspy.scraper.ts";
-import { buildTapReport } from "../scrapers/tap/tap.scraper.ts";
+import { aaBookingLink, buildAaReport } from "./aa/aa.scraper.ts";
+import { buildSeatspyReport, type CabinAvailability } from "./seatspy/seatspy.scraper.ts";
+import { buildTapReport } from "./tap/tap.scraper.ts";
 
 const cabin = (miles: number | null, seats = 0): CabinAvailability => ({ available: miles !== null, miles, seats });
 
