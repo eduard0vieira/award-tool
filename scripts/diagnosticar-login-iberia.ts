@@ -1,7 +1,7 @@
 import "dotenv/config";
 import path from "node:path";
-import { abrirSessaoChrome } from "../src/nucleo/sessao-chrome.ts";
-import { DIR_FIXTURES } from "../src/nucleo/caminhos.ts";
+import { openChromeSession } from "../src/core/chrome-session.ts";
+import { FIXTURES_DIR } from "../src/core/paths.ts";
 
 // Uma pergunta só: por que o login automático parou de passar? Preenche com o
 // que está no .env, envia, e mostra o que a Iberia respondeu na tela — erro de
@@ -17,7 +17,7 @@ async function main() {
     process.exit(1);
   }
 
-  const sessao = await abrirSessaoChrome(false, "diag-login");
+  const sessao = await openChromeSession(false, "diag-login");
   const page = sessao.page;
   try {
     await page
@@ -68,7 +68,7 @@ async function main() {
       console.log(`frame: ${f.url().slice(0, 110)}`);
     }
 
-    const foto = path.join(DIR_FIXTURES, "iberia-login-diag.png");
+    const foto = path.join(FIXTURES_DIR, "iberia-login-diag.png");
     await page.screenshot({ path: foto }).catch(() => {});
     console.log(`\nFoto: ${foto}`);
   } finally {

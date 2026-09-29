@@ -1,15 +1,15 @@
 import "dotenv/config";
 import type { Page } from "playwright";
-import { abrirSessaoChrome, type SessaoChrome } from "../../nucleo/sessao-chrome.ts";
+import { openChromeSession, type ChromeSession } from "../../core/chrome-session.ts";
 import {
-  LimitadorFrequencia,
-  formatarListaPorMes,
-  type DeveParar,
-  type OnAviso,
+  RateLimiter,
+  formatDatesByMonth,
+  type ShouldStop,
+  type OnNotice,
   type OnLog,
-  type OnProgresso,
-  type SecaoRelatorio,
-} from "../../nucleo/comum.ts";
+  type OnProgress,
+  type ReportSection,
+} from "../../core/common.ts";
 
 // Bot da American Airlines (aa.com), busca de prêmios (Award) sem login.
 //
@@ -26,7 +26,7 @@ import {
 // - O request aceita cabine e maxStops (0 = só direto, 1 = até 1 conexão)
 //   server-side, então o filtro de conexões é o mesmo do site.
 
-export type SessaoAA = SessaoChrome;
+export type SessaoAA = ChromeSession;
 
 export type CabineAA = "economica" | "premium" | "executiva" | "primeira";
 
@@ -110,7 +110,7 @@ export type MesComFalha = { mes: string; erro: string };
 export type ResultadoAnoAA = { dias: DiaAA[]; mesesComFalha: MesComFalha[] };
 
 const INTERVALO_MIN_AA_MS = Number(process.env.AA_INTERVALO_BUSCAS_MS) || 6000;
-const limitadorAA = new LimitadorFrequencia(INTERVALO_MIN_AA_MS);
+const limitadorAA = new RateLimiter(INTERVALO_MIN_AA_MS);
 
 // Uma falha de mês pode ser passageira, mas várias seguidas indicam bloqueio
 // ou rota quebrada — aí desiste preservando o que já coletou (mesmo padrão
@@ -120,7 +120,7 @@ const MESES_A_VARRER = 12;
 
 
 export async function iniciarSessaoAA(headless = false): Promise<SessaoAA> {
-  const sessao = await abrirSessaoChrome(headless, "AA");
+  const sessao = await openChromeSession(headless, "AA");
 
   // Aquecimento: sem passar pela home primeiro, o Akamai devolve 403 nas
   // URLs de /booking.
@@ -324,16 +324,16 @@ export async function pesquisarAnoAA(
   page: Page,
   params: ParametrosAA,
   onLog: OnLog = () => {},
-  onProgresso: OnProgresso = () => {},
-  onAviso: OnAviso = () => {},
-  deveParar: DeveParar = () => false,
+  onProgresso: OnProgress = () => {},
+  onAviso: OnNotice = () => {},
+  deveParar: ShouldStop = () => false,
 ): Promise<ResultadoAnoAA> {
   const origem = params.origem.toUpperCase();
   const destino = params.destino.toUpperCase();
   const paramsNorm: ParametrosAA = { ...params, origem, destino };
 
   const datas = datasDosMeses();
-  await limitadorAA.aguardarVez();
+  await limitadorAA.waitTurn();
   await abrirPaginaDeResultados(page, paramsNorm, datas[0]!, onLog);
   onProgresso(0.1);
 
@@ -352,7 +352,7 @@ export async function pesquisarAnoAA(
     let sucesso = false;
 
     for (let tentativa = 1; tentativa <= MAX_TENTATIVAS_BLOQUEIO && !sucesso; tentativa++) {
-      await limitadorAA.aguardarVez();
+      await limitadorAA.waitTurn();
       // Pausa extra aleatória: cadência mais humana entre os meses.
       await page.waitForTimeout(500 + Math.random() * 1500);
       try {
@@ -412,7 +412,7 @@ export function construirRelatorioAA(
   dias: DiaAA[],
   tetoMilhas: number | null,
   params?: { origem: string; destino: string; passageiros: number; cabine: CabineAA },
-): SecaoRelatorio {
+): ReportSection {
   const aceitos = dias.filter((d) => tetoMilhas == null || d.milhas <= tetoMilhas);
 
   if (aceitos.length === 0) {
@@ -430,6 +430,6 @@ export function construirRelatorioAA(
     menor: Math.min(...valores),
     maior: Math.max(...valores),
     dias: diasFormatados,
-    texto: formatarListaPorMes(diasFormatados.map((d) => d.data)),
+    texto: formatDatesByMonth(diasFormatados.map((d) => d.data)),
   };
 }

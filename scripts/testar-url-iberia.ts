@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { abrirSessaoChrome } from "../src/nucleo/sessao-chrome.ts";
+import { openChromeSession } from "../src/core/chrome-session.ts";
 import { linkEmissaoIberia } from "../src/fontes/iberia/bot-iberia.ts";
 
 // Diagnóstico de uma pergunta só: a tela de erro da Iberia ('não podemos
@@ -17,7 +17,7 @@ async function main() {
   const urlDoSite = fs.readFileSync(arquivo, "utf8").trim();
   const urlDaFonte = linkEmissaoIberia({ origem: "GRU", destino: "MAD", passageiros: 1 }, "2026-12-15");
 
-  const sessao = await abrirSessaoChrome(false, "teste-url");
+  const sessao = await openChromeSession(false, "teste-url");
   try {
     for (const [nome, url] of [
       ["URL DO SITE ", urlDoSite],

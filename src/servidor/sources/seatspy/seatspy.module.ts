@@ -9,11 +9,11 @@ import { SEATSPY_POOL, SeatspySource } from "./seatspy.source.ts";
   imports: [JobsModule],
   providers: [
     sessionPoolProvider<SessaoSeatspy>(SEATSPY_POOL, {
-      rotulo: "seatspy",
-      tamanho: config.concurrency.seatspy,
-      criarSessao: (headless) => iniciarSessaoSeatspy(headless),
-      sessaoViva: (session) => session.browser.isConnected() && !session.page.isClosed(),
-      fecharSessao: (session) => session.browser.close(),
+      label: "seatspy",
+      size: config.concurrency.seatspy,
+      createSession: (headless) => iniciarSessaoSeatspy(headless),
+      isAlive: (session) => session.browser.isConnected() && !session.page.isClosed(),
+      closeSession: (session) => session.browser.close(),
     }),
     SeatspySource,
   ],

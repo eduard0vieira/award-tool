@@ -1,4 +1,4 @@
-import { abrirSessaoChrome } from "../src/nucleo/sessao-chrome.ts";
+import { openChromeSession } from "../src/core/chrome-session.ts";
 
 // Mede duas coisas numa rota: até quantos dias à frente o Smiles vende (e o que
 // responde depois disso) e se o calendário de 7 dias vem, com e sem congênere.
@@ -6,7 +6,7 @@ import { abrirSessaoChrome } from "../src/nucleo/sessao-chrome.ts";
 // Uso: npx tsx scripts/recon-smiles-janela.ts GRU MRU
 
 const [origem = "GRU", destino = "MRU"] = process.argv.slice(2);
-const RAIZ = "https://api-air-flightsearch-prd.smiles.com.br/";
+const ROOT_DIR = "https://api-air-flightsearch-prd.smiles.com.br/";
 const HEADERS = {
   "x-api-key": "aJqPU7xNHl9qN3NVZnPaJ208aPo2Bh2p2ZV844tw",
   channel: "WEB",
@@ -31,12 +31,12 @@ function url(data: string, extra: Record<string, string> = {}): string {
     forceCongener: "false",
     ...extra,
   });
-  return `${RAIZ}v1/airlines/search?${q}`;
+  return `${ROOT_DIR}v1/airlines/search?${q}`;
 }
 
 async function main() {
-  const sessao = await abrirSessaoChrome(false, "Smiles");
-  await sessao.page.goto(RAIZ, { waitUntil: "domcontentloaded", timeout: 60000 }).catch(() => null);
+  const sessao = await openChromeSession(false, "Smiles");
+  await sessao.page.goto(ROOT_DIR, { waitUntil: "domcontentloaded", timeout: 60000 }).catch(() => null);
   await sessao.page.waitForTimeout(3000);
 
   const chamar = async (rotulo: string, u: string) => {

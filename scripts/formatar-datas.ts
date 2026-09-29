@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { formatarListaPorMes } from "../src/nucleo/comum.ts";
+import { formatDatesByMonth } from "../src/core/common.ts";
 
 // Formata um bloco colado da planilha (Smiles ou qualquer outra) no texto de
 // datas que o grupo recebe. Copie o bloco da planilha e rode:
@@ -14,7 +14,7 @@ import { formatarListaPorMes } from "../src/nucleo/comum.ts";
 // O bloco pronto sai na saída padrão; aviso de coluna faltando, data ilegível
 // e regra aplicada saem no erro padrão, pra não irem junto no ctrl+V.
 //
-// O texto por mês vem do `formatarListaPorMes` do núcleo — é o mesmo contrato
+// O texto por mês vem do `formatDatesByMonth` do núcleo — é o mesmo contrato
 // que as fontes emitem e que o `parseDates` do vcc-alertas-portal lê.
 
 type Papel = "data" | "assentos" | "valor" | "direcao" | "unidade" | "origem" | "destino" | "cabine" | "fonte";
@@ -275,7 +275,7 @@ function montarBloco(titulo: string, registros: Registro[], dias: Dia[], ctx: Re
   if (titulo === SEM_DIRECAO) linhas.push("⚠️ não reconheci a direção dessas linhas — confira se é ida ou volta");
 
   const porData = new Map(dias.map((d) => [d.data, d]));
-  const texto = formatarListaPorMes(
+  const texto = formatDatesByMonth(
     dias.map((d) => d.data),
     (data) => {
       const assentos = porData.get(data)!.assentos;

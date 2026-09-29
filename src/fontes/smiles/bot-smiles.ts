@@ -1,14 +1,14 @@
 import "dotenv/config";
 import type { Page } from "playwright";
-import { abrirSessaoChrome, type SessaoChrome } from "../../nucleo/sessao-chrome.ts";
-import { CacheComValidade } from "../../nucleo/cache.ts";
+import { openChromeSession, type ChromeSession } from "../../core/chrome-session.ts";
+import { ExpiringCache } from "../../core/cache.ts";
 import {
-  LimitadorFrequencia,
-  formatarListaPorMes,
-  type DeveParar,
+  RateLimiter,
+  formatDatesByMonth,
+  type ShouldStop,
   type OnLog,
-  type SecaoRelatorio,
-} from "../../nucleo/comum.ts";
+  type ReportSection,
+} from "../../core/common.ts";
 
 // Bot do Smiles (GOL) — busca de disponibilidade em milhas, sem login.
 //
@@ -31,7 +31,7 @@ import {
 // mesmo com dezenas de voos na lista. Quem varrer o ano não pode contar com os
 // 7 dias; tem que checar e cair pra dia a dia quando não vier.
 
-export type SessaoSmiles = SessaoChrome;
+export type SessaoSmiles = ChromeSession;
 
 const HOST_API = "https://api-air-flightsearch-prd.smiles.com.br";
 
@@ -59,7 +59,7 @@ const HEADERS_API: Record<string, string> = {
 };
 
 const INTERVALO_MIN_SMILES_MS = Number(process.env.SMILES_INTERVALO_BUSCAS_MS) || 4000;
-export const limitadorSmiles = new LimitadorFrequencia(INTERVALO_MIN_SMILES_MS);
+export const limitadorSmiles = new RateLimiter(INTERVALO_MIN_SMILES_MS);
 
 export type CabineSmiles = "economica" | "premium" | "executiva";
 
@@ -167,7 +167,7 @@ function exigirTexto(valor: unknown, campo: string, contexto: string): string {
 }
 
 export async function iniciarSessaoSmiles(headless = false): Promise<SessaoSmiles> {
-  const sessao = await abrirSessaoChrome(headless, "Smiles");
+  const sessao = await openChromeSession(headless, "Smiles");
   await renovarSessaoSmiles(sessao.page);
   return sessao;
 }
@@ -451,7 +451,7 @@ export function erro452(texto: string, params: ParametrosSmiles, data: string): 
 }
 
 async function chamarApi(page: Page, params: ParametrosSmiles, data: string) {
-  await limitadorSmiles.aguardarVez();
+  await limitadorSmiles.waitTurn();
   return page.evaluate(
     async ({ url, headers }) => {
       const res = await fetch(url, { headers });
@@ -466,7 +466,7 @@ async function chamarApi(page: Page, params: ParametrosSmiles, data: string) {
 // Disponibilidade em milhas muda ao longo do dia, e alerta com dado vencido é
 // pior que alerta que faltou.
 const VALIDADE_CACHE_MS = Number(process.env.SMILES_CACHE_MS) || 3 * 60 * 60_000;
-const cacheDias = new CacheComValidade<RespostaSmiles>(VALIDADE_CACHE_MS);
+const cacheDias = new ExpiringCache<RespostaSmiles>(VALIDADE_CACHE_MS);
 
 // Quantos dias da última varredura vieram do cache. Zerado no início de cada
 // varredura pra virar número no relatório em vez de ficar invisível.
@@ -531,7 +531,7 @@ export async function buscarDiaSmiles(
   data: string,
   onLog: OnLog = () => {},
 ): Promise<RespostaSmiles> {
-  const guardado = cacheDias.buscar(chaveCache(params, data));
+  const guardado = cacheDias.get(chaveCache(params, data));
   if (guardado) {
     diasDoCache++;
     return guardado;
@@ -550,7 +550,7 @@ export async function buscarDiaSmiles(
 
   const resposta = lerRespostaSmiles(resultado.texto, data, onLog);
   if (!resposta) return { data, voos: [], calendario: [] };
-  cacheDias.guardar(chaveCache(params, data), resposta);
+  cacheDias.set(chaveCache(params, data), resposta);
   return resposta;
 }
 
@@ -659,7 +659,7 @@ export async function pesquisarAnoSmiles(
   tetos: TetosSmiles,
   onLog: OnLog = () => {},
   onProgresso: (fracao: number) => void = () => {},
-  deveParar: DeveParar = () => false,
+  deveParar: ShouldStop = () => false,
   periodo: PeriodoSmiles = {},
 ): Promise<ResultadoAnoSmiles> {
   const { inicio, fim } = limitesDoPeriodo(periodo);
@@ -829,7 +829,7 @@ const CABINES_SMILES = [
   { campo: "executiva", rotulo: "Executiva", corClasse: "cartao-executiva" },
 ] as const;
 
-export type SecaoSmiles = SecaoRelatorio & { rotulo: string; corClasse: string };
+export type SecaoSmiles = ReportSection & { rotulo: string; corClasse: string };
 
 export function construirRelatorioSmiles(dias: RespostaSmiles[], tetos: TetosSmiles = {}): SecaoSmiles[] {
   return CABINES_SMILES.map(({ campo, rotulo, corClasse }) => {
@@ -867,7 +867,7 @@ export function construirRelatorioSmiles(dias: RespostaSmiles[], tetos: TetosSmi
       menor: Math.min(...valores),
       maior: Math.max(...valores),
       dias: porDia,
-      texto: formatarListaPorMes(
+      texto: formatDatesByMonth(
         porDia.map((d) => d.data),
         (data) => {
           const n = assentosPorData.get(data) ?? 0;

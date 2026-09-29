@@ -1,19 +1,19 @@
 import "dotenv/config";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import {
-  LimitadorFrequencia,
-  formatarListaPorMes,
-  parseValorK,
-  type DeveParar,
-  type OnAviso,
-  type OnJanela,
+  RateLimiter,
+  formatDatesByMonth,
+  parseValueK,
+  type ShouldStop,
+  type OnNotice,
+  type OnWindow,
   type OnLog,
-  type OnProgresso,
-  type DiaFormatado,
-  type SecaoRelatorio,
-} from "../../nucleo/comum.ts";
+  type OnProgress,
+  type FormattedDay,
+  type ReportSection,
+} from "../../core/common.ts";
 
-export type { OnAviso, OnJanela, OnLog, OnProgresso, SecaoRelatorio };
+export type { OnNotice, OnWindow, OnLog, OnProgress, ReportSection };
 
 export type DiaDisponibilidade = {
   date: string;
@@ -32,12 +32,12 @@ export type ParametrosBusca = {
 };
 
 export type Relatorio = {
-  executivas: SecaoRelatorio;
-  economicas: SecaoRelatorio;
+  executivas: ReportSection;
+  economicas: ReportSection;
 };
 
 const INTERVALO_MIN_BUSCAS_MS = Number(process.env.AWARDTOOL_INTERVALO_BUSCAS_MS) || 15000;
-const limitadorAwardtool = new LimitadorFrequencia(INTERVALO_MIN_BUSCAS_MS);
+const limitadorAwardtool = new RateLimiter(INTERVALO_MIN_BUSCAS_MS);
 
 // Cada linha do popover "Date" tem um parágrafo "YYYY-MM-DD (achados/total)"
 // seguido de 4 valores de preço, um por cabine, identificados pela cor da
@@ -116,17 +116,17 @@ async function pesquisarJanela(
   onLog: OnLog,
   // fracaoBase..fracaoBase+fracaoPasso é a fatia do progresso total (0..1)
   // que esta janela ocupa (atualizada no início e no fim da janela).
-  onProgresso: OnProgresso,
+  onProgresso: OnProgress,
   fracaoBase: number,
   fracaoPasso: number,
-  onAviso: OnAviso = () => {},
+  onAviso: OnNotice = () => {},
 ): Promise<DiaDisponibilidade[]> {
   const { baseUrl, origem, destino, cabineParam, dataInicio, dataFim } = opts;
 
   // Espaça o início desta busca em relação a qualquer outra busca do
   // AwardTool rodando em paralelo (outras sessões do pool) — é o que evita o
   // bloqueio por "buscando com muita frequência".
-  await limitadorAwardtool.aguardarVez();
+  await limitadorAwardtool.waitTurn();
 
   const params = new URLSearchParams({
     flightWay: "oneway",
@@ -161,7 +161,7 @@ async function pesquisarJanela(
   // acima — insistir rápido só piora/prolonga o bloqueio.
   const MAX_TENTATIVAS_LIMITE = 3;
   for (let tentativa = 1, tentativaLimite = 1; ; tentativa++) {
-    if (tentativa > 1) await limitadorAwardtool.aguardarVez();
+    if (tentativa > 1) await limitadorAwardtool.waitTurn();
     await page.goto(resultsUrl);
     await page.waitForLoadState("domcontentloaded");
 
@@ -262,7 +262,7 @@ async function pesquisarJanela(
   return dias;
 }
 
-export { formatarListaPorMes };
+export { formatDatesByMonth };
 
 // Tetos padrão, vindos da tabela de milhas da TAP: Executiva na tarifa padrão
 // OU melhor (181K ou menos) e Econômica na tarifa padrão OU melhor (53K ou
@@ -283,9 +283,9 @@ function construirSecao(
   nome: string,
   campo: "economy" | "business",
   aceita: (valorK: number) => boolean,
-): SecaoRelatorio {
+): ReportSection {
   const disponiveis = todasAsDatas.filter((d) => {
-    const v = parseValorK(d[campo]);
+    const v = parseValueK(d[campo]);
     return v !== null && aceita(v);
   });
 
@@ -293,14 +293,14 @@ function construirSecao(
     return { menor: null, maior: null, dias: [], texto: "Nenhuma disponibilidade encontrada nesse período." };
   }
 
-  const dias: DiaFormatado[] = disponiveis
-    .map((d) => ({ data: d.date, valorK: parseValorK(d[campo])! }))
+  const dias: FormattedDay[] = disponiveis
+    .map((d) => ({ data: d.date, valorK: parseValueK(d[campo])! }))
     .sort((a, b) => a.data.localeCompare(b.data));
 
   const valores = dias.map((d) => d.valorK);
   const menor = Math.min(...valores);
   const maior = Math.max(...valores);
-  const texto = formatarListaPorMes(dias.map((d) => d.data));
+  const texto = formatDatesByMonth(dias.map((d) => d.data));
 
   return { menor, maior, dias, texto };
 }
@@ -375,11 +375,11 @@ export async function pesquisarAnoCompleto(
     cabineParam: string;
   },
   onLog: OnLog = () => {},
-  onProgresso: OnProgresso = () => {},
-  onJanela: OnJanela = () => {},
-  onAviso: OnAviso = () => {},
+  onProgresso: OnProgress = () => {},
+  onJanela: OnWindow = () => {},
+  onAviso: OnNotice = () => {},
   onPergunta?: OnPergunta,
-  deveParar: DeveParar = () => false,
+  deveParar: ShouldStop = () => false,
 ): Promise<ResultadoAnoCompleto> {
   const { baseUrl, origem, destino, cabineParam } = opts;
 

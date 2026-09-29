@@ -13,8 +13,8 @@ import {
   type SessaoLatam,
   type TetosLatam,
 } from "../../../fontes/latam/bot-latam.ts";
-import { formatarListaPorMes } from "../../../nucleo/comum.ts";
-import { PoolSessoes } from "../../../nucleo/pool-sessoes.ts";
+import { formatDatesByMonth } from "../../../core/common.ts";
+import { SessionPool } from "../../../core/session-pool.ts";
 import { DIR_ALERTAS } from "../../../saidas/alertas.ts";
 import { config } from "../../config.ts";
 import { JobRunner } from "../../jobs/job-runner.service.ts";
@@ -45,7 +45,7 @@ export class LatamSource implements SearchSource<LatamSearchDto> {
   readonly requestDto = LatamSearchDto;
 
   constructor(
-    @Inject(LATAM_POOL) private readonly pool: PoolSessoes<SessaoLatam>,
+    @Inject(LATAM_POOL) private readonly pool: SessionPool<SessaoLatam>,
     private readonly runner: JobRunner,
     private readonly jobs: JobStore,
   ) {}
@@ -154,8 +154,8 @@ export class LatamSource implements SearchSource<LatamSearchDto> {
               confirmed.push({
                 ...offer,
                 imagem: offer.imagem ? `/alertas/${folder}/${file}` : "",
-                textoIda: formatarListaPorMes([offer.dataIda]),
-                textoVolta: formatarListaPorMes([offer.dataVolta]),
+                textoIda: formatDatesByMonth([offer.dataIda]),
+                textoVolta: formatDatesByMonth([offer.dataVolta]),
               });
             } else {
               failures.push(`${pair.ida.data} → ${pair.volta.data}: sem oferta em milhas`);

@@ -5,7 +5,7 @@ import {
   type PeriodoSmiles,
   type SessaoSmiles,
 } from "../../../fontes/smiles/bot-smiles.ts";
-import { PoolSessoes } from "../../../nucleo/pool-sessoes.ts";
+import { SessionPool } from "../../../core/session-pool.ts";
 import { criarPlanilhaDaBusca, type LinhaVoo } from "../../../saidas/planilha.ts";
 import { JobRunner } from "../../jobs/job-runner.service.ts";
 import { JobStore } from "../../jobs/job-store.service.ts";
@@ -55,7 +55,7 @@ export class SmilesSource implements SearchSource<SmilesSearchDto> {
   readonly requestDto = SmilesSearchDto;
 
   constructor(
-    @Inject(SMILES_POOL) private readonly pool: PoolSessoes<SessaoSmiles>,
+    @Inject(SMILES_POOL) private readonly pool: SessionPool<SessaoSmiles>,
     private readonly runner: JobRunner,
     private readonly jobs: JobStore,
   ) {}

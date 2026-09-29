@@ -4,7 +4,7 @@ import {
   pesquisarSeatspy,
   type SessaoSeatspy,
 } from "../../../fontes/seatspy/bot-seatspy.ts";
-import { PoolSessoes } from "../../../nucleo/pool-sessoes.ts";
+import { SessionPool } from "../../../core/session-pool.ts";
 import { JobRunner } from "../../jobs/job-runner.service.ts";
 import { JobStore } from "../../jobs/job-store.service.ts";
 import type { SearchSource } from "../../search/search-source.ts";
@@ -21,7 +21,7 @@ export class SeatspySource implements SearchSource<SeatspySearchDto> {
   readonly requestDto = SeatspySearchDto;
 
   constructor(
-    @Inject(SEATSPY_POOL) private readonly pool: PoolSessoes<SessaoSeatspy>,
+    @Inject(SEATSPY_POOL) private readonly pool: SessionPool<SessaoSeatspy>,
     private readonly runner: JobRunner,
     private readonly jobs: JobStore,
   ) {}

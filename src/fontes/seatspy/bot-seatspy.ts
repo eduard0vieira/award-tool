@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
-import { formatarListaPorMes, type OnLog, type OnProgresso } from "../../nucleo/comum.ts";
+import { formatDatesByMonth, type OnLog, type OnProgress } from "../../core/common.ts";
 
 export type SessaoSeatspy = {
   browser: Browser;
@@ -239,7 +239,7 @@ export async function pesquisarSeatspy(
   page: Page,
   params: ParametrosSeatspy,
   onLog: OnLog,
-  onProgresso: OnProgresso,
+  onProgresso: OnProgress,
 ): Promise<{ ida: DiaSeatspy[]; volta: DiaSeatspy[] | null }> {
   const origem = params.origem.toUpperCase();
   const destino = params.destino.toUpperCase();
@@ -406,7 +406,7 @@ export function construirRelatorioSeatspy(
       menor: valoresConhecidos.length > 0 ? Math.min(...valoresConhecidos) : null,
       maior: valoresConhecidos.length > 0 ? Math.max(...valoresConhecidos) : null,
       dias: diasFormatados,
-      texto: formatarListaPorMes(
+      texto: formatDatesByMonth(
         diasFormatados.map((d) => d.data),
         mostrarAssentos
           ? (data) => {

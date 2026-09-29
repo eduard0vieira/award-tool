@@ -1,14 +1,14 @@
 import type { Page } from "playwright";
 import {
-  formatarListaPorMes,
-  LimitadorFrequencia,
-  type DeveParar,
-  type OnAviso,
+  formatDatesByMonth,
+  RateLimiter,
+  type ShouldStop,
+  type OnNotice,
   type OnLog,
-  type OnProgresso,
-  type SecaoRelatorio,
-} from "../../nucleo/comum.ts";
-import { abrirSessaoChrome, type SessaoChrome } from "../../nucleo/sessao-chrome.ts";
+  type OnProgress,
+  type ReportSection,
+} from "../../core/common.ts";
+import { openChromeSession, type ChromeSession } from "../../core/chrome-session.ts";
 
 // Fonte Iberia (Avios), escrita contra respostas reais salvas em `fixtures/`
 // e documentadas em `contexto/notas-recon-iberia.md`.
@@ -22,7 +22,7 @@ import { abrirSessaoChrome, type SessaoChrome } from "../../nucleo/sessao-chrome
 // antigo atacava, devolve só assentos por voo e NENHUM preço — por isso não
 // serve sozinho. Ver "por que sem vagas" no fim deste arquivo.
 
-export type SessaoIberia = SessaoChrome;
+export type SessaoIberia = ChromeSession;
 
 export type ParametrosIberia = {
   origem: string; // IATA
@@ -48,7 +48,7 @@ export type ResultadoIberia =
 const INTERVALO_MIN_IBERIA_MS = Number(process.env.IBERIA_INTERVALO_BUSCAS_MS) || 8000;
 const TAMANHO_LOTE_DETALHE = Number(process.env.IBERIA_LOTE_DETALHE) || 1;
 const PAUSA_APOS_FALHA_MS = 30_000;
-const limitadorIberia = new LimitadorFrequencia(INTERVALO_MIN_IBERIA_MS);
+const limitadorIberia = new RateLimiter(INTERVALO_MIN_IBERIA_MS);
 
 // A grade observada devolveu 191 dias pedindo `maxSearchTime: 359` e começou em
 // HOJE, não na data pedida. Como o comportamento da janela não foi confirmado, a
@@ -60,7 +60,7 @@ const DIAS_A_COBRIR = 359;
 const MERCADO = process.env.IBERIA_MERCADO || "US";
 
 export async function iniciarSessaoIberia(headless = false): Promise<SessaoIberia> {
-  const sessao = await abrirSessaoChrome(headless, "Iberia");
+  const sessao = await openChromeSession(headless, "Iberia");
   observarAutorizacao(sessao.page);
   await sessao.page.goto("https://www.iberia.com/br/", { waitUntil: "domcontentloaded", timeout: 60_000 });
   await sessao.page.waitForTimeout(4000);
@@ -420,9 +420,9 @@ export async function pesquisarAnoIberia(
   page: Page,
   params: ParametrosIberia,
   onLog: OnLog = () => {},
-  onProgresso: OnProgresso = () => {},
-  _onAviso: OnAviso = () => {},
-  deveParar: DeveParar = () => false,
+  onProgresso: OnProgress = () => {},
+  _onAviso: OnNotice = () => {},
+  deveParar: ShouldStop = () => false,
 ): Promise<ResultadoIberia> {
   const primeiraData = daquiA(1);
   const limiteHorizonte = daquiA(DIAS_A_COBRIR);
@@ -430,7 +430,7 @@ export async function pesquisarAnoIberia(
   observarAutorizacao(page);
   const lerAutorizacao = () => obterAutorizacao(page);
   try {
-    await limitadorIberia.aguardarVez();
+    await limitadorIberia.waitTurn();
     await abrirPaginaDeResultados(page, params, primeiraData, onLog);
   } catch (erro) {
     return { tipo: "erro", motivo: erro instanceof Error ? erro.message : String(erro) };
@@ -462,7 +462,7 @@ export async function pesquisarAnoIberia(
     let resultado: Awaited<ReturnType<typeof buscarGrade>>;
     try {
       await garantirNaBusca(page, params, cursor, onLog);
-      await limitadorIberia.aguardarVez();
+      await limitadorIberia.waitTurn();
       resultado = await buscarGrade(page, params, cursor, lerAutorizacao() ?? autorizacao);
     } catch (erro) {
       motivoParcial = erro instanceof Error ? erro.message : String(erro);
@@ -514,7 +514,7 @@ export function construirRelatorioIberia(
   dias: DiaIberia[],
   tetoAvios: number | null,
   params?: ParametrosIberia,
-): SecaoRelatorio {
+): ReportSection {
   const aceitos = dias.filter((d) => tetoAvios == null || d.avios <= tetoAvios);
 
   if (aceitos.length === 0) {
@@ -532,7 +532,7 @@ export function construirRelatorioIberia(
     menor: Math.min(...valores),
     maior: Math.max(...valores),
     dias: diasFormatados,
-    texto: formatarListaPorMes(diasFormatados.map((d) => d.data)),
+    texto: formatDatesByMonth(diasFormatados.map((d) => d.data)),
   };
 }
 
@@ -796,8 +796,8 @@ export async function detalharDias(
   params: ParametrosIberia,
   datas: string[],
   onLog: OnLog = () => {},
-  onProgresso: OnProgresso = () => {},
-  deveParar: DeveParar = () => false,
+  onProgresso: OnProgress = () => {},
+  deveParar: ShouldStop = () => false,
 ): Promise<{ voos: VooIberia[]; diasComFalha: DiaComFalha[] }> {
   const voos: VooIberia[] = [];
   const diasComFalha: DiaComFalha[] = [];
@@ -816,7 +816,7 @@ export async function detalharDias(
 
   const consultarLote = async (lote: string[]) => {
     await garantirNaBusca(page, params, lote[0]!, onLog);
-    await limitadorIberia.aguardarVez();
+    await limitadorIberia.waitTurn();
     const autorizacao = obterAutorizacao(page);
     if (!autorizacao) throw new Error("a página de busca não fez nenhuma chamada com Authorization");
     return Promise.all(

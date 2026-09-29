@@ -9,8 +9,8 @@ import {
   type FiltrosVoo,
   type SessaoIberia,
 } from "../../../fontes/iberia/bot-iberia.ts";
-import { DIR_PLANILHAS } from "../../../nucleo/caminhos.ts";
-import { PoolSessoes } from "../../../nucleo/pool-sessoes.ts";
+import { SPREADSHEETS_DIR } from "../../../core/paths.ts";
+import { SessionPool } from "../../../core/session-pool.ts";
 import { criarPlanilhaDaBusca, gravarCsvDeVoos, type LinhaVoo } from "../../../saidas/planilha.ts";
 import { JobRunner } from "../../jobs/job-runner.service.ts";
 import { JobStore } from "../../jobs/job-store.service.ts";
@@ -42,7 +42,7 @@ export class IberiaSource implements SearchSource<IberiaSearchDto> {
   readonly requestDto = IberiaSearchDto;
 
   constructor(
-    @Inject(IBERIA_POOL) private readonly pool: PoolSessoes<SessaoIberia>,
+    @Inject(IBERIA_POOL) private readonly pool: SessionPool<SessaoIberia>,
     private readonly runner: JobRunner,
     private readonly jobs: JobStore,
   ) {}
@@ -160,7 +160,7 @@ export class IberiaSource implements SearchSource<IberiaSearchDto> {
           const stamp = new Date().toISOString().slice(0, 16).replace("T", " ");
           const fileName = `iberia-${origem}-${destino}-${stamp.replace(/[: ]/g, "-")}.csv`;
           try {
-            gravarCsvDeVoos(rows, path.join(DIR_PLANILHAS, fileName));
+            gravarCsvDeVoos(rows, path.join(SPREADSHEETS_DIR, fileName));
             // The local file always exists while Google may be down or unconfigured;
             // without sending it to the screen a saved sheet looked like it was never made.
             localFile = `planilhas/${fileName}`;

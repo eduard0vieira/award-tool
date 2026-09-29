@@ -18,8 +18,8 @@ import { fileURLToPath } from "node:url";
 // Precisa de SEATS_API_KEY no .env (a chave NÃO é impressa nem salva).
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const RAIZ = path.join(__dirname, "..");
-const DESTINO = path.join(RAIZ, "fixtures", "seatsaero-real.json");
+const ROOT_DIR = path.join(__dirname, "..");
+const DESTINO = path.join(ROOT_DIR, "fixtures", "seatsaero-real.json");
 
 const BASE_URL = process.env.SEATS_BASE_URL || "https://seats.aero/partnerapi";
 

@@ -1,7 +1,7 @@
 import { chromium } from "playwright";
 import fs from "node:fs";
 import path from "node:path";
-import { DIR_ALERTAS_GERADOS, DIR_PORTAL_DIST } from "../nucleo/caminhos.ts";
+import { ALERTS_DIR, PORTAL_DIST_DIR } from "../core/paths.ts";
 
 // Conexão com o gerador de alertas (projetos/vcc-alertas-portal): transforma
 // o resultado de uma busca do bot num alerta pronto pra encaminhar no grupo —
@@ -15,8 +15,8 @@ import { DIR_ALERTAS_GERADOS, DIR_PORTAL_DIST } from "../nucleo/caminhos.ts";
 // página, tira screenshot do(s) card(s) e lê a legenda. Os PNGs ficam em
 // ./alertas (servido em /alertas), prontos pra baixar e encaminhar.
 
-export { DIR_PORTAL_DIST };
-export const DIR_ALERTAS = DIR_ALERTAS_GERADOS;
+export { PORTAL_DIST_DIR };
+export const DIR_ALERTAS = ALERTS_DIR;
 
 // Como o portal nomeia companhia (AIRLINES) e programa (KNOWN_PROGRAMS)
 // pra cada fonte/companhia que o bot busca.
@@ -86,7 +86,7 @@ export async function gerarAlerta(
   pedido: PedidoAlerta,
   opts: { baseUrl: string; authUser?: string; authPass?: string },
 ): Promise<AlertaGerado> {
-  if (!fs.existsSync(path.join(DIR_PORTAL_DIST, "index.html"))) {
+  if (!fs.existsSync(path.join(PORTAL_DIST_DIR, "index.html"))) {
     throw new Error(
       "Build do portal de alertas não encontrado. Rode `npm run build` em projetos/vcc-alertas-portal primeiro.",
     );

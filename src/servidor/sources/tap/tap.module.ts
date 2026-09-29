@@ -9,11 +9,11 @@ import { TAP_POOL, TapSource } from "./tap.source.ts";
   imports: [JobsModule],
   providers: [
     sessionPoolProvider<Sessao>(TAP_POOL, {
-      rotulo: "awardtool",
-      tamanho: config.concurrency.awardtool,
-      criarSessao: (headless) => iniciarSessao(headless),
-      sessaoViva: (session) => session.browser.isConnected() && !session.page.isClosed(),
-      fecharSessao: (session) => session.browser.close(),
+      label: "awardtool",
+      size: config.concurrency.awardtool,
+      createSession: (headless) => iniciarSessao(headless),
+      isAlive: (session) => session.browser.isConnected() && !session.page.isClosed(),
+      closeSession: (session) => session.browser.close(),
     }),
     TapSource,
   ],

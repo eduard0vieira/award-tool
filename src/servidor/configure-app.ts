@@ -1,6 +1,6 @@
 import type { NestExpressApplication } from "@nestjs/platform-express";
-import { DIR_PUBLICO } from "../nucleo/caminhos.ts";
-import { DIR_ALERTAS, DIR_PORTAL_DIST } from "../saidas/alertas.ts";
+import { PUBLIC_DIR } from "../core/paths.ts";
+import { DIR_ALERTAS, PORTAL_DIST_DIR } from "../saidas/alertas.ts";
 import { basicAuth } from "./basic-auth.ts";
 import type { Credentials } from "./config.ts";
 import { HttpErrorFilter } from "./http-error.filter.ts";
@@ -12,8 +12,8 @@ export function configureApp(app: NestExpressApplication, credentials: Credentia
   // and /alertas open to anyone who finds the tunnel URL.
   if (credentials) app.use(basicAuth(credentials));
 
-  app.useStaticAssets(DIR_PUBLICO);
-  app.useStaticAssets(DIR_PORTAL_DIST, { prefix: "/portal" });
+  app.useStaticAssets(PUBLIC_DIR);
+  app.useStaticAssets(PORTAL_DIST_DIR, { prefix: "/portal" });
   app.useStaticAssets(DIR_ALERTAS, { prefix: "/alertas" });
   app.useGlobalFilters(new HttpErrorFilter());
   app.useGlobalPipes(createValidationPipe());

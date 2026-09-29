@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import { Test } from "@nestjs/testing";
-import { PoolSessoes } from "../nucleo/pool-sessoes.ts";
+import { SessionPool } from "../core/session-pool.ts";
 import { AppModule } from "./app.module.ts";
 import type { Credentials } from "./config.ts";
 import { configureApp } from "./configure-app.ts";
@@ -18,13 +18,13 @@ class FakeSearchDto extends RouteRequestDto {}
 class FakeSource implements SearchSource<FakeSearchDto> {
   readonly id = "tap";
   readonly requestDto = FakeSearchDto;
-  private readonly pool = new PoolSessoes<object>({
-    rotulo: "fake",
-    tamanho: 1,
-    criarSessao: async () => ({}),
-    sessaoViva: () => true,
-    fecharSessao: async () => {},
-    minutosOcioso: 0,
+  private readonly pool = new SessionPool<object>({
+    label: "fake",
+    size: 1,
+    createSession: async () => ({}),
+    isAlive: () => true,
+    closeSession: async () => {},
+    idleMinutes: 0,
   });
   release: () => void = () => {};
 

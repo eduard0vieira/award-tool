@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { DIR_FIXTURES } from "../src/nucleo/caminhos.ts";
+import { FIXTURES_DIR } from "../src/core/paths.ts";
 import { filtrarVoos, lerVoos } from "../src/fontes/iberia/bot-iberia.ts";
 
 // Confere o parser de voos contra as respostas reais salvas em fixtures/.
@@ -10,7 +10,7 @@ import { filtrarVoos, lerVoos } from "../src/fontes/iberia/bot-iberia.ts";
 const arquivos = ["iberia-real.json", "iberia-real-mais1.json", "iberia-real-mais30.json"];
 
 for (const nome of arquivos) {
-  const caminho = path.join(DIR_FIXTURES, nome);
+  const caminho = path.join(FIXTURES_DIR, nome);
   if (!fs.existsSync(caminho)) {
     console.log(`${nome}: não está em fixtures/ — pulando.`);
     continue;

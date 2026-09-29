@@ -1,7 +1,7 @@
 import "dotenv/config";
 import crypto from "node:crypto";
 import path from "node:path";
-import { DIR_PLANILHAS } from "../src/nucleo/caminhos.ts";
+import { SPREADSHEETS_DIR } from "../src/core/paths.ts";
 import {
   criarPlanilhaDaBusca,
   gravarCsvDeVoos,
@@ -199,7 +199,7 @@ async function main() {
     }
 
     const arquivo = path.join(
-      DIR_PLANILHAS,
+      SPREADSHEETS_DIR,
       `iberia-${origem.toUpperCase()}-${destino.toUpperCase()}-${carimbo.replace(/[: ]/g, "-")}.csv`,
     );
     gravarCsvDeVoos(linhas, arquivo);

@@ -1,8 +1,8 @@
 import "dotenv/config";
 import fs from "node:fs";
 import path from "node:path";
-import { abrirSessaoChrome } from "../src/nucleo/sessao-chrome.ts";
-import { DIR_FIXTURES } from "../src/nucleo/caminhos.ts";
+import { openChromeSession } from "../src/core/chrome-session.ts";
+import { FIXTURES_DIR } from "../src/core/paths.ts";
 
 // FASE 0 do módulo Iberia.
 //
@@ -41,7 +41,7 @@ function dataBR(iso: string): string {
 // fica salvo no perfil, então isso é uma vez só — não a cada busca.
 const ESPERA_LOGIN_MS = Number(process.env.IBERIA_ESPERA_LOGIN_MS) || 600_000;
 
-const foto = (nome: string) => path.join(DIR_FIXTURES, `iberia-${nome}.png`);
+const foto = (nome: string) => path.join(FIXTURES_DIR, `iberia-${nome}.png`);
 
 const SIGILOSOS = ["authorization", "cookie", "x-acf-sensor-data"];
 const mascarar = (n: string, v: string) =>
@@ -73,7 +73,7 @@ const interessa = (u: string) => {
 async function main() {
   console.log(`\nRecon Iberia — ${origem.toUpperCase()}→${destino.toUpperCase()} em ${data} (Avios)\n`);
 
-  const sessao = await abrirSessaoChrome(false, "recon-iberia");
+  const sessao = await openChromeSession(false, "recon-iberia");
   const page = sessao.page;
   const capturas: Captura[] = [];
 
@@ -200,8 +200,8 @@ async function main() {
     if (/^(authorization|x-|content-type|accept|market|culture|device)/i.test(n)) console.log(`     ${n}: ${mascarar(n, v)}`);
   }
 
-  fs.mkdirSync(DIR_FIXTURES, { recursive: true });
-  fs.writeFileSync(path.join(DIR_FIXTURES, "iberia-real.json"), busca.corpoRecebido, "utf8");
+  fs.mkdirSync(FIXTURES_DIR, { recursive: true });
+  fs.writeFileSync(path.join(FIXTURES_DIR, "iberia-real.json"), busca.corpoRecebido, "utf8");
   console.log(`\n✅ Resposta crua salva em fixtures/iberia-real.json (${busca.corpoRecebido.length} bytes).`);
 
   await mostrarAviosNaTela(page);
@@ -303,7 +303,7 @@ async function sondarSelecaoDeVoo(page: import("playwright").Page, capturas: Cap
       if (c.corpoEnviado) console.log(`       enviou: ${c.corpoEnviado.slice(0, 500)}`);
       if ((c.corpoRecebido?.length ?? 0) > 500) {
         const nome = `iberia-mensal-${novas.indexOf(c)}.json`;
-        fs.writeFileSync(path.join(DIR_FIXTURES, nome), c.corpoRecebido!, "utf8");
+        fs.writeFileSync(path.join(FIXTURES_DIR, nome), c.corpoRecebido!, "utf8");
         console.log(`       salvo em fixtures/${nome}`);
       }
     }
@@ -398,7 +398,7 @@ async function sondarCalendario(page: import("playwright").Page, capturas: Captu
 
     console.log(`   marketCode=${mercado}: status ${r.status} | ${r.texto.length} bytes`);
     if (r.status === 200 && r.texto.length > 500) {
-      const arquivo = path.join(DIR_FIXTURES, `iberia-calendario-${mercado}.json`);
+      const arquivo = path.join(FIXTURES_DIR, `iberia-calendario-${mercado}.json`);
       fs.writeFileSync(arquivo, r.texto, "utf8");
       console.log(`   ✅ salvo em fixtures/${path.basename(arquivo)}`);
     } else if (r.status !== 200) {
@@ -460,7 +460,7 @@ async function sondarRepeticao(page: import("playwright").Page, busca: Captura) 
 
     console.log(`   +${deslocamento} dia(s) (${novaIso}): status ${resultado.status} | ${resultado.texto.length} bytes`);
     if (resultado.status === 200 && resultado.texto.length > 2000) {
-      const arquivo = path.join(DIR_FIXTURES, `iberia-real-mais${deslocamento}.json`);
+      const arquivo = path.join(FIXTURES_DIR, `iberia-real-mais${deslocamento}.json`);
       fs.writeFileSync(arquivo, resultado.texto, "utf8");
       console.log(`   salvo em fixtures/${path.basename(arquivo)}`);
     } else if (resultado.status !== 200) {
@@ -532,7 +532,7 @@ async function diagnosticarLogin(page: import("playwright").Page) {
   }
   console.log(`     caixa: <${caixa.tag} class="${String(caixa.classe).slice(0, 80)}">`);
   for (const c of caixa.campos) console.log(`       ${c}`);
-  const arquivo = path.join(DIR_FIXTURES, "iberia-login-modal.html");
+  const arquivo = path.join(FIXTURES_DIR, "iberia-login-modal.html");
   fs.writeFileSync(arquivo, caixa.html, "utf8");
   console.log(`     HTML do modal salvo em fixtures/${path.basename(arquivo)}`);
 }

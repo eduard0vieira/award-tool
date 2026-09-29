@@ -2,7 +2,7 @@ import "dotenv/config";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { abrirSessaoChrome } from "../src/nucleo/sessao-chrome.ts";
+import { openChromeSession } from "../src/core/chrome-session.ts";
 
 // FASE 0 do módulo Azul: descobrir de onde a chamada precisa sair, e com quais
 // credenciais de sessão, ANTES de escrever qualquer linha de parsing.
@@ -30,7 +30,7 @@ import { abrirSessaoChrome } from "../src/nucleo/sessao-chrome.ts";
 // Uso: npx tsx scripts/recon-azul.ts [VCP] [REC] [2026-10-15]
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DIR_FIXTURES = path.join(__dirname, "..", "fixtures");
+const FIXTURES_DIR = path.join(__dirname, "..", "fixtures");
 
 const [origem = "VCP", destino = "REC", data = dataDaqui(60)] = process.argv.slice(2);
 
@@ -83,7 +83,7 @@ async function main() {
   console.log(`\nRecon Azul — ${origem.toUpperCase()}→${destino.toUpperCase()} em ${data}`);
   console.log(`Deep link: ${deepLink()}\n`);
 
-  const sessao = await abrirSessaoChrome(false, "recon-azul");
+  const sessao = await openChromeSession(false, "recon-azul");
   const page = sessao.page;
   const capturas: Captura[] = [];
 
@@ -169,8 +169,8 @@ async function main() {
     return;
   }
 
-  fs.mkdirSync(DIR_FIXTURES, { recursive: true });
-  const destinoArq = path.join(DIR_FIXTURES, "azul-real.json");
+  fs.mkdirSync(FIXTURES_DIR, { recursive: true });
+  const destinoArq = path.join(FIXTURES_DIR, "azul-real.json");
   fs.writeFileSync(destinoArq, boa.corpoRecebido, "utf8");
   console.log(`✅ Resposta crua salva em fixtures/azul-real.json (${boa.corpoRecebido.length} bytes).`);
   console.log("   Só o corpo da resposta — nenhum header de sessão foi pro arquivo.\n");
@@ -398,7 +398,7 @@ async function sequestrar(page: import("playwright").Page) {
     if (resposta.status !== 200) console.log(`     amostra: ${resposta.corpo.slice(0, 200)}`);
 
     if (quantas === Math.max(...LOTES) && datas.length > 0) {
-      fs.writeFileSync(path.join(DIR_FIXTURES, "azul-real-multidata.json"), resposta.corpo, "utf8");
+      fs.writeFileSync(path.join(FIXTURES_DIR, "azul-real-multidata.json"), resposta.corpo, "utf8");
       console.log("   ✅ fixture multi-data salva em fixtures/azul-real-multidata.json");
     }
   }

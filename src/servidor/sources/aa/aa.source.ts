@@ -5,7 +5,7 @@ import {
   pesquisarAnoAA,
   type SessaoAA,
 } from "../../../fontes/aa/bot-aa.ts";
-import { PoolSessoes } from "../../../nucleo/pool-sessoes.ts";
+import { SessionPool } from "../../../core/session-pool.ts";
 import { JobRunner } from "../../jobs/job-runner.service.ts";
 import { JobStore } from "../../jobs/job-store.service.ts";
 import type { SearchSource } from "../../search/search-source.ts";
@@ -21,7 +21,7 @@ export class AaSource implements SearchSource<AaSearchDto> {
   readonly requestDto = AaSearchDto;
 
   constructor(
-    @Inject(AA_POOL) private readonly pool: PoolSessoes<SessaoAA>,
+    @Inject(AA_POOL) private readonly pool: SessionPool<SessaoAA>,
     private readonly runner: JobRunner,
     private readonly jobs: JobStore,
   ) {}

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { describe, test } from "node:test";
-import { DIR_FIXTURES } from "../../nucleo/caminhos.ts";
+import { FIXTURES_DIR } from "../../core/paths.ts";
 import { construirRelatorioLatam, escolherMelhoresPares, lerOpcoesResgate } from "./bot-latam.ts";
 
 const outbound = [
@@ -16,7 +16,7 @@ const inbound = [
 
 describe("LATAM", () => {
   test("reads the miles-plus-money ladder of a round-trip pair", () => {
-    const raw = JSON.parse(fs.readFileSync(path.join(DIR_FIXTURES, "latam-redemption-options-real.json"), "utf8"));
+    const raw = JSON.parse(fs.readFileSync(path.join(FIXTURES_DIR, "latam-redemption-options-real.json"), "utf8"));
     assert.deepEqual(lerOpcoesResgate(raw), {
       taxaReais: 255.69,
       opcoes: [

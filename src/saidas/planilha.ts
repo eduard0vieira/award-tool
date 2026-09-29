@@ -21,8 +21,8 @@ import path from "node:path";
 // Sem dependência nova: o acesso ao Sheets é REST puro, com o JWT da conta de
 // serviço assinado pelo `node:crypto`.
 
-import { DIR_PLANILHAS, RAIZ } from "../nucleo/caminhos.ts";
-const ARQUIVO_CSV = path.join(DIR_PLANILHAS, "buscas.csv");
+import { SPREADSHEETS_DIR, ROOT_DIR } from "../core/paths.ts";
+const ARQUIVO_CSV = path.join(SPREADSHEETS_DIR, "buscas.csv");
 
 const CAMINHO_CREDENCIAIS = process.env.GOOGLE_CREDENCIAIS;
 const PLANILHA_ID = process.env.PLANILHA_ID;
@@ -133,7 +133,7 @@ function escaparCsv(valor: string | number): string {
 }
 
 function gravarCsv(linhas: LinhaPlanilha[]) {
-  fs.mkdirSync(DIR_PLANILHAS, { recursive: true });
+  fs.mkdirSync(SPREADSHEETS_DIR, { recursive: true });
   const novo = !fs.existsSync(ARQUIVO_CSV);
   const conteudo =
     (novo ? `${COLUNAS.join(",")}\n` : "") +
@@ -420,7 +420,7 @@ export async function registrarBusca(
       jaAvisouSemSheets = true;
       onLog(
         "Planilha do Google não configurada (GOOGLE_CREDENCIAIS + PLANILHA_ID no .env). " +
-          `as buscas estão sendo gravadas só em ${path.relative(RAIZ, ARQUIVO_CSV)}.`,
+          `as buscas estão sendo gravadas só em ${path.relative(ROOT_DIR, ARQUIVO_CSV)}.`,
       );
     }
     return;

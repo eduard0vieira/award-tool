@@ -4,7 +4,7 @@
 //  B. flexibleDays ±3 muda alguma coisa na resposta?
 //  C. o site aguenta 30 navegações seguidas, que é o regime real do módulo?
 //     (a lição do Smiles: volume tem orçamento, e ele só aparece medindo)
-import { abrirSessaoChrome } from "../src/nucleo/sessao-chrome.ts";
+import { openChromeSession } from "../src/core/chrome-session.ts";
 import type { Page } from "playwright";
 
 const ORIGEM = "VCP";
@@ -60,7 +60,7 @@ async function chamar(page: Page, b: object): Promise<Saida> {
 }
 
 async function main() {
-  const sessao = await abrirSessaoChrome(false, "probe-azul");
+  const sessao = await openChromeSession(false, "probe-azul");
   const page = sessao.page;
 
   let corpoAtual: object | null = null;

@@ -5,10 +5,10 @@ import {
   construirRelatorio,
   iniciarSessao,
   pesquisarAnoCompleto,
-  type SecaoRelatorio,
+  type ReportSection,
 } from "./fontes/tap/bot-tap.ts";
 
-function formatarSecaoParaTexto(nome: string, secao: SecaoRelatorio): string {
+function formatarSecaoParaTexto(nome: string, secao: ReportSection): string {
   if (secao.dias.length === 0) {
     return `${nome}:\n${secao.texto}`;
   }

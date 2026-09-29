@@ -4,7 +4,7 @@
 //
 // Aqui: navega, e quando a busca não dispara, fotografa o estado da página
 // (URL, título, marcas de página de bloqueio) em vez de só contar o timeout.
-import { abrirSessaoChrome } from "../src/nucleo/sessao-chrome.ts";
+import { openChromeSession } from "../src/core/chrome-session.ts";
 import type { Page } from "playwright";
 
 const ORIGEM = "VCP";
@@ -31,7 +31,7 @@ async function retrato(page: Page): Promise<string> {
 }
 
 async function main() {
-  const sessao = await abrirSessaoChrome(false, "probe-azul-2");
+  const sessao = await openChromeSession(false, "probe-azul-2");
   const page = sessao.page;
   const t0 = Date.now();
 

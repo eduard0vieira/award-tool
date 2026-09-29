@@ -6,7 +6,7 @@ import {
   TETO_EXECUTIVA_K_PADRAO,
   type Sessao,
 } from "../../../fontes/tap/bot-tap.ts";
-import { PoolSessoes } from "../../../nucleo/pool-sessoes.ts";
+import { SessionPool } from "../../../core/session-pool.ts";
 import { JobRunner } from "../../jobs/job-runner.service.ts";
 import { JobStore } from "../../jobs/job-store.service.ts";
 import type { SearchSource } from "../../search/search-source.ts";
@@ -25,7 +25,7 @@ export class TapSource implements SearchSource<TapSearchDto> {
   readonly requestDto = TapSearchDto;
 
   constructor(
-    @Inject(TAP_POOL) private readonly pool: PoolSessoes<Sessao>,
+    @Inject(TAP_POOL) private readonly pool: SessionPool<Sessao>,
     private readonly runner: JobRunner,
     private readonly jobs: JobStore,
   ) {}

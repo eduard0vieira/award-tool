@@ -1,9 +1,9 @@
 import "dotenv/config";
 import fs from "node:fs";
 import path from "node:path";
-import { abrirSessaoChrome } from "../src/nucleo/sessao-chrome.ts";
+import { openChromeSession } from "../src/core/chrome-session.ts";
 import { esperarLoginManual, pedindoLogin } from "../src/fontes/latam/bot-latam.ts";
-import { DIR_FIXTURES, RAIZ } from "../src/nucleo/caminhos.ts";
+import { FIXTURES_DIR, ROOT_DIR } from "../src/core/paths.ts";
 
 // Descobrir DE ONDE sai o preço de ida e volta da LATAM.
 //
@@ -23,7 +23,7 @@ import { DIR_FIXTURES, RAIZ } from "../src/nucleo/caminhos.ts";
 // Uso: npx tsx scripts/recon-latam-rt.ts GRU JNB 2026-10-31 2026-11-06
 
 const [origem = "GRU", destino = "JNB", dataIda = daqui(60), dataVolta = daqui(67)] = process.argv.slice(2);
-const DIR_SAIDA = path.join(RAIZ, "fixtures", "latam-rt");
+const DIR_SAIDA = path.join(ROOT_DIR, "fixtures", "latam-rt");
 
 function daqui(dias: number): string {
   const d = new Date();
@@ -62,7 +62,7 @@ async function main() {
   console.log(`\nRecon LATAM ida e volta — ${origem} ⇄ ${destino} · ${dataIda} → ${dataVolta}\n`);
   fs.mkdirSync(DIR_SAIDA, { recursive: true });
 
-  const sessao = await abrirSessaoChrome(false, "recon-latam-rt");
+  const sessao = await openChromeSession(false, "recon-latam-rt");
   const page = sessao.page;
 
   page.on("response", async (res) => {
@@ -202,7 +202,7 @@ async function salvar() {
   for (const r of grandes.slice(0, 8)) {
     console.log(`  ${r.tamanho.toString().padStart(8)} bytes | ${r.passo} | ${r.url.slice(0, 110)}`);
   }
-  console.log(`\n(fixtures em ${path.relative(RAIZ, DIR_SAIDA)}; DIR_FIXTURES = ${path.relative(RAIZ, DIR_FIXTURES)})`);
+  console.log(`\n(fixtures em ${path.relative(ROOT_DIR, DIR_SAIDA)}; FIXTURES_DIR = ${path.relative(ROOT_DIR, FIXTURES_DIR)})`);
 }
 
 async function encerrar(page: import("playwright").Page) {

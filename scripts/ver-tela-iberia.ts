@@ -1,7 +1,7 @@
 import "dotenv/config";
-import { abrirSessaoChrome } from "../src/nucleo/sessao-chrome.ts";
+import { openChromeSession } from "../src/core/chrome-session.ts";
 import { linkEmissaoIberia } from "../src/fontes/iberia/bot-iberia.ts";
-import { DIR_FIXTURES } from "../src/nucleo/caminhos.ts";
+import { FIXTURES_DIR } from "../src/core/paths.ts";
 import path from "node:path";
 
 // Abre o deep link da busca e fotografa onde a aba para. Existe porque a fonte
@@ -9,7 +9,7 @@ import path from "node:path";
 // da varredura, e é preciso ver o que ela pede antes de decidir o que fazer.
 
 async function main() {
-  const sessao = await abrirSessaoChrome(false, "ver-tela");
+  const sessao = await openChromeSession(false, "ver-tela");
   const url = linkEmissaoIberia({ origem: "GRU", destino: "MAD", passageiros: 1 }, "2026-12-15");
 
   await sessao.page
@@ -22,7 +22,7 @@ async function main() {
   const texto = (await sessao.page.evaluate("document.body ? document.body.innerText : ''")) as string;
   console.log(`\nTexto da tela:\n${texto.replace(/\n{2,}/g, "\n").slice(0, 1200)}`);
 
-  const foto = path.join(DIR_FIXTURES, "iberia-tela-atual.png");
+  const foto = path.join(FIXTURES_DIR, "iberia-tela-atual.png");
   await sessao.page.screenshot({ path: foto, fullPage: false }).catch(() => {});
   console.log(`\nFoto: ${foto}`);
   await sessao.page.close().catch(() => {});

@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { describe, test } from "node:test";
-import { DIR_FIXTURES } from "../../nucleo/caminhos.ts";
+import { FIXTURES_DIR } from "../../core/paths.ts";
 import { construirRelatorioSmiles, erro452, ErroForaDaJanelaSmiles, lerRespostaSmiles } from "./bot-smiles.ts";
 
-const fixture = (name: string) => fs.readFileSync(path.join(DIR_FIXTURES, name), "utf8");
+const fixture = (name: string) => fs.readFileSync(path.join(FIXTURES_DIR, name), "utf8");
 
 describe("Smiles response parser", () => {
   test("reads flights and the 7-day calendar from a GOL route", () => {

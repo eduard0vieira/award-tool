@@ -1,15 +1,15 @@
 import "dotenv/config";
 import type { Page } from "playwright";
-import { abrirSessaoChrome, type SessaoChrome } from "../../nucleo/sessao-chrome.ts";
+import { openChromeSession, type ChromeSession } from "../../core/chrome-session.ts";
 import {
-  LimitadorFrequencia,
-  formatarListaPorMes,
-  type DeveParar,
-  type OnAviso,
+  RateLimiter,
+  formatDatesByMonth,
+  type ShouldStop,
+  type OnNotice,
   type OnLog,
-  type OnProgresso,
-  type SecaoRelatorio,
-} from "../../nucleo/comum.ts";
+  type OnProgress,
+  type ReportSection,
+} from "../../core/common.ts";
 
 // Bot da LATAM (latamairlines.com/br/pt), tarifas em dinheiro, classe
 // Econômica, sem login.
@@ -27,7 +27,7 @@ import {
 // - O próprio site marca os dias mais baratos com `lowPrice: true` — é o
 //   destaque verde da interface, e sai de graça no JSON.
 
-export type SessaoLatam = SessaoChrome;
+export type SessaoLatam = ChromeSession;
 
 export type ParametrosLatam = {
   origem: string; // IATA
@@ -89,7 +89,7 @@ export type TetosLatam = {
 };
 
 const INTERVALO_MIN_LATAM_MS = Number(process.env.LATAM_INTERVALO_BUSCAS_MS) || 8000;
-const limitadorLatam = new LimitadorFrequencia(INTERVALO_MIN_LATAM_MS);
+const limitadorLatam = new RateLimiter(INTERVALO_MIN_LATAM_MS);
 
 // Cada resposta cobre 2 meses, então 6 chamadas dão os 12 meses.
 const MESES_A_VARRER = 12;
@@ -97,7 +97,7 @@ const MESES_POR_CHAMADA = 2;
 const MAX_FALHAS_SEGUIDAS = 3;
 
 export async function iniciarSessaoLatam(headless = false): Promise<SessaoLatam> {
-  const sessao = await abrirSessaoChrome(headless, "LATAM");
+  const sessao = await openChromeSession(headless, "LATAM");
 
   // Precisa estar num contexto latamairlines.com pro fetch in-page valer, e o
   // acesso à home também aquece os cookies.
@@ -197,9 +197,9 @@ export async function pesquisarAnoLatam(
   page: Page,
   params: ParametrosLatam,
   onLog: OnLog = () => {},
-  onProgresso: OnProgresso = () => {},
-  onAviso: OnAviso = () => {},
-  deveParar: DeveParar = () => false,
+  onProgresso: OnProgress = () => {},
+  onAviso: OnNotice = () => {},
+  deveParar: ShouldStop = () => false,
 ): Promise<ResultadoAnoLatam> {
   const origem = params.origem.toUpperCase();
   const destino = params.destino.toUpperCase();
@@ -224,7 +224,7 @@ export async function pesquisarAnoLatam(
     const ano = alvo.getFullYear();
     const rotulo = `${String(mes).padStart(2, "0")}/${ano}`;
 
-    await limitadorLatam.aguardarVez();
+    await limitadorLatam.waitTurn();
     // Cadência menos robótica entre as chamadas.
     await page.waitForTimeout(400 + Math.random() * 1200);
 
@@ -274,7 +274,7 @@ export function filtrarPorTetos(dias: DiaLatam[], tetos: TetosLatam = {}): DiaLa
   });
 }
 
-export function construirRelatorioLatam(dias: DiaLatam[], tetos: TetosLatam = {}): SecaoRelatorio {
+export function construirRelatorioLatam(dias: DiaLatam[], tetos: TetosLatam = {}): ReportSection {
   const aceitos = filtrarPorTetos(dias, tetos);
 
   if (aceitos.length === 0) {
@@ -288,7 +288,7 @@ export function construirRelatorioLatam(dias: DiaLatam[], tetos: TetosLatam = {}
     menor: Math.min(...valores),
     maior: Math.max(...valores),
     dias: diasFormatados,
-    texto: formatarListaPorMes(diasFormatados.map((d) => d.data)),
+    texto: formatDatesByMonth(diasFormatados.map((d) => d.data)),
     unidade: "BRL",
   };
 }
@@ -399,7 +399,7 @@ async function preencherCredenciais(page: Page, onLog: OnLog): Promise<void> {
   }
 }
 
-export async function esperarLoginManual(page: Page, onLog: OnLog, onAviso: OnAviso): Promise<void> {
+export async function esperarLoginManual(page: Page, onLog: OnLog, onAviso: OnNotice): Promise<void> {
   await page.bringToFront().catch(() => {});
   await preencherCredenciais(page, onLog);
 
@@ -439,7 +439,7 @@ export async function confirmarParEmMilhas(
   page: Page,
   params: { origem: string; destino: string; dataIda: string; dataVolta: string; caminhoImagem: string },
   onLog: OnLog = () => {},
-  onAviso: OnAviso = () => {},
+  onAviso: OnNotice = () => {},
 ): Promise<ConfirmacaoPar | null> {
   const { origem, destino, dataIda, dataVolta, caminhoImagem } = params;
 
@@ -467,7 +467,7 @@ export async function confirmarParEmMilhas(
   page.on("response", capturar);
 
   try {
-    await limitadorLatam.aguardarVez();
+    await limitadorLatam.waitTurn();
     const url =
       "https://www.latamairlines.com/br/pt/oferta-voos?" +
       new URLSearchParams({

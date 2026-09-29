@@ -2,7 +2,7 @@ import "dotenv/config";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { abrirSessaoChrome } from "../src/nucleo/sessao-chrome.ts";
+import { openChromeSession } from "../src/core/chrome-session.ts";
 
 // FASE 0 do módulo Smiles: descobrir POR ONDE a chamada passa hoje, antes de
 // escrever qualquer linha de parsing.
@@ -24,7 +24,7 @@ import { abrirSessaoChrome } from "../src/nucleo/sessao-chrome.ts";
 // Uso: npx tsx scripts/recon-smiles.ts [GRU] [MIA] [2026-10-15]
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DIR_FIXTURES = path.join(__dirname, "..", "fixtures");
+const FIXTURES_DIR = path.join(__dirname, "..", "fixtures");
 
 const [origem = "GRU", destino = "MIA", data = dataDaqui(60)] = process.argv.slice(2);
 
@@ -88,7 +88,7 @@ async function degrauNode(ambiente: string): Promise<Resultado> {
 //     a resposta chegar.
 async function degrauNavegador(ambiente: string, modo: "navegar" | "fetch"): Promise<Resultado> {
   const degrau = `navegador-${modo}/${ambiente}`;
-  const sessao = await abrirSessaoChrome(false, "Smiles");
+  const sessao = await openChromeSession(false, "Smiles");
   try {
     const url = urlBusca(ambiente);
 
@@ -124,8 +124,8 @@ async function degrauNavegador(ambiente: string, modo: "navegar" | "fetch"): Pro
 
 function salvar(r: Resultado) {
   if (!r.corpo) return;
-  fs.mkdirSync(DIR_FIXTURES, { recursive: true });
-  const destinoArq = path.join(DIR_FIXTURES, "smiles-real.json");
+  fs.mkdirSync(FIXTURES_DIR, { recursive: true });
+  const destinoArq = path.join(FIXTURES_DIR, "smiles-real.json");
   fs.writeFileSync(destinoArq, r.corpo, "utf8");
   console.log(`\n✅ Resposta crua salva em fixtures/smiles-real.json (${r.corpo.length} bytes, degrau ${r.degrau}).`);
 }

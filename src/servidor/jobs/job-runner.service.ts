@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import type { PoolSessoes } from "../../nucleo/pool-sessoes.ts";
+import type { SessionPool } from "../../core/session-pool.ts";
 import { JobStore } from "./job-store.service.ts";
 
 // Reported as an error with its own text because the front already knows how
@@ -10,16 +10,16 @@ const CANCELLED = "Busca cancelada.";
 export class JobRunner {
   constructor(private readonly jobs: JobStore) {}
 
-  async run<S>(pool: PoolSessoes<S>, jobId: string, work: (session: S) => Promise<void>): Promise<void> {
+  async run<S>(pool: SessionPool<S>, jobId: string, work: (session: S) => Promise<void>): Promise<void> {
     const job = this.jobs.get(jobId);
     let slot: number | null = null;
     try {
       if (job.cancelled) return this.jobs.fail(jobId, CANCELLED);
-      const { sessao, indice } = await pool.adquirir();
-      slot = indice;
+      const { session, index } = await pool.acquire();
+      slot = index;
       if (job.cancelled) return this.jobs.fail(jobId, CANCELLED);
       this.jobs.markRunning(jobId);
-      await work(sessao);
+      await work(session);
     } catch (err) {
       if (job.cancelled) return this.jobs.fail(jobId, CANCELLED);
       const message = err instanceof Error ? err.message : String(err);
@@ -29,7 +29,7 @@ export class JobRunner {
         browserClosed ? "A janela do navegador foi fechada durante a busca. Tente buscar de novo." : message,
       );
     } finally {
-      if (slot !== null) pool.liberar(slot);
+      if (slot !== null) pool.release(slot);
       this.jobs.close(jobId);
     }
   }

@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { describe, test } from "node:test";
-import { DIR_FIXTURES } from "../../nucleo/caminhos.ts";
+import { FIXTURES_DIR } from "../../core/paths.ts";
 import { construirRelatorioIberia, filtrarVoos, lerVoos, linkEmissaoIberia } from "./bot-iberia.ts";
 
-const fixture = (name: string) => fs.readFileSync(path.join(DIR_FIXTURES, name), "utf8");
+const fixture = (name: string) => fs.readFileSync(path.join(FIXTURES_DIR, name), "utf8");
 const route = { origem: "GRU", destino: "MAD", passageiros: 1 };
 
 describe("Iberia availability parser", () => {

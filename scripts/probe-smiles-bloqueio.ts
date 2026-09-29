@@ -1,4 +1,4 @@
-import { abrirSessaoChrome } from "../src/nucleo/sessao-chrome.ts";
+import { openChromeSession } from "../src/core/chrome-session.ts";
 
 // Diz por que o Smiles está negando as buscas hoje.
 //
@@ -21,7 +21,7 @@ import { abrirSessaoChrome } from "../src/nucleo/sessao-chrome.ts";
 
 const [origem = "GRU", destino = "MIA", data = dataDaqui(60)] = process.argv.slice(2);
 
-const RAIZ = "https://api-air-flightsearch-prd.smiles.com.br/";
+const ROOT_DIR = "https://api-air-flightsearch-prd.smiles.com.br/";
 const CHAVE = "aJqPU7xNHl9qN3NVZnPaJ208aPo2Bh2p2ZV844tw";
 
 // A que está no bot hoje vem primeiro: é a que interessa saber se ainda passa.
@@ -47,7 +47,7 @@ function urlBusca(): string {
     infants: "0",
     forceCongener: "false",
   });
-  return `${RAIZ}v1/airlines/search?${params}`;
+  return `${ROOT_DIR}v1/airlines/search?${params}`;
 }
 
 type Leitura = { status: number; bloqueada: boolean; resumo: string };
@@ -87,11 +87,11 @@ async function main() {
   }
   console.log(`[fora do navegador] ${deFora.status} · ${deFora.resumo}\n`);
 
-  const sessao = await abrirSessaoChrome(false, "Smiles");
+  const sessao = await openChromeSession(false, "Smiles");
   const leituras: Array<[string, Leitura]> = [];
 
   try {
-    await sessao.page.goto(RAIZ, { waitUntil: "domcontentloaded", timeout: 60000 }).catch(() => null);
+    await sessao.page.goto(ROOT_DIR, { waitUntil: "domcontentloaded", timeout: 60000 }).catch(() => null);
     await sessao.page.waitForTimeout(3000);
 
     for (const [nome, headers] of VARIANTES) {
