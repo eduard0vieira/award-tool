@@ -104,14 +104,53 @@ pedir.
 
 ---
 
+## Idioma
+
+**Código em inglês**: identificadores, nomes de arquivo, comentários e descrições
+de teste.
+
+Continuam em português, porque traduzir quebraria o produto ou um contrato:
+
+- Texto voltado ao usuário: telas, mensagens de erro exibidas, legendas de alerta
+- Contratos de fio: campos do JSON da API (`origem`, `tetos`, `secaoAA`…),
+  payloads do SSE e o formato `"Ago 2026: 07 (9)"`
+
+O código antigo em português é renomeado numa fase própria, nunca de carona em
+outra tarefa. Até lá, a mistura é esperada: código novo em inglês chamando
+`pesquisarAnoAA` é normal.
+
+---
+
+## Comentários
+
+O padrão é **nenhum**. Um comentário precisa se justificar para existir.
+
+- Não comente o que o código já diz. Se o trecho precisa de explicação para ser
+  entendido, melhore o nome ou extraia uma função
+- Comente só o que o código não consegue dizer: o porquê de uma decisão não
+  óbvia, uma armadilha que já mordeu, a razão de uma ordem de operações importar
+- Nada de JSDoc cerimonial, cabeçalho de função, narração passo a passo ou
+  marcador de seção
+- Contexto longo (o que foi medido, o que ficou de fora) vai no chat ou em
+  `contexto/`, não no arquivo
+
+---
+
 ## Convenções de código
 
-- TypeScript + Node, rodando via `tsx` (sem etapa de build)
-- Front é HTML + JS puro, sem framework e sem bundler. **Não introduza framework,
-  bundler ou build step.**
-- Nomes de identificadores e mensagens em português, seguindo o código existente
-- Cada fonte vive em `src/fontes/<programa>/`, autocontida, seguindo o padrão das
-  demais. `src/nucleo/` não importa fonte nenhuma
+- TypeScript + Node. O servidor é **NestJS** e roda via loader SWC
+  (`@swc-node/register`), porque o Nest depende de metadados de decorator que o
+  `tsx` (esbuild) não gera. `scripts/` e `src/cli.ts` continuam via `tsx`
+- Todo corpo de requisição tem um DTO validado com class-validator
+- Controller não tem regra de negócio: recebe, valida e delega
+- DTOs e services são importados como valor, nunca com `import type`: com
+  `verbatimModuleSyntax` o import de tipo apaga o metadado e a validação é pulada
+  em silêncio
+- Cada fonte tem duas partes: o bot puro em `src/fontes/<programa>/`, que não
+  sabe que o Nest existe, e o módulo Nest em `src/servidor/sources/<programa>/`,
+  que o embrulha. `src/nucleo/` não importa fonte nenhuma
+- Front é HTML + JS puro até a migração planejada para React. Nenhum outro
+  framework ou bundler entra antes dela
 - Todo caminho de disco sai de `src/nucleo/caminhos.ts` — nunca calcule com
   `__dirname` no próprio arquivo
 - Fontes com login usam o pool de sessões; fontes com API oficial não precisam de
@@ -136,9 +175,8 @@ pedir.
 refatoração e documentação: se algo quebrar, o `git diff` precisa apontar uma
 coisa só.
 
-Mensagem no padrão Conventional Commits, uma linha, **sempre em inglês** — é a
-única parte do repositório que não é em português (código, comentários e
-interface continuam como estão).
+Mensagem no padrão Conventional Commits, uma linha, **sempre em inglês**, assim
+como nomes de branch, títulos e descrições de PR.
 
 ```
 <tipo>(<escopo opcional>): <descrição>
