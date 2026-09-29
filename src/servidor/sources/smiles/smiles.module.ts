@@ -1,5 +1,5 @@
 import { Module } from "@nestjs/common";
-import { iniciarSessaoSmiles, type SessaoSmiles } from "../../../fontes/smiles/bot-smiles.ts";
+import { startSmilesSession, type SmilesSession } from "../../../scrapers/smiles/smiles.scraper.ts";
 import { closeChromeSession, isSessionAlive } from "../../../core/chrome-session.ts";
 import { config } from "../../config.ts";
 import { JobsModule } from "../../jobs/jobs.module.ts";
@@ -10,10 +10,10 @@ import { SMILES_POOL, SmilesSource } from "./smiles.source.ts";
   imports: [JobsModule],
   providers: [
     // No login, but each year sweep is ~112 requests from inside the browser.
-    sessionPoolProvider<SessaoSmiles>(SMILES_POOL, {
+    sessionPoolProvider<SmilesSession>(SMILES_POOL, {
       label: "smiles",
       size: config.concurrency.smiles,
-      createSession: (headless) => iniciarSessaoSmiles(headless),
+      createSession: (headless) => startSmilesSession(headless),
       isAlive: isSessionAlive,
       closeSession: closeChromeSession,
     }),

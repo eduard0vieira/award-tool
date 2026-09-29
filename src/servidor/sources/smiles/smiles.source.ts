@@ -1,12 +1,12 @@
 import { Inject, Injectable } from "@nestjs/common";
-import {
-  construirRelatorioSmiles,
-  pesquisarAnoSmiles,
-  type PeriodoSmiles,
-  type SessaoSmiles,
-} from "../../../fontes/smiles/bot-smiles.ts";
 import { SessionPool } from "../../../core/session-pool.ts";
 import { createSearchSheet, type FlightRow } from "../../../outputs/spreadsheet.ts";
+import {
+  buildSmilesReport,
+  searchSmilesYear,
+  type SmilesPeriod,
+  type SmilesSession,
+} from "../../../scrapers/smiles/smiles.scraper.ts";
 import { JobRunner } from "../../jobs/job-runner.service.ts";
 import { JobStore } from "../../jobs/job-store.service.ts";
 import type { SearchSource } from "../../search/search-source.ts";
@@ -24,13 +24,13 @@ function asDate(value: string | undefined, endOfMonth: boolean): string | undefi
 }
 
 // A month starts on its first day and ends on its last; the sweep rules
-// themselves are enforced by the bot, which knows them.
-function toPeriod(period: SmilesPeriodDto | undefined): PeriodoSmiles {
-  const result: PeriodoSmiles = {};
+// themselves are enforced by the scraper, which knows them.
+function toPeriod(period: SmilesPeriodDto | undefined): SmilesPeriod {
+  const result: SmilesPeriod = {};
   const from = asDate(period?.de, false);
   const until = asDate(period?.ate, true);
-  if (from) result.de = from;
-  if (until) result.ate = until;
+  if (from) result.from = from;
+  if (until) result.until = until;
   return result;
 }
 
@@ -55,7 +55,7 @@ export class SmilesSource implements SearchSource<SmilesSearchDto> {
   readonly requestDto = SmilesSearchDto;
 
   constructor(
-    @Inject(SMILES_POOL) private readonly pool: SessionPool<SessaoSmiles>,
+    @Inject(SMILES_POOL) private readonly pool: SessionPool<SmilesSession>,
     private readonly runner: JobRunner,
     private readonly jobs: JobStore,
   ) {}
@@ -63,17 +63,17 @@ export class SmilesSource implements SearchSource<SmilesSearchDto> {
   start(jobId: string, request: SmilesSearchDto) {
     const { origem, destino } = request;
     const ceilings = {
-      economica: request.tetos?.economica ?? null,
+      economy: request.tetos?.economica ?? null,
       premium: request.tetos?.premium ?? null,
-      executiva: request.tetos?.executiva ?? null,
+      business: request.tetos?.executiva ?? null,
     };
     const period = toPeriod(request.periodo);
 
     return this.runner.run(this.pool, jobId, async ({ page }) => {
       const job = this.jobs.callbacks(jobId);
-      const { dias, diasComFalha, lacunas, doCache } = await pesquisarAnoSmiles(
+      const { days, failedDays, gaps, fromCache } = await searchSmilesYear(
         page,
-        { origem, destino },
+        { origin: origem, destination: destino },
         ceilings,
         job.log,
         job.progress,
@@ -81,59 +81,52 @@ export class SmilesSource implements SearchSource<SmilesSearchDto> {
         period,
       );
 
-      const legs: Leg[] = [{ rotulo: `${origem} → ${destino}`, secoes: construirRelatorioSmiles(dias, ceilings) }];
+      const legs: Leg[] = [{ rotulo: `${origem} → ${destino}`, secoes: buildSmilesReport(days, ceilings) }];
 
-      // The gaps come already worded by the bot, which is what knows what it left uncovered.
-      const gaps = [...lacunas];
-      const firstFailure = diasComFalha[0];
+      // The gaps come already worded by the scraper, which knows what it left uncovered.
+      const notices = [...gaps];
+      const firstFailure = failedDays[0];
       if (firstFailure) {
-        gaps.push(`${diasComFalha.length} dia(s) falharam. O primeiro foi ${firstFailure.data}: ${firstFailure.erro}`);
+        notices.push(`${failedDays.length} dia(s) falharam. O primeiro foi ${firstFailure.date}: ${firstFailure.error}`);
       }
       // Cached data is not data from this hour; counting it is what separates
       // saving a request from showing a stale price without saying so.
-      if (doCache > 0) {
-        gaps.push(`${doCache} dia(s) vieram de consulta recente reaproveitada, não de agora`);
+      if (fromCache > 0) {
+        notices.push(`${fromCache} dia(s) vieram de consulta recente reaproveitada, não de agora`);
       }
-      const partialNotice = gaps.length > 0 ? `Cobertura parcial. ${gaps.join("; ")}.` : undefined;
+      const partialNotice = notices.length > 0 ? `Cobertura parcial. ${notices.join("; ")}.` : undefined;
 
-      const rows: FlightRow[] = [];
-      for (const day of dias) {
-        for (const flight of day.voos) {
-          const detail = flight.detalhe;
-          rows.push({
-            departure_date: detail.partidaData,
-            arrival_date: detail.chegadaData,
-            departure_station: detail.partidaAeroporto,
-            departure_time: detail.partidaHora,
-            arrival_station: detail.chegadaAeroporto,
-            connections: flight.conexoes,
-            connecting_airports: detail.aeroportosConexao,
-            points: flight.milhas,
-            duration: detail.duracaoMinutos,
-            cabin_category: detail.cabineCru,
-            operation_carriers: detail.codigoCompanhia,
-            program: "SMILES",
-            source_fare: flight.tarifa,
-            available_seats: flight.assentos,
-            aircraft: detail.aeronaves,
-            tax: flight.taxaReais ?? "",
-            class_of_service: detail.classesServico,
-            url: smilesSearchUrl(origem, destino, detail.partidaData),
-          });
-        }
-      }
-      const spreadsheetUrl = await createSearchSheet({ title: `Smiles ${origem}-${destino} ${new Date().toISOString().slice(0, 16).replace("T", " ")}`,
-          rows,
-        },
-        job.log,
+      const rows: FlightRow[] = days.flatMap((day) =>
+        day.flights.map((flight) => ({
+          departure_date: flight.detail.departureDate,
+          arrival_date: flight.detail.arrivalDate,
+          departure_station: flight.detail.departureAirport,
+          departure_time: flight.detail.departureTime,
+          arrival_station: flight.detail.arrivalAirport,
+          connections: flight.stops,
+          connecting_airports: flight.detail.connectingAirports,
+          points: flight.miles,
+          duration: flight.detail.durationMinutes,
+          cabin_category: flight.detail.rawCabin,
+          operation_carriers: flight.detail.airlineCode,
+          program: "SMILES",
+          source_fare: flight.fare,
+          available_seats: flight.seats,
+          aircraft: flight.detail.aircraft,
+          tax: flight.feeReais ?? "",
+          class_of_service: flight.detail.serviceClasses,
+          url: smilesSearchUrl(origem, destino, flight.detail.departureDate),
+        })),
       );
+      const stamp = new Date().toISOString().slice(0, 16).replace("T", " ");
+      const spreadsheetUrl = await createSearchSheet({ title: `Smiles ${origem}-${destino} ${stamp}`, rows }, job.log);
 
       recordSearch(jobId, {
         source: "SMILES",
         origin: origem,
         destination: destino,
         legs,
-        ceilings: { "Econômica": ceilings.economica, Conforto: ceilings.premium, Executiva: ceilings.executiva },
+        ceilings: { "Econômica": ceilings.economy, Conforto: ceilings.premium, Executiva: ceilings.business },
       });
       this.jobs.complete(jobId, { pernas: legs, avisoParcial: partialNotice, planilhaUrl: spreadsheetUrl });
     });
