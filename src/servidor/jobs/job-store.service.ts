@@ -4,10 +4,6 @@ import { concat, defer, from, map, Subject, type Observable } from "rxjs";
 import { config } from "../config.ts";
 import type { Job, JobCallbacks, JobEvent } from "./job.types.ts";
 
-function replayedResult({ avisoParcial, arquivoLocal, ...result }: JobEvent): JobEvent {
-  return "pernas" in result ? result : { ...result, avisoParcial };
-}
-
 @Injectable()
 export class JobStore {
   private readonly jobs = new Map<string, Job>();
@@ -107,7 +103,7 @@ export class JobStore {
     if (job.window) events.push({ tipo: "janela", ...job.window });
     if (job.notice) events.push({ tipo: "aviso", mensagem: job.notice });
     if (job.question) events.push({ tipo: "pergunta", ...job.question });
-    if (job.status === "done" && job.result) events.push(replayedResult(job.result));
+    if (job.status === "done" && job.result) events.push(job.result);
     if (job.status === "erro") events.push({ tipo: "erro", mensagem: job.error });
     return events;
   }

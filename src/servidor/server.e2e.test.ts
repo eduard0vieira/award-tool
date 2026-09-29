@@ -40,7 +40,11 @@ class FakeSource implements SearchSource<FakeSearchDto> {
       await new Promise<void>((resolve) => (this.release = resolve));
       if (job.shouldStop()) throw new Error("stopped");
       if (request.origem === "ASK" && !(await job.ask("Continuar?"))) throw new Error("recusado");
-      this.jobs.complete(jobId, { secaoAA: { rotulo: request.origem }, avisoParcial: "parcial" });
+      this.jobs.complete(jobId, {
+        pernas: [{ rotulo: request.origem, secoes: [] }],
+        avisoParcial: "parcial",
+        arquivoLocal: "planilhas/voos.csv",
+      });
     });
   }
 }
@@ -116,7 +120,7 @@ describe("server without auth", () => {
     assert.equal((await nextEvent(events, "progresso")).fracao, 0.5);
     fake.release();
     const done = await nextEvent(events, "done");
-    assert.deepEqual(done.secaoAA, { rotulo: "GRU" });
+    assert.deepEqual(done.pernas, [{ rotulo: "GRU", secoes: [] }]);
     assert.equal((await events.next()).done, true);
 
     const state = await fetch(`${url}/api/buscar/${jobId}/estado`).then((r) => r.json());
@@ -125,17 +129,14 @@ describe("server without auth", () => {
     assert.equal((await post(`${url}/api/buscar/${jobId}/responder`, { continuar: true })).status, 409);
   });
 
-  test("replays the finished result to a late subscriber", async () => {
+  test("replays the whole finished result to a late subscriber", async () => {
     const { body } = await post(`${url}/api/buscar`, { fonte: "tap", origem: "GRU", destino: "LIS" });
     const live = readEvents(`${url}/api/buscar/${body.jobId}/eventos`);
     await nextEvent(live, "progresso");
     fake.release();
-    await nextEvent(live, "done");
-
-    const replay = readEvents(`${url}/api/buscar/${body.jobId}/eventos`);
-    const done = await nextEvent(replay, "done");
-    assert.deepEqual(done.secaoAA, { rotulo: "GRU" });
-    assert.equal(done.avisoParcial, "parcial");
+    const liveDone = await nextEvent(live, "done");
+    const replayed = await nextEvent(readEvents(`${url}/api/buscar/${body.jobId}/eventos`), "done");
+    assert.deepEqual(replayed, liveDone);
   });
 
   test("asks the user and resumes after the answer", async () => {
