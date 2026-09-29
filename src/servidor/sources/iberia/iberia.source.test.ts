@@ -1,0 +1,22 @@
+import "reflect-metadata";
+import assert from "node:assert/strict";
+import { describe, test } from "node:test";
+import { pickDatesToDetail } from "./iberia.source.ts";
+
+const dates = ["2026-10-01", "2026-10-02", "2026-10-03", "2026-10-04"];
+const aviosByDate = new Map([
+  ["2026-10-01", 30_000],
+  ["2026-10-02", 12_000],
+  ["2026-10-03", 45_000],
+  ["2026-10-04", 18_000],
+]);
+
+describe("pickDatesToDetail", () => {
+  test("picks the N cheapest dates, cheapest first", () => {
+    assert.deepEqual(pickDatesToDetail(dates, aviosByDate, 2), ["2026-10-02", "2026-10-04"]);
+  });
+
+  test("details nothing when asked for zero", () => {
+    assert.deepEqual(pickDatesToDetail(dates, aviosByDate, 0), []);
+  });
+});

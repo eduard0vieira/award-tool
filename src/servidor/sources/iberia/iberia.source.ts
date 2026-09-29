@@ -20,6 +20,11 @@ import { IberiaSearchDto } from "./iberia-search.dto.ts";
 
 export const IBERIA_POOL = Symbol("IBERIA_POOL");
 
+export function pickDatesToDetail(dates: string[], aviosByDate: Map<string, number>, detailDays: number): string[] {
+  if (!(detailDays > 0)) return [];
+  return [...dates].sort((a, b) => (aviosByDate.get(a) ?? 0) - (aviosByDate.get(b) ?? 0)).slice(0, detailDays);
+}
+
 // No cabin selector: the Avios grid returns one value per day, the cheapest,
 // without saying which cabin it belongs to (contexto/notas-recon-iberia.md, 10 and 13).
 @Injectable()
@@ -59,13 +64,14 @@ export class IberiaSource implements SearchSource<IberiaSearchDto> {
       let spreadsheetUrl: string | null = null;
       let localFile: string | null = null;
       const spreadsheetNotices: string[] = [];
-      if (detailDays > 0 && section.dias.length > 0) {
-        const aviosByDate = new Map(days.map((day) => [day.data, day.avios]));
+      const aviosByDate = new Map(days.map((day) => [day.data, day.avios]));
+      const chosenDates = pickDatesToDetail(
+        section.dias.map((day) => day.data),
+        aviosByDate,
+        detailDays,
+      );
+      if (chosenDates.length > 0) {
         const detailAll = detailDays === -1;
-        const chosenDates = [...section.dias]
-          .sort((a, b) => (aviosByDate.get(a.data) ?? 0) - (aviosByDate.get(b.data) ?? 0))
-          .slice(0, detailAll ? section.dias.length : detailDays)
-          .map((day) => day.data);
         if (section.dias.length > chosenDates.length) {
           spreadsheetNotices.push(
             `A planilha de voos traz os ${chosenDates.length} dia(s) mais baratos; ` +
