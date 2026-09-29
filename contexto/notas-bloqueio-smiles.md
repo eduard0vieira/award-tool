@@ -81,3 +81,26 @@ dia". Consequências, todas visíveis no log de 2026-09-15:
 
 Hoje o 403 para a varredura na hora, igual ao 406, e devolve o parcial com a
 lacuna explicada.
+
+## 452 — dois sentidos, e nenhum é bloqueio (medido em 2026-09-29)
+
+| corpo | o que é |
+|---|---|
+| `{"errorMessage":"data não permitida"}` | data fora da janela de venda |
+| `{"error":"Error: Falha ao obter os dados do aeroporto: XQZ"}` | sigla que o Smiles não conhece |
+
+- A janela de venda vai até **hoje + 329 dias**. O dia 330 já responde "data
+  não permitida". A varredura corta o período aí (`JANELA_VENDA_DIAS`) e, se
+  mesmo assim bater na borda, para sem contar como falha.
+- Antes disso todo 452 virava "confira as siglas IATA". A varredura padrão de
+  365 dias pedia as últimas sondagens fora da venda, tomava três 452 seguidos e
+  parava acusando o aeroporto.
+- `npx tsx scripts/recon-smiles-janela.ts GRU MRU` refaz a medição (~10
+  requisições) e também diz se a rota traz o calendário de 7 dias.
+
+## Rotas só de parceira não têm calendário
+
+GRU→MRU responde `resultType: "congener"`, todos os voos `AMADEUS`, e o
+`calendarDayList` vem vazio. `forceCongener=true` não muda nada, e a
+`flightList` só traz o dia pedido (`fixtures/smiles-real-congener.json`). Nessas
+rotas cada dia custa uma consulta: ~330 por perna para cobrir a janela inteira.
