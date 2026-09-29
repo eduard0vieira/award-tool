@@ -1,18 +1,18 @@
-# Recon Azul / TudoAzul (Fase 0) — anotações
+# Azul / TudoAzul recon (phase 0): notes
 
-> Levantado em 2026-08-18 com `npx tsx scripts/recon-azul.ts VCP REC`, num perfil
-> de Chrome **novo em folha** (sem cookie, sem histórico, sem login).
+> Gathered on 2026-08-18 with `npx tsx scripts/recon-azul.ts VCP REC`, on a
+> **brand new** Chrome profile (no cookies, no history, no login).
 
-## Resumo em uma linha
+## One-line summary
 
-Dá pra buscar em pontos **sem login e sem reputação de perfil**, mas nenhuma chamada
-nossa passa: quem tem que disparar é o próprio site. O jeito que funciona é deixar a
-página fazer a requisição dela e **trocar o corpo no caminho** — e o corpo aceita
-**6 datas de uma vez**. O problema é o volume: **na 9ª navegação seguida a busca para
-de disparar**, e um ano por direção precisaria de 61. É esse limite que decide se o
-módulo existe.
+Searching in points works **without login and without profile reputation**, but
+none of our own calls get through: the site itself has to fire them. What works
+is letting the page make its request and **swapping the body on the way**, and
+the body accepts **6 dates at once**. The problem is volume: **on the 9th
+navigation in a row the search stops firing**, and a year per direction would
+need 61. That limit decides whether the module exists.
 
-## 1. Deep link (funciona, e é o melhor achado)
+## 1. Deep link (works, and it is the best finding)
 
 ```
 https://www.voeazul.com.br/br/pt/home/selecao-voo
@@ -20,41 +20,43 @@ https://www.voeazul.com.br/br/pt/home/selecao-voo
   &p[0].t=ADT&p[0].c=1&p[0].cp=false&f.dl=3&f.dr=3&cc=PTS
 ```
 
-- `cc=PTS` = pontos; a data vai em **M/D/AAAA**, não ISO.
-- Cai direto no resultado. **Nada foi clicado** — nem o aviso de cookies.
-- Perfil zerado funciona: não precisa de conta TudoAzul nem de cookie herdado.
+- `cc=PTS` = points; the date goes as **M/D/YYYY**, not ISO.
+- It lands straight on the result. **Nothing was clicked**, not even the cookie
+  notice.
+- A blank profile works: no TudoAzul account or inherited cookie needed.
 
-## 2. A sessão é gerada pela própria página
+## 2. The session is created by the page itself
 
 ```
 POST /authentication/api/authentication/v1/token   → 200, ~300 bytes
 ```
 
-Sai com `authorization` vazio e volta com o token (280 chars) que as chamadas
-seguintes usam. **Nenhuma credencial nossa entra nisso.** É a diferença entre este
-caminho e o do projeto antigo, onde o token era colado à mão e apodrecia em horas.
+It goes out with an empty `authorization` and comes back with the token (280
+chars) the following calls use. **None of our credentials take part in it.**
+That is the difference between this path and the old project's, where the
+token was pasted by hand and went stale in hours.
 
-## 3. Endpoint de disponibilidade — a versão do código antigo está errada
+## 3. Availability endpoint: the old code's version is wrong
 
 ```
 POST https://b2c-api.voeazul.com.br/tudoAzulReservationAvailability
      /api/tudoazul/reservation/availability/v6/availability
 ```
 
-`endpoints.py` do `cheap-flights` aponta pra **v5**; o site usa **v6**. O
-`azul_headers_generator.py` do mesmo repo já apontava pra v6 — ou seja, lá dentro os
-dois discordavam entre si.
+`endpoints.py` in `cheap-flights` points to **v5**; the site uses **v6**. The
+same repo's `azul_headers_generator.py` already pointed to v6, so inside it the
+two disagreed with each other.
 
-Headers que a aplicação define (o resto é do navegador):
+Headers the application sets (the rest come from the browser):
 
-| header | o que é |
+| header | what it is |
 |---|---|
-| `authorization` | token de sessão, gerado no passo 2 |
-| `ocp-apim-subscription-key` | chave pública do gateway (32 chars, vem no JS do site) |
+| `authorization` | session token, generated in step 2 |
+| `ocp-apim-subscription-key` | the gateway's public key (32 chars, comes in the site's JS) |
 | `device` | `novosite` |
 | `culture` | `pt-BR` |
 
-Corpo que o site manda:
+Body the site sends:
 
 ```json
 {"criteria":[{"departureStation":"VCP","arrivalStation":"REC",
@@ -64,117 +66,120 @@ Corpo que o site manda:
  "currencyCode":"BRL"}
 ```
 
-## 4. Nenhuma chamada nossa passa — e o erro engana
+## 4. None of our calls get through, and the error misleads
 
-Testei quatro transportes, todos com os mesmos headers da chamada boa:
+I tried four transports, all with the same headers as the good call:
 
-| transporte | resultado |
+| transport | result |
 |---|---|
-| `fetch` de dentro da página | `Failed to fetch` |
-| `XMLHttpRequest` de dentro da página | erro de rede |
-| `fetch` de um iframe novo (sem o embrulho anti-bot do site) | `Failed to fetch` |
-| requisição do Playwright (fora do JS da página) | **403 com página HTML de bloqueio** |
+| `fetch` from inside the page | `Failed to fetch` |
+| `XMLHttpRequest` from inside the page | network error |
+| `fetch` from a fresh iframe (without the site's anti-bot wrapper) | `Failed to fetch` |
+| Playwright request (outside the page's JS) | **403 with an HTML block page** |
 
-O console diz *"blocked by CORS policy: No 'Access-Control-Allow-Origin'"*, o que
-manda pro caminho errado. **Não é CORS.** A quarta linha mostra o que acontece de
-verdade: a requisição é barrada por anti-bot e devolve uma página de bloqueio — que,
-por ser HTML de erro, não traz cabeçalho de CORS. O navegador então relata o sintoma,
-não a causa.
+The console says *"blocked by CORS policy: No 'Access-Control-Allow-Origin'"*,
+which points the wrong way. **It is not CORS.** The fourth row shows what really
+happens: the request is stopped by the anti-bot and gets a block page, which, as
+an error HTML, carries no CORS header. The browser then reports the symptom, not
+the cause.
 
-Ou seja: aqui **não basta a chamada sair de dentro do navegador**, como bastou no
-Smiles. Só passa a requisição que o próprio site montou.
+So here **it is not enough for the call to leave from inside the browser**, as it
+was on Smiles. Only the request the site itself built gets through.
 
-## 5. O que funciona: sequestrar o corpo
+## 5. What works: hijacking the body
 
-Interceptar a requisição do site e substituir só o `postData`:
+Intercept the site's request and replace only `postData`:
 
 ```ts
-await page.route("**/availability/v*/availability", (rota) =>
-  rota.continue({ postData: JSON.stringify(corpo) }));
+await page.route("**/availability/v*/availability", (route) =>
+  route.continue({ postData: JSON.stringify(body) }));
 await page.goto(deepLink());
 ```
 
-Resultado: **200**. A requisição continua sendo a do site, com tudo que o anti-bot
-espera; só o que pedimos muda.
+Result: **200**. The request is still the site's, with everything the anti-bot
+expects; only what we ask for changes.
 
-## 6. Quantas datas cabem numa chamada — medido
+## 6. How many dates fit one call: measured
 
-| `criteria` | resultado |
+| `criteria` | result |
 |---|---|
-| 1 | 200, 1 data, 20 KB |
-| 6 | **200, 6 datas, 125 KB** |
+| 1 | 200, 1 date, 20 KB |
+| 6 | **200, 6 dates, 125 KB** |
 | 7, 8, 9, 10, 12 | 400 `{"notifications":["GetTripAvailabilityRequestFailed"]}` |
 
-A primeira rodada tinha um vício: as listas maiores incluíam uma data que as menores
-não tinham, então o 400 podia ser da data, não da quantidade. Refiz com **7 datas
-espremidas dentro da mesma faixa já testada como boa** (dias 90–125): **400 do mesmo
-jeito**. **Seis é o teto, e é da quantidade.** O `chunks(…, 6)` do projeto antigo não
-era chute.
+The first round had a flaw: the bigger lists included a date the smaller ones
+did not, so the 400 could come from the date, not the count. I redid it with
+**7 dates squeezed inside the same range already tested as good** (days
+90–125): **400 all the same**. **Six is the ceiling, and it is about the
+count.** The old project's `chunks(…, 6)` was not a guess.
 
-**`flexibleDays` não faz nada.** Comparei ±3 contra 0 nas mesmas 6 datas: resposta
-byte a byte do mesmo tamanho (125.150) e `lowestPoints` idêntico em todas as datas.
-Não existe aqui o equivalente ao `calendarDayList` do Smiles — cada data custa o que
-custa, e um ano são ⌈365/6⌉ = **61 chamadas por direção**.
+**`flexibleDays` does nothing.** I compared ±3 against 0 on the same 6 dates:
+responses of the exact same byte size (125,150) and identical `lowestPoints` on
+every date. There is no equivalent of Smiles' `calendarDayList` here: each date
+costs what it costs, and a year is ⌈365/6⌉ = **61 calls per direction**.
 
-Não testei se dá pra fazer a SPA repetir a busca sem recarregar a página. Fica como
-otimização da Fase 1 — e a seção 7 mostra que ela deixou de ser opcional.
+I did not test whether the SPA can repeat the search without reloading the page.
+It stays as a phase 1 optimization, and section 7 shows it stopped being
+optional.
 
-## 7. O limite que derruba o plano: 8 navegações seguidas
+## 7. The limit that sinks the plan: 8 navigations in a row
 
-Medir volume antes de projetar foi a lição cara do Smiles, então testei: 30
-navegações seguidas, 6 datas cada, perfil limpo.
+Measuring volume before designing was the expensive lesson from Smiles, so I
+tested: 30 navigations in a row, 6 dates each, clean profile.
 
 ```
 # 1 | 6s  | 200 | 6 trips | 5894ms
 ...
 # 8 | 47s | 200 | 6 trips | 4909ms
-# 9 | a busca simplesmente não dispara mais (timeout de 60s)
+# 9 | the search simply stops firing (60s timeout)
 ```
 
-**Parou na 9ª, aos ~47 segundos.**
+**It stopped on the 9th, at ~47 seconds.**
 
-Uma segunda sonda foi ver o que aparece na tela nesse momento, em vez de contar
-timeout — e o site diz com todas as letras:
+A second probe looked at what shows on screen at that moment, instead of
+counting timeouts, and the site says it plainly:
 
 ```
-403 em www.voeazul.com.br/br/pt/home/selecao-voo
+403 on www.voeazul.com.br/br/pt/home/selecao-voo
 "Oops! Just a moment. We detected unusual activity from your IP.
  Access is temporarily limited. Please try disabling VPN, clearing
- cookies, or wait a moment. IP: <o IP de saída da máquina>"
+ cookies, or wait a moment. IP: <the machine's outgoing IP>"
 ```
 
-Três coisas ficam claras:
+Three things become clear:
 
-1. **O bloqueio é por IP, e a própria página diz isso.** Não é cookie, não é perfil,
-   não é sessão — limpar cookie não muda nada, como o texto sugere.
-2. **Cai o site inteiro, não só a API.** O 403 é na navegação; a busca nem chega a
-   ser tentada.
-3. **Dura muito.** Do primeiro bloqueio até a última tentativa passou mais de meia
-   hora, e continuava bloqueado.
+1. **The block is per IP, and the page itself says so.** It is not the cookie,
+   the profile or the session; clearing cookies changes nothing, whatever the
+   text suggests.
+2. **The whole site goes down, not just the API.** The 403 is on the navigation;
+   the search is not even attempted.
+3. **It lasts long.** From the first block to the last attempt more than half an
+   hour went by, and it was still blocked.
 
-É o mesmo formato do 406 do Smiles, com uma diferença importante: lá o teto era de
-~100–150 requisições; aqui bastaram **8 navegações em 47 segundos**.
+It is the same shape as Smiles' 406, with one important difference: there the
+ceiling was ~100–150 requests; here **8 navigations in 47 seconds** were enough.
 
-Isso derruba o desenho ingênuo: **61 navegações seguidas não acontecem.** Um ano por
-direção precisa de outra coisa —
+That sinks the naive design: **61 navigations in a row will not happen.** A year
+per direction needs something else:
 
-- **medir se o intervalo importa.** 8 navegações em 47s é ~6s entre elas, rápido pra
-  um humano. No Smiles ritmo não mudava nada (o orçamento era de volume), mas lá a
-  mensagem falava de requisição e aqui fala de *"unusual activity"*. **É o primeiro
-  teste a fazer**, e precisa esperar o bloqueio passar;
-- descobrir se a SPA refaz a busca sem recarregar — se o gasto estiver na navegação
-  e não na consulta, muda tudo;
-- ou aceitar janelas menores por busca, como ficou o Smiles.
+- **measure whether the interval matters.** 8 navigations in 47s is ~6s apart,
+  fast for a human. On Smiles the pace changed nothing (the budget was about
+  volume), but there the message talked about requests and here it talks about
+  *"unusual activity"*. **It is the first test to run**, and it has to wait for
+  the block to pass;
+- find out whether the SPA redoes the search without reloading; if the cost is
+  in the navigation and not in the query, everything changes;
+- or accept smaller windows per search, as Smiles ended up.
 
-**Nada disso está respondido.** Enquanto não estiver, o módulo não tem custo
-conhecido, e prometer "ano inteiro" seria inventar.
+**None of this is answered.** Until it is, the module has no known cost, and
+promising "a whole year" would be making it up.
 
-## 8. Forma da resposta e as armadilhas
+## 8. Response shape and its traps
 
 ```
-data.trips[]                       um por data pedida
-  .std                             a data
-  .fareInformation                 {lowestPoints, highestPoints}  ← resumo barato do dia
+data.trips[]                       one per requested date
+  .std                             the date
+  .fareInformation                 {lowestPoints, highestPoints}  ← cheap summary of the day
   .journeys[]
     .identifier                    {carrierCode, flightNumber, std, sta, duration, connections}
     .fares[]
@@ -185,28 +190,29 @@ data.trips[]                       um por data pedida
     .segments[].legs[].legInfo     {capacity, lid, sold, remainingSeats}
 ```
 
-Quatro coisas que precisam de decisão explícita no módulo, não de default:
+Four things that need an explicit decision in the module, not a default:
 
-1. **`amountLevel` vai de 1 a 5** — é a escada pontos↔dinheiro. O nível 1 é o
-   "tudo em pontos"; do 2 em diante entra dinheiro (`fareMoney` > 0). Comparar níveis
-   diferentes é somar moedas diferentes.
-2. **`points.discount.applied: true`** com `restriction: "DiscountForContactPax"`:
-   o valor mostrado já vem com desconto de cliente. Existem `amount` **e**
-   `discountedAmount` — os dois precisam ser guardados, senão o alerta anuncia um
-   preço que nem todo passageiro consegue.
-3. **`remainingSeats` é assento físico da perna** (`capacity - sold`), **não**
-   assento de prêmio naquele nível de pontos. Chamar isso de "assentos disponíveis"
-   no alerta seria mentira.
-4. **Taxa vem partida**: `taxesAndFees` + `convenienceFee`. Somar sem dizer, ou
-   mostrar só uma, muda o número que o cliente vê.
+1. **`amountLevel` goes from 1 to 5**: the points↔cash ladder. Level 1 is "all
+   points"; from 2 on cash comes in (`fareMoney` > 0). Comparing different
+   levels is adding different currencies.
+2. **`points.discount.applied: true`** with `restriction: "DiscountForContactPax"`:
+   the value shown already carries a customer discount. There is `amount`
+   **and** `discountedAmount`; both must be kept, otherwise the alert announces
+   a price not every passenger gets.
+3. **`remainingSeats` is the leg's physical seats** (`capacity - sold`), **not**
+   award seats at that points level. Calling it "available seats" in the alert
+   would be a lie.
+4. **The fee comes split**: `taxesAndFees` + `convenienceFee`. Adding them
+   silently, or showing only one, changes the number the client sees.
 
-## 9. `cabin` vem `null` no doméstico
+## 9. `cabin` comes `null` on domestic routes
 
-Em VCP→REC todos os `fares` vieram com `cabin: null` e `productClass.category:
-"Regular"`. A distinção de cabine provavelmente só aparece em rota internacional —
-**precisa ser confirmada antes de o módulo prometer filtro de cabine.**
+On VCP→REC every `fares` entry came with `cabin: null` and
+`productClass.category: "Regular"`. The cabin distinction probably only shows up
+on international routes; **it must be confirmed before the module promises a
+cabin filter.**
 
 ## Fixtures
 
-- `fixtures/azul-real.json` — uma data (a chamada original do site)
-- `fixtures/azul-real-multidata.json` — seis datas (chamada sequestrada)
+- `fixtures/azul-real.json`: one date (the site's original call)
+- `fixtures/azul-real-multidata.json`: six dates (hijacked call)

@@ -1,106 +1,106 @@
-# Smiles: os dois bloqueios (406 e 403)
+# Smiles: the two blocks (406 and 403)
 
-Última atualização: 2026-09-15.
+Last updated: 2026-09-15.
 
-A busca do Smiles sai de dentro do Chrome, com a página parada na origem da API
-(`api-air-flightsearch-prd.smiles.com.br`). Existem dois jeitos diferentes de a
-busca morrer, e eles não têm a mesma causa nem a mesma espera.
+The Smiles search runs from inside Chrome, with the page sitting on the API's
+origin (`api-air-flightsearch-prd.smiles.com.br`). There are two different ways
+for the search to die, and they have neither the same cause nor the same wait.
 
-## 406 — orçamento de requisições por IP
+## 406: request budget per IP
 
-- Quem responde é a API.
-- Medido: o bloqueio dura mais de 20 min e replantar os cookies não recupera.
-  É orçamento por IP numa janela móvel (as sondas gastaram ~99 e a seguinte
-  bloqueou na 40ª).
-- Não existe "tentar de novo": insistir só queima o que sobrou do saldo.
-- No código: `ErroOrcamentoSmiles`.
+- The API is what answers.
+- Measured: the block lasts more than 20 min and replanting the cookies does not
+  recover it. It is a per-IP budget over a sliding window (the probes spent ~99
+  and the next run was blocked at the 40th).
+- There is no "try again": insisting only burns what is left of the budget.
+- In the code: `SmilesBudgetError`.
 
-## 403 — negado na borda (resolvido em 2026-09-15)
+## 403: denied at the edge (solved on 2026-09-15)
 
-- Quem responde é o Akamai, com uma página HTML de `Access Denied` no lugar do
-  JSON. O corpo traz um `Reference #…` — é o único pedaço útil pra suporte.
-- **Causa: o header `channel: APP`.** Nada a ver com IP, cookie ou rota.
-- No código: `ErroAcessoNegadoSmiles`, que continua valendo se voltar a
-  acontecer por outro motivo.
+- Akamai is what answers, with an HTML `Access Denied` page instead of the JSON.
+  The body carries a `Reference #…`, the only piece useful for support.
+- **Cause: the `channel: APP` header.** Nothing to do with IP, cookie or route.
+- In the code: `SmilesAccessDeniedError`, which still applies if it happens again
+  for another reason.
 
-### Como foi medido
+### How it was measured
 
-Primeiro descartando o que parecia óbvio:
+First ruling out what looked obvious:
 
-| teste | resultado |
+| test | result |
 |---|---|
-| navegador → raiz e busca, nos 3 ambientes (prd/green/blue) | 403 HTML em todos |
-| **fora do navegador** (`fetch` do Node, mesmo IP) | **406** — o IP está liberado |
-| `www.smiles.com.br` no mesmo Chrome | 200 |
-| limpar os 5 cookies do Akamai e repetir | 403 de novo |
-| entrar pelo site primeiro, pro sensor validar o `_abck` | 403 de novo |
+| browser → root and search, on the 3 environments (prd/green/blue) | 403 HTML on all |
+| **outside the browser** (Node `fetch`, same IP) | **406**: the IP is allowed |
+| `www.smiles.com.br` in the same Chrome | 200 |
+| clearing Akamai's 5 cookies and repeating | 403 again |
+| going through the site first, so the sensor validates `_abck` | 403 again |
 
-Com IP, cookie e rota descartados, sobrou o que a gente manda. Mesma URL,
-mesmos cookies, uma chamada atrás da outra:
+With IP, cookie and route ruled out, what was left is what we send. Same URL,
+same cookies, one call after the other:
 
-| headers | resultado |
+| headers | result |
 |---|---|
-| `x-api-key` + `channel: APP` | **403, HTML de bloqueio** |
-| `x-api-key` sozinho | 200 · 8 voos · **calendário vazio** |
-| `x-api-key` + `channel: WEB` | 200 · 40 voos · **6 dias de calendário** |
+| `x-api-key` + `channel: APP` | **403, block HTML** |
+| `x-api-key` alone | 200 · 8 flights · **empty calendar** |
+| `x-api-key` + `channel: WEB` | 200 · 40 flights · **6 calendar days** |
 
-Ou seja: o 403 não é bloqueio no sentido de "espere passar". É uma regra nova
-que recusa quem se diz app iOS vindo de um Chrome — contradição fácil de
-detectar. E `WEB` não é só o que passa, é o único valor que traz o
-`calendarDayList`, que é a base da varredura de 7 em 7 dias.
+So the 403 is not a block in the "wait for it to pass" sense. It is a new rule
+that refuses whoever claims to be the iOS app coming from a Chrome, an easy
+contradiction to detect. And `WEB` is not just what passes, it is the only value
+that brings `calendarDayList`, the basis of the sweep in 7-day steps.
 
-O `user-agent` falso de iOS saiu junto: `fetch` ignora esse header por
-especificação, então ele nunca chegou a sair do bot.
+The fake iOS `user-agent` went away too: `fetch` ignores that header by
+specification, so it never actually left the bot.
 
-### Três negativas que se parecem no log
+### Three refusals that look alike in the log
 
-| resposta | o que é |
+| response | what it is |
 |---|---|
-| `406` JSON | orçamento de requisições por IP |
-| `403` **HTML** `Access Denied` | a borda recusou esta requisição |
-| `403` **JSON** `Missing Authentication Token` | resposta normal do API Gateway pra rota que não existe — é o que a raiz devolve sempre, não é bloqueio |
+| `406` JSON | request budget per IP |
+| `403` **HTML** `Access Denied` | the edge refused this request |
+| `403` **JSON** `Missing Authentication Token` | the API Gateway's normal answer for a route that does not exist; the root always returns it, it is not a block |
 
-O número sozinho não diz nada; o corpo diz. `renovarSessaoSmiles()` guarda o
-status da raiz ao abrir a sessão (`statusRaizAoAbrir`) e a mensagem do 403 usa
-isso pra dizer se a origem inteira já vinha negada.
+The number alone says nothing; the body does. `refreshSmilesSession()` keeps the
+root's status when opening the session (`rootStatusOnOpen`) and the 403 message
+uses it to say whether the whole origin was already denied.
 
-`npx tsx scripts/probe-smiles-bloqueio.ts` refaz essa medição em ~4
-requisições: compara a chamada de fora do navegador com as variantes de header
-e diz qual delas ainda passa.
+`npx tsx scripts/probe-smiles-block.ts` redoes this measurement in ~4 requests:
+it compares the call from outside the browser with the header variants and says
+which one still passes.
 
-## Um efeito colateral que já enganou o log
+## A side effect that already fooled the log
 
-Antes desta correção o 403 caía no ramo genérico de status, virando "falha do
-dia". Consequências, todas visíveis no log de 2026-09-15:
+Before this fix the 403 fell into the generic status branch and became "day
+failed". Consequences, all visible in the 2026-09-15 log:
 
-1. A varredura continuou depois do primeiro 403 e gastou mais requisições.
-2. Como nenhum dia respondeu, `calendario` ficou vazio e a etapa 2 concluiu
-   "esta rota não devolve calendário" e começou a preencher dia a dia — em cima
-   de evidência falsa. **A rota tinha calendário; o que faltava era acesso.**
-3. A página HTML de bloqueio entrava inteira em cada mensagem de erro.
+1. The sweep carried on after the first 403 and spent more requests.
+2. Since no day answered, the calendar stayed empty and step 2 concluded "this
+   route returns no calendar" and started filling day by day, on false
+   evidence. **The route had a calendar; what was missing was access.**
+3. The whole HTML block page went into every error message.
 
-Hoje o 403 para a varredura na hora, igual ao 406, e devolve o parcial com a
-lacuna explicada.
+Today the 403 stops the sweep immediately, like the 406, and returns the partial
+result with the gap explained.
 
-## 452 — dois sentidos, e nenhum é bloqueio (medido em 2026-09-29)
+## 452: two meanings, and neither is a block (measured on 2026-09-29)
 
-| corpo | o que é |
+| body | what it is |
 |---|---|
-| `{"errorMessage":"data não permitida"}` | data fora da janela de venda |
-| `{"error":"Error: Falha ao obter os dados do aeroporto: XQZ"}` | sigla que o Smiles não conhece |
+| `{"errorMessage":"data não permitida"}` | date outside the sale window |
+| `{"error":"Error: Falha ao obter os dados do aeroporto: XQZ"}` | a code Smiles does not know |
 
-- A janela de venda vai até **hoje + 329 dias**. O dia 330 já responde "data
-  não permitida". A varredura corta o período aí (`JANELA_VENDA_DIAS`) e, se
-  mesmo assim bater na borda, para sem contar como falha.
-- Antes disso todo 452 virava "confira as siglas IATA". A varredura padrão de
-  365 dias pedia as últimas sondagens fora da venda, tomava três 452 seguidos e
-  parava acusando o aeroporto.
-- `npx tsx scripts/recon-smiles-janela.ts GRU MRU` refaz a medição (~10
-  requisições) e também diz se a rota traz o calendário de 7 dias.
+- The sale window goes up to **today + 329 days**. Day 330 already answers "data
+  não permitida". The sweep cuts the period there (`SALE_WINDOW_DAYS`) and, if it
+  still hits the edge, stops without counting it as a failure.
+- Before that every 452 became "check the IATA codes". The default 365-day sweep
+  asked for the last samples outside the sale window, got three 452s in a row and
+  stopped blaming the airport.
+- `npx tsx scripts/recon-smiles-window.ts GRU MRU` redoes the measurement (~10
+  requests) and also says whether the route brings the 7-day calendar.
 
-## Rotas só de parceira não têm calendário
+## Partner-only routes have no calendar
 
-GRU→MRU responde `resultType: "congener"`, todos os voos `AMADEUS`, e o
-`calendarDayList` vem vazio. `forceCongener=true` não muda nada, e a
-`flightList` só traz o dia pedido (`fixtures/smiles-real-congener.json`). Nessas
-rotas cada dia custa uma consulta: ~330 por perna para cobrir a janela inteira.
+GRU→MRU answers `resultType: "congener"`, every flight `AMADEUS`, and
+`calendarDayList` comes back empty. `forceCongener=true` changes nothing, and
+`flightList` only brings the requested day (`fixtures/smiles-real-congener.json`).
+On these routes each day costs one query: ~330 per leg to cover the whole window.

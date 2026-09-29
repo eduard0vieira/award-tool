@@ -1,58 +1,56 @@
-# Recon AA (Etapa 0) — anotações dos endpoints
+# AA recon (step 0): endpoint notes
 
-> Levantado em 2026-08-03 com Chrome real via Playwright. Estas notas viram
-> comentários no bot-aa.ts quando ele for implementado (e este arquivo pode
-> ser apagado depois).
+> Gathered on 2026-08-03 with real Chrome through Playwright.
 
-## Como rodar buscas na AA (procedimento)
+## How to run AA searches (procedure)
 
-1. `npm run chrome` — abre uma janela do Chrome com um perfil separado
-   (`~/.chrome-bot-aa`). Deixe aberta; seu Chrome normal segue funcionando ao
-   lado. Precisa ser perfil separado: desde o Chrome 136 a porta de depuração
-   é ignorada no perfil padrão.
-2. Se der "Access Denied": feche essa janela, rode
-   `bash scripts/importar-cookies.sh aa.com` e reabra com `npm run chrome`.
-3. Buscar normalmente pela aba American do bot.
+1. `npm run chrome` opens a Chrome window with a separate profile
+   (`~/.chrome-bot-aa`). Leave it open; your normal Chrome keeps working next to
+   it. It has to be a separate profile: since Chrome 136 the debugging port is
+   ignored on the default profile.
+2. If you get "Access Denied": close that window, run
+   `bash scripts/import-cookies.sh aa.com` and reopen with `npm run chrome`.
+3. Search normally from the bot's American tab.
 
-O passo 2 é o que destrava: a Akamai barra qualquer navegador sem os cookies
-dela (`_abck`, `bm_s`) — inclusive um Chrome comum, sem automação, com perfil
-novo. O script leva SÓ os cookies de aa.com do seu Chrome de todo dia pro
-perfil do bot. Refaça quando esses cookies expirarem e o bloqueio voltar.
+Step 2 is what unlocks it: Akamai blocks any browser without its cookies
+(`_abck`, `bm_s`), including a plain Chrome, with no automation, on a new
+profile. The script carries ONLY the aa.com cookies from your everyday Chrome to
+the bot's profile. Redo it when those cookies expire and the block comes back.
 
 ## Anti-bot (Akamai)
 
-- Chromium empacotado do Playwright: **403 imediato** em qualquer URL de /booking.
-- Chrome real (`channel: "chrome"` + `--disable-blink-features=AutomationControlled`) **passa**, desde que aqueça primeiro: visitar `https://www.aa.com/` (~4s) antes de ir pro deep-link.
-- `page.request.post(...)` (fora do navegador, mesmo com cookies): **403** — o TLS não é o do Chrome.
-- `fetch` de dentro da página (`page.evaluate`): **200** — é o caminho pra chamar a API.
+- Playwright's bundled Chromium: **immediate 403** on any /booking URL.
+- Real Chrome (`channel: "chrome"` + `--disable-blink-features=AutomationControlled`) **passes**, as long as it warms up first: visit `https://www.aa.com/` (~4s) before going to the deep link.
+- `page.request.post(...)` (outside the browser, even with cookies): **403**; the TLS is not Chrome's.
+- `fetch` from inside the page (`page.evaluate`): **200**; this is the way to call the API.
 
-## Deep-link (funciona a frio após aquecimento)
+## Deep link (works cold after warming up)
 
 ```
 https://www.aa.com/booking/search?locale=en_US&pax=1&adult=1&type=OneWay
-  &searchType=Award&cabin=<CABINE>&carriers=ALL
+  &searchType=Award&cabin=<CABIN>&carriers=ALL
   &slices=[{"orig":"GRU","origNearby":false,"dest":"MIA","destNearby":false,"date":"2026-09-15"}]
 ```
-(`slices` URL-encoded). Redireciona pra `POST /booking/choose-flights/1?sid=...` (HTML).
-`cabin=BUSINESS` na URL vira `"BUSINESS,FIRST"` no request interno e o carrossel
-passa a mostrar preços de Business — o filtro de cabine é server-side.
+(`slices` URL-encoded). It redirects to `POST /booking/choose-flights/1?sid=...` (HTML).
+`cabin=BUSINESS` in the URL becomes `"BUSINESS,FIRST"` in the internal request
+and the carousel starts showing Business prices; the cabin filter is server side.
 
-## Página de resultados
+## Results page
 
-- Estado completo embutido em `<script id="ng-state" type="application/json">`:
-  `SearchData.itineraryResult.slices[]` (itinerários do dia: `stops`,
-  `segments[]`, `pricingDetail[]` com as 4 cabines — `productType`
+- The full state is embedded in `<script id="ng-state" type="application/json">`:
+  `SearchData.itineraryResult.slices[]` (the day's itineraries: `stops`,
+  `segments[]`, `pricingDetail[]` with the 4 cabins, `productType`
   COACH/PREMIUM_ECONOMY/BUSINESS/FIRST, `perPassengerAwardPoints`,
-  `productAvailable`) e `SearchData.weeklyResult.days[]` (carrossel ±6 dias:
+  `productAvailable`) and `SearchData.weeklyResult.days[]` (±6-day carousel:
   `date`, `awardPointsTotal`).
-- Banner de cookies (OneTrust) pode cobrir a página — dispensar com "Reject All".
-- Botão "CALENDAR" abre o calendário mensal → dispara o XHR abaixo.
+- The cookie banner (OneTrust) may cover the page; dismiss it with "Reject All".
+- The "CALENDAR" button opens the monthly calendar → fires the XHR below.
 
-## API do calendário (o coração do bot)
+## Calendar API (the heart of the bot)
 
-`POST https://www.aa.com/booking/api/search/calendar` — **sem estado de
-sessão** (`sessionId`/`solutionSet` vazios funcionam; qualquer `departureDate`
-serve, o mês retornado é o do departureDate). Body:
+`POST https://www.aa.com/booking/api/search/calendar`, **no session state**
+(empty `sessionId`/`solutionSet` work; any `departureDate` will do, the month
+returned is the departureDate's). Body:
 
 ```json
 {
@@ -61,10 +59,10 @@ serve, o mês retornado é o do departureDate). Body:
   "requestHeader": { "clientId": "AAcom" },
   "slices": [{
     "allCarriers": true,
-    "cabin": "BUSINESS,FIRST",      // "" = todas | "COACH" | "PREMIUM_ECONOMY" | "BUSINESS,FIRST"
+    "cabin": "BUSINESS,FIRST",      // "" = all | "COACH" | "PREMIUM_ECONOMY" | "BUSINESS,FIRST"
     "departureDate": "2026-09-15",
     "destination": "MIA", "destinationNearbyAirports": false,
-    "maxStops": null,               // 0 = só voo direto (a confirmar em rota sem direto)
+    "maxStops": null,               // 0 = direct only (to confirm on a route without a direct flight)
     "origin": "GRU", "originNearbyAirports": false
   }],
   "tripOptions": { "corporateBooking": false, "fareType": "Lowest", "locale": "en_US",
@@ -74,83 +72,85 @@ serve, o mês retornado é o do departureDate). Body:
 }
 ```
 
-Resposta: `calendarMonths[0] = { month, year, weeks[] }`; cada
-`weeks[].days[]` = `{ date, dayOfMonth, validDay, solution }` com
-`solution.perPassengerAwardPoints` (menor valor do dia pra cabine pedida;
-`solution: null` = sem disponibilidade). `calendarDetails.lowestMonthlyPrice`
-= menor do mês.
+Response: `calendarMonths[0] = { month, year, weeks[] }`; each
+`weeks[].days[]` = `{ date, dayOfMonth, validDay, solution }` with
+`solution.perPassengerAwardPoints` (the day's lowest value for the requested
+cabin; `solution: null` = no availability). `calendarDetails.lowestMonthlyPrice`
+= the month's lowest.
 
-## Passageiros (validado)
+## Passengers (validated)
 
-`passengers[0].count` é respeitado pelo calendário: mesma rota/mês/cabine com
-count 1, 2, 4 e 9 devolve valores diferentes por dia (GRU–MIA econômica,
-out/2026: dia 05 saiu 48000 → 48500 → 48500 → 49000; dia 03, 43500 → 45000 com
-9). Em rota folgada a quantidade de dias não muda; em rota apertada é o dia
-inteiro que some, porque a AA só cota se houver assento-prêmio pra todo mundo
-no mesmo voo. **`perPassengerAwardPoints` é por pessoa**, então o teto de
-milhas não muda de significado com mais passageiros.
+`passengers[0].count` is honored by the calendar: the same route/month/cabin
+with count 1, 2, 4 and 9 returns different values per day (GRU–MIA economy,
+Oct/2026: day 05 went 48000 → 48500 → 48500 → 49000; day 03, 43500 → 45000 with
+9). On a loose route the number of days does not change; on a tight route the
+whole day disappears, because AA only quotes when there is an award seat for
+everyone on the same flight. **`perPassengerAwardPoints` is per person**, so the
+miles ceiling keeps its meaning with more passengers.
 
-Máximo: **9**. Com 10 responde 400 com
+Maximum: **9**. With 10 it answers 400 with
 `"Total number of passengers must be between 1 and 9."` (reasonCode 27).
 
-## Os dois significados do 400
+## The two meanings of 400
 
-O mesmo status cobre duas coisas muito diferentes, e a distinção só existe no
-corpo (`details[].reason`):
+The same status covers two very different things, and the distinction only
+exists in the body (`details[].reason`):
 
-- fim do calendário de vendas → `field: "slices[0].departureDate"`,
+- end of the sales calendar → `field: "slices[0].departureDate"`,
   `"Search date is outside of available schedule."` (reasonCode 1356);
-- pedido inválido (ex.: passageiros demais) → o campo problemático em
+- invalid request (e.g. too many passengers) → the offending field in
   `details[].field`.
 
-Confundir os dois faz a varredura parar no primeiro mês e devolver "nenhuma
-disponibilidade" em vez de erro — por isso `buscarMes` classifica pelo motivo,
-não pelo status.
+Mixing them up makes the sweep stop at the first month and return "no
+availability" instead of an error, which is why `fetchMonth` classifies by the
+reason, not by the status.
 
-## Varredura de ano (validada)
+## Year sweep (validated)
 
-1. Aquecer home → deep-link (1 navegação; estabelece cookies Akamai).
-2. 12 × `fetch` in-page no `/booking/api/search/calendar`, um por mês
-   (`departureDate` = dia 15 de cada mês), com pausa entre eles.
-3. Parsear `calendarMonths`. Total: ~13 requests por direção/ano.
+1. Warm up on the home page → deep link (1 navigation; sets Akamai's cookies).
+2. 12 × in-page `fetch` on `/booking/api/search/calendar`, one per month
+   (`departureDate` = the 15th of each month), with a pause between them.
+3. Parse `calendarMonths`. Total: ~13 requests per direction/year.
 
-## Pendências pra Etapa 1/2
+## Open points for steps 1/2
 
-- Confirmar `maxStops: 0` numa rota sem voo direto (no teste GRU–MIA o menor
-  preço já era do direto, então o filtro não mudou nada — inconclusivo).
-- Confirmar o valor de cabine da Premium Economy (`"PREMIUM_ECONOMY"` é o
-  productType; o valor aceito no request pode ser outro).
-- Mensagem/formato de erro de rota inexistente e de rate-limit da AA.
+- Confirm `maxStops: 0` on a route without a direct flight (in the GRU–MIA test
+  the lowest price was already the direct one, so the filter changed nothing;
+  inconclusive).
+- Confirm the Premium Economy cabin value (`"PREMIUM_ECONOMY"` is the
+  productType; the value accepted in the request may be another).
+- Error message/format for a nonexistent route and for AA's rate limit.
 
-## Link de emissão por dia (2026-09-17)
+## Booking link per day (2026-09-17)
 
-Cada dia do relatório da AA sai com um deep link pra página de resultados
-daquela data — é o mesmo endereço que o site gera numa busca feita na mão:
+Each day of the AA report comes with a deep link to that date's results page,
+the same address the site generates for a search made by hand:
 
 ```
 https://www.aa.com/booking/search?locale=en_US&pax=N&adult=N
-  &type=OneWay&searchType=Award&cabin=<CABINE>&carriers=ALL
+  &type=OneWay&searchType=Award&cabin=<CABIN>&carriers=ALL
   &slices=[{"orig":"GRU","origNearby":false,"dest":"MIA","destNearby":false,"date":"2026-11-20"}]
 ```
 
-O `cabin` da URL **não aceita os mesmos valores do request**: no corpo do
-calendário a Executiva é `BUSINESS,FIRST`, mas na URL vale `BUSINESS`. Por isso
-existe `CABINE_AA_LINK` separado de `CABINE_AA_REQUEST`.
+The URL's `cabin` **does not take the same values as the request**: in the
+calendar body Business is `BUSINESS,FIRST`, but in the URL it is `BUSINESS`.
+That is why `AA_LINK_CABINS` exists apart from `AA_REQUEST_CABINS`.
 
-Conferido no Chrome do usuário em 2026-09-17 (GRU → MIA, 20/11/2026):
+Checked in the user's Chrome on 2026-09-17 (GRU → MIA, 2026-11-20):
 
-- `cabin=BUSINESS` → redireciona pra `booking/choose-flights/1` com a data certa
-  e só a coluna Business. O voo direto AA930 apareceu por 171.5K, o mesmo número
-  do carrossel do dia.
-- `cabin=PREMIUM_ECONOMY` → idem, com as colunas Main/Premium Economy/Business.
+- `cabin=BUSINESS` → redirects to `booking/choose-flights/1` with the right date
+  and only the Business column. The direct flight AA930 showed up at 171.5K, the
+  same number as the day's carousel.
+- `cabin=PREMIUM_ECONOMY` → same, with the Main/Premium Economy/Business columns.
 
-Duas coisas que valem lembrar:
+Two things worth remembering:
 
-1. O link abre no navegador **do usuário**, não no perfil do bot. Perfil novo em
-   folha leva `Access Denied` da AA; o navegador do dia a dia passa normal.
-2. A sessão da busca (`sid`) é criada pela própria AA no redirecionamento, então
-   o link não vence — pode ser guardado e clicado depois.
+1. The link opens in the **user's** browser, not in the bot's profile. A brand
+   new profile gets `Access Denied` from AA; the everyday browser passes
+   normally.
+2. The search session (`sid`) is created by AA itself in the redirect, so the
+   link does not expire; it can be kept and clicked later.
 
-`abrirPaginaDeResultados()` (o passo que planta os cookies do bot) usa a mesma
-função de URL, mas **sem cabine**: ali a página só serve pra abrir sessão, e
-quem filtra é o request do calendário.
+`openResultsPage()` (the step that plants the bot's cookies) uses the same URL
+function. There the page only serves to open the session, and the calendar
+request is what filters.

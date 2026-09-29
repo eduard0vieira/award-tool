@@ -1,22 +1,23 @@
-# Recon Iberia (Fase 0) — anotações
+# Iberia recon (phase 0): notes
 
-> Levantado em 2026-08-18 com `npx tsx scripts/recon-iberia.ts GRU MAD`, num perfil
-> de Chrome novo, sem login e sem cookie herdado.
+> Gathered on 2026-08-18 with `npx tsx scripts/recon-iberia.ts GRU MAD`, on a
+> new Chrome profile, no login and no inherited cookie.
 
-## Resumo em uma linha
+## One-line summary
 
-**A busca com Avios exige conta Iberia Club.** Clicar em Pesquisar com "Pagar com
-Avios" marcado não chama disponibilidade nenhuma: pede login — em 2026-08 por
-redirecionamento pro `login.iberia.com`, desde 2026-09 por um modal na própria
-home (ver 4.1). Todo o resto do caminho está limpo — é só isso que falta.
+**The Avios search needs an Iberia Club account.** Clicking Search with "Pay with
+Avios" checked calls no availability at all: it asks for a login, in 2026-08 by
+redirecting to `login.iberia.com`, since 2026-09 through a modal on the home page
+itself (see 4.1). The rest of the path is clear; that is all that is missing.
 
-## 1. O bloqueio do projeto antigo não é o nosso
+## 1. The old project's block is not ours
 
-O `cheap-flights` atacava a API do app iOS e morreu por causa de Akamai: cookies
-`_abck`/`bm_sz` colados à mão e um `X-acf-sensor-data` que só o app nativo sabe
-assinar. Nada disso nos atinge, porque quem monta a requisição é o site.
+`cheap-flights` went after the iOS app's API and died because of Akamai:
+`_abck`/`bm_sz` cookies pasted by hand and an `X-acf-sensor-data` that only the
+native app knows how to sign. None of that hits us, because the site is what
+builds the request.
 
-Dois sinais confirmam:
+Two signals confirm it:
 
 ```
 POST https://ibisauth.iberia.com/api/auth/realms/commercial_platform
@@ -24,141 +25,147 @@ POST https://ibisauth.iberia.com/api/auth/realms/commercial_platform
 GET  https://ibisservices.iberia.com/api/rdu-loc/rs/loc/v1/location/areas/origin/
 ```
 
-- O **mesmo endpoint de token** que o projeto antigo chamava com cookie colado, a
-  home chama sozinha, anônima, e recebe 200.
-- O site usa o **mesmo host `ibisservices.iberia.com`** da API do app. O mapa de
-  endpoints levantado lá provavelmente continua valendo.
+- The **same token endpoint** the old project called with a pasted cookie is
+  called by the home page on its own, anonymously, and gets 200.
+- The site uses the **same `ibisservices.iberia.com` host** as the app's API. The
+  endpoint map gathered there probably still holds.
 
-Nenhum desafio de anti-bot apareceu em nenhuma das execuções.
+No anti-bot challenge showed up in any of the runs.
 
-## 2. Onde para: login
+## 2. Where it stops: login
 
-Formulário preenchido (GRU→MAD, data, 1 adulto), `paywithAvios` marcado, clique em
+Form filled (GRU→MAD, date, 1 adult), `paywithAvios` checked, click on
 `#buttonSubmit1`:
 
 ```
-URL final: https://login.iberia.com/IDY_LoginPage?...&market=BRpt&startURL=...
-Título:    Iberia Login
-Texto:     "Faça o login … E-mail ou Num. Iberia Club … Senha"
+Final URL: https://login.iberia.com/IDY_LoginPage?...&market=BRpt&startURL=...
+Title:     Iberia Login
+Text:      "Faça o login … E-mail ou Num. Iberia Club … Senha"
 ```
 
-**Nenhuma chamada de disponibilidade acontece antes disso.** O redirecionamento vem
-do próprio handler do Avios.
+**No availability call happens before that.** The redirect comes from the Avios
+handler itself.
 
-Controle rodado (`SEM_AVIOS=true`): sem marcar Avios a busca não sai da home — mas
-isso é **inconclusivo**, porque provavelmente esbarra na validação do calendário
-(ver seção 4), não no login. Ou seja: sei que Avios exige login; **não** sei ainda
-como se comporta a busca em dinheiro.
+Control run (`WITHOUT_AVIOS=true`): without checking Avios the search does not
+leave the home page, but that is **inconclusive**, because it probably hits the
+calendar validation (see section 4), not the login. So: I know Avios requires a
+login; I do **not** know yet how the cash search behaves.
 
-## 3. O aviso de cookies bloqueia tudo — e não tem botão de recusar
+## 3. The cookie notice blocks everything, and has no reject button
 
-Foi o que travou as primeiras tentativas, e o sintoma engana: cliques dando timeout
-em campos visíveis, e cliques forçados que não surtem efeito.
+This is what stalled the first attempts, and the symptom misleads: clicks
+timing out on visible fields, and forced clicks with no effect.
 
 ```js
 document.elementFromPoint(630, 232)
 // → div.onetrust-pc-dark-filter.ot-fade-in
 ```
 
-O banner cobre a página inteira com um filtro que intercepta todo clique. E os
-únicos botões são **"Aceitar todos os cookies"** e **"Definições de cookies"** —
-não existe "Rejeitar todos", apesar de o texto do banner citar um.
+The banner covers the whole page with a filter that intercepts every click. And
+the only buttons are **"Aceitar todos os cookies"** and **"Definições de
+cookies"**; there is no "Reject all", even though the banner text mentions one.
 
-O script **não aceita nada**: remove a cobertura e segue. O banner fica sem
-resposta, que é o mais próximo de "não consenti" que dá pra fazer sem clicar em
-aceitar.
+The script **accepts nothing**: it removes the overlay and moves on. The banner
+stays unanswered, which is the closest to "did not consent" possible without
+clicking accept.
 
-## 4. Detalhes do formulário (pra quem for mexer)
+## 4. Form details (for whoever touches it)
 
-| o que | como |
+| what | how |
 |---|---|
-| origem / destino | `#flight_origin1` / `#flight_destiny1`, autocomplete: digitar, ↓, Enter |
-| trecho | `#ticketops-seeker` — `Ida e volta`, `Só ida`, `Stopover`, `Múltiplos trajetos` |
-| Avios | `#paywithAvios` — o clique direto não pega; só `checked = true` + eventos |
-| datas | `#flight_round_date1` / `#flight_return_date1`, formato DD/MM/YYYY |
-| cabine | `#tarifa1` — `R` (mais económica), `N` (premium economy), `B` (business) |
-| buscar | `#buttonSubmit1` (o botão visível é uma lupa; o texto "Pesquisar" é interno) |
+| origin / destination | `#flight_origin1` / `#flight_destiny1`, autocomplete: type, ↓, Enter |
+| trip | `#ticketops-seeker`: `Ida e volta`, `Só ida`, `Stopover`, `Múltiplos trajetos` |
+| Avios | `#paywithAvios`: a direct click does not take; only `checked = true` + events |
+| dates | `#flight_round_date1` / `#flight_return_date1`, DD/MM/YYYY format |
+| cabin | `#tarifa1`: `R` (cheapest), `N` (premium economy), `B` (business) |
+| search | `#buttonSubmit1` (the visible button is a magnifier; the "Pesquisar" text is internal) |
 
-Duas armadilhas: **o perfil guarda o estado do formulário entre execuções** (o
-controle sem Avios rodou com Avios ligado na primeira tentativa e mentiu), e
-**escrever no campo de data não basta** — o valor aparece, mas o calendário mantém
-o estado dele por dentro.
+Two traps: **the profile keeps the form state between runs** (the control run
+without Avios ran with Avios on the first time and lied), and **typing in the
+date field is not enough**: the value shows, but the calendar keeps its own
+internal state.
 
-## 4.1. Mudança de comportamento (2026-09-22)
+## 4.1. Behavior change (2026-09-22)
 
-A busca com Avios **não redireciona mais** pro `login.iberia.com`: ela abre um
-**modal na própria home** ("Acesso a Iberia Club"), sem trocar de URL. Uma
-execução inteira morreu por causa disso — o recon reconhecia login só pela URL,
-concluiu que ninguém tinha pedido nada e desistiu em 25s, com o modal na tela.
+The Avios search **no longer redirects** to `login.iberia.com`: it opens a
+**modal on the home page itself** ("Acesso a Iberia Club"), without changing the
+URL. A whole run died because of it: the recon only recognized the login by the
+URL, concluded nobody had asked for anything and gave up after 25s, with the
+modal on screen.
 
-O que continua valendo: nenhuma chamada de disponibilidade sai antes do login, e
-nenhum desafio de anti-bot apareceu (token anônimo segue voltando 200).
+What still holds: no availability call goes out before the login, and no
+anti-bot challenge showed up (the anonymous token keeps returning 200).
 
-Hoje o script reconhece os dois caminhos — URL, iframe de login e modal — e diz
-no log por qual reconheceu. Quando não reconhece, despeja o diagnóstico (frames,
-campos da caixa de login) e salva o HTML em `fixtures/iberia-login-modal.html`.
+Today the script recognizes every path (URL, login iframe and modal) and logs
+which one it recognized. When it recognizes none, it dumps the diagnosis
+(frames, fields of the login box) and saves the HTML to
+`fixtures/iberia-login-modal.html`.
 
-## 5. Como fazer o login (fluxo pronto)
+## 5. How to log in (ready flow)
 
 ```
 npm run recon:iberia GRU MAD 2026-11-16
 ```
 
-O script preenche a busca e, quando a Iberia pedir login, tenta entrar sozinho com
-o que está no `.env` (abaixo). Sem credencial lá, ele **para e espera você**: traz
-a janela do Chrome do bot pra frente, avisa no terminal, e fica checando a cada 3
-segundos. Nos dois casos, assim que a sessão abrir o recon continua — se a Iberia
-não refizer a busca, ele repete o formulário com a sessão já válida.
+The script fills the search and, when Iberia asks for a login, tries to sign in
+on its own with what is in `.env` (below). Without a credential there, it
+**stops and waits for you**: it brings the bot's Chrome window to the front,
+warns in the terminal and checks every 3 seconds. Either way, as soon as the
+session opens the recon carries on; if Iberia does not redo the search, it
+repeats the form with the session already valid.
 
-- espera padrão: 10 min (`IBERIA_LOGIN_WAIT_MS` muda isso);
-- o login fica salvo no perfil do Chrome do bot (`~/.chrome-bot-aa`), então é
-  **uma vez só**, não a cada busca;
-### Preenchimento automático (opcional)
+- default wait: 10 min (`IBERIA_LOGIN_WAIT_MS` changes it);
+- the login stays saved in the bot Chrome's profile (`~/.chrome-bot-aa`), so it is
+  **once**, not on every search.
 
-Com `IBERIA_EMAIL` e `IBERIA_PASSWORD` no `.env`, o script preenche **e envia** o
-formulário — inclusive o fluxo de duas etapas, em que a senha só aparece depois
-do e-mail. A busca roda sem ninguém na frente da máquina, que era o objetivo.
+### Automatic filling (optional)
 
-A janela do bot continua abrindo: se a Iberia pedir 2FA ou captcha, é ali que
-você conclui. As credenciais moram só no `.env` (que está no `.gitignore`), nunca
-no código e nunca no log.
+With `IBERIA_EMAIL` and `IBERIA_PASSWORD` in `.env`, the script fills **and
+submits** the form, including the two-step flow where the password only shows
+up after the e-mail. The search runs with nobody in front of the machine, which
+was the goal.
+
+The bot's window still opens: if Iberia asks for 2FA or a captcha, that is where
+you finish it. The credentials live only in `.env` (which is in `.gitignore`),
+never in the code and never in the log.
 
 ```
-# no .env do projeto (já está no .gitignore)
+# in the project's .env (already in .gitignore)
 IBERIA_EMAIL=...
 IBERIA_PASSWORD=...
 ```
 
-Sem essas variáveis, o login é todo na mão — o script só espera.
+Without these variables the login is entirely by hand; the script just waits.
 
-Seletores do login (Salesforce Identity), caso mudem:
+Login selectors (Salesforce Identity), in case they change:
 `input[name="loginPage:theForm:loginEmailInput"]`, `input[type=password]`,
 `input[name="loginPage:theForm:loginSubmit"]`.
 
-Se aparecer o erro de perfil em uso, feche o Chrome do bot com `npm run
-chrome:parar` (ou pare o `npm run server`, que também segura o perfil) e rode de
-novo.
+If the "profile in use" error shows up, close the bot's Chrome with
+`npm run chrome:stop` (or stop `npm run server`, which also holds the profile)
+and run it again.
 
-## 6. O que falta, e de quem depende
+## 6. What is missing, and who it depends on
 
-Com uma sessão logada da Iberia Club, o caminho daqui é o mesmo que funcionou na
-Azul: deixar o site fazer a requisição e trocar o corpo. Mas o login é do dono da
-conta — **não é coisa que o bot faça sozinho**, e a senha não passa por aqui.
+With a logged-in Iberia Club session, the path from here is the same that worked
+on Azul: let the site make the request and swap the body. But the login belongs
+to the account owner; **it is not something the bot does on its own**, and the
+password does not go through here.
 
-Enquanto isso não existir, ficam sem resposta:
+Until that exists, these stay unanswered:
 
-1. qual endpoint traz a disponibilidade em Avios (candidato do projeto antigo:
-   `api/sse-rpa/rs/v1/availability`, no mesmo host que o site já usa);
-2. quantos dias vêm por resposta — o número que decide o custo de um ano;
-3. se há calendário de preços (como na LATAM em dinheiro) ou só dia a dia;
-4. se a sessão logada cai sozinha, e com que frequência.
+1. which endpoint brings availability in Avios (the old project's candidate:
+   `api/sse-rpa/rs/v1/availability`, on the same host the site already uses);
+2. how many days come per response, the number that decides the cost of a year;
+3. whether there is a price calendar (like LATAM in cash) or only day by day;
+4. whether the logged-in session drops on its own, and how often.
 
-## 7. Fase 1 concluída (2026-09-22) — o que a resposta real diz
+## 7. Phase 1 done (2026-09-22): what the real response says
 
-Login automático pelo `.env` funcionou, e desta vez a Iberia **redirecionou**
-(não foi modal): os dois caminhos existem, então o script precisa dos dois.
+The automatic login from `.env` worked, and this time Iberia **redirected** (it
+was not the modal): both paths exist, so the script needs both.
 
-**Endpoint confirmado** — é o mesmo que o projeto antigo usava:
+**Endpoint confirmed**, the same one the old project used:
 
 ```
 POST https://ibisservices.iberia.com/api/sse-rpa/rs/v1/availability   → 200
@@ -168,129 +175,132 @@ POST https://ibisservices.iberia.com/api/sse-rpa/rs/v1/availability   → 200
  "marketCode":"BR","preferredCabin":""}
 ```
 
-Headers que a aplicação manda: `authorization` (JWT emitido após o login),
+Headers the application sends: `authorization` (JWT issued after the login),
 `x-request-appversion`, `x-request-device`, `x-request-osversion`,
 `x-observations-current-page: availability`.
 
-**Uma data por resposta.** Cada chamada devolve um `originDestination` com 5–6
-`slices` (as opções de voo daquele dia), 26–32 `offers` no total. Varrer um ano
-é uma requisição por dia — a menos que o calendário (abaixo) funcione.
+**One date per response.** Each call returns one `originDestination` with 5–6
+`slices` (the flight options of that day), 26–32 `offers` in total. Sweeping a
+year is one request per day, unless the calendar (below) works.
 
-**A sessão aguenta.** Repetir a mesma chamada de dentro da página com +1 e +30
-dias voltou 200 nas duas (`fixtures/iberia-real-mais1.json`,
-`iberia-real-mais30.json`). Confirma o padrão da AA/Azul: quem assina o TLS e
-manda o cookie é o navegador.
+**The session holds.** Repeating the same call from inside the page with +1 and
++30 days returned 200 on both (`fixtures/iberia-real-plus1.json`,
+`iberia-real-plus30.json`). It confirms the AA/Azul pattern: the browser is what
+signs the TLS and sends the cookie.
 
-### O bloqueio novo: a disponibilidade não traz preço
+### The new block: availability carries no price
 
 ```json
 {"offerId":"AT021420261215E","bookingClass":"ECONOMY","bookingCode":"E",
  "fareFamily":"X","rbd":"E","remainingSeats":4,"fareBasis":"EATFF"}
 ```
 
-Varredura no arquivo inteiro: **nenhum campo de valor, Avios, taxa ou moeda.**
-O `models.py` do projeto antigo lia `offer.totalPrice.fare` — campo que não
-existe nesta resposta. Mais um caso de schema imaginado, agora medido.
+A sweep of the whole file: **no value, Avios, fee or currency field.** The old
+project's `models.py` read `offer.totalPrice.fare`, a field that does not exist
+in this response. One more case of imagined schema, now measured.
 
-Isso importa porque `DiaFormatado.valorK` é `number` obrigatório em
-`src/nucleo/comum.ts`: **sem valor por dia não há `SecaoRelatorio` legal**, e
-inventar um placeholder é exatamente a falha que este repositório proíbe.
+This matters because `FormattedDay.valueK` is a required `number` in
+`src/core/common.ts`: **without a value per day there is no legitimate
+`ReportSection`**, and inventing a placeholder is exactly the failure this
+repository forbids.
 
-Duas pistas de onde o número pode estar, nenhuma verificada:
+Two leads on where the number may be, neither verified:
 
-- o corpo enviado **não tem marca de Avios** (nada de `pagoAvios`), embora a URL
-  da página tenha `pagoAvios=true` — o contexto de resgate pode viajar no bearer;
-- `POST /api/sse-rpa/rs/v1/calendar` existe e voltou **404 com `marketCode: BR`**;
-  nunca foi repetido com outro mercado.
+- the body sent **has no Avios marker** (no `pagoAvios`), although the page URL
+  has `pagoAvios=true`; the redemption context might travel in the bearer;
+- `POST /api/sse-rpa/rs/v1/calendar` exists and returned **404 with
+  `marketCode: BR`**; it was never repeated with another market.
 
-### Armadilha do próprio recon (corrigida)
+### A trap in the recon itself (fixed)
 
-A resposta era pareada ao pedido **pela URL**, e a página chama
-`/availability` duas vezes (marketCode BR e depois US). Isso pode ter grudado a
-resposta de um pedido no outro: `iberia-real.json` diz
-`contextMetadata.country: "US"` com `marketCode: "BR"` no corpo. **Trate esse
-arquivo como suspeito**; os dois de replay (`+1`/`+30`) vêm de chamadas isoladas
-e são confiáveis. O pareamento agora é pela identidade da requisição.
+The response was paired with the request **by URL**, and the page calls
+`/availability` twice (marketCode BR and then US). That may have glued one
+request's response to the other: `iberia-real.json` says
+`contextMetadata.country: "US"` with `marketCode: "BR"` in the body. **Treat that
+file as suspect**; the two replay files (`+1`/`+30`) come from isolated calls and
+are reliable. Pairing is now by request identity.
 
-## 8. A rodada que buscou o aeroporto errado (2026-09-22)
+## 8. The run that searched the wrong airport (2026-09-22)
 
-Uma execução inteira se perdeu e **quase passou por resultado válido**: o
-autocomplete do destino escolheu **Madison (MSN)** em vez de Madrid (MAD), e a
-tela respondeu "não encontramos assentos Iberia Club exclusivos" — que é a
-resposta certa para a pergunta errada.
+A whole run was lost and **almost passed as a valid result**: the destination
+autocomplete picked **Madison (MSN)** instead of Madrid (MAD), and the screen
+answered "we did not find exclusive Iberia Club seats", the right answer to the
+wrong question.
 
-Causa: digitar `MAD` lista Madrid **e** Madison, e o script fazia
-`ArrowDown + Enter` às cegas, pegando o primeiro da lista. Agora a opção é
-escolhida pelo código (`\bMAD\b`, que rejeita "Madison (MSN)"), e — o que
-realmente importa — **a URL do resultado é conferida** contra o que foi pedido
-(`BEGIN_CITY_01` / `END_CITY_01`). Divergiu, o script descarta e diz por quê.
+Cause: typing `MAD` lists Madrid **and** Madison, and the script did
+`ArrowDown + Enter` blindly, taking the first item of the list. Now the option
+is picked by code (`\bMAD\b`, which rejects "Madison (MSN)"), and, what really
+matters, **the result URL is checked** against what was asked
+(`BEGIN_CITY_01` / `END_CITY_01`). If it differs, the script discards it and says
+why.
 
-Três coisas úteis vieram dela assim mesmo:
+Three useful things came out of it anyway:
 
-1. **`204` é "sem disponibilidade", e não erro.** A chamada de disponibilidade
-   com `marketCode: US` voltou 204 com corpo vazio. Ausência de dado e falha na
-   busca são estados diferentes — o bot vai precisar dessa distinção.
-2. **O `/calendar` volta 404 nos dois mercados** (BR e US). *(Duas correções:
-   o 404 é semântico, ver seção 9; e a rota certa é `/calendar/grid`, ver
-   seção 10 — é ela que traz o preço e a faixa de datas.)*
-3. **O fluxo É de resgate.** A mensagem fala em "assentos Iberia Club
-   exclusivos" — então a `/availability` que voltou 200 na rodada anterior é
-   disponibilidade de prêmio mesmo, e continua sem trazer preço.
+1. **`204` is "no availability", not an error.** The availability call with
+   `marketCode: US` returned 204 with an empty body. No data and a failed search
+   are different states; the bot will need that distinction.
+2. **`/calendar` returns 404 on both markets** (BR and US). *(Two corrections:
+   the 404 is semantic, see section 9; and the right route is `/calendar/grid`,
+   see section 10, which is the one that brings the price and the date range.)*
+3. **The flow IS a redemption.** The message talks about "exclusive Iberia Club
+   seats", so the `/availability` that returned 200 in the previous run really is
+   award availability, and it still brings no price.
 
-## 9. Rodada limpa (2026-09-22) — o que fechou e o que não
+## 9. Clean run (2026-09-22): what closed and what did not
 
-Destino conferido pela URL (`END_CITY_01=MAD`), login automático, três respostas
-de disponibilidade pareadas corretamente.
+Destination checked through the URL (`END_CITY_01=MAD`), automatic login, three
+availability responses paired correctly.
 
-**O preço não está na disponibilidade — confirmado em três respostas.** Todas as
-ofertas têm exatamente estes campos:
+**The price is not in the availability, confirmed on three responses.** Every
+offer has exactly these fields:
 
 ```
 offerId, bookingClass, bookingCode, fareFamily, rbd, remainingSeats, fareBasis
 ```
 
-Nenhum campo de valor, Avios, taxa ou moeda em nenhum nível do JSON.
+No value, Avios, fee or currency field at any level of the JSON.
 
-**O contexto de resgate não viaja no bearer.** As claims do token da chamada de
-disponibilidade são de sessão web comum:
+**The redemption context does not travel in the bearer.** The claims of the
+availability call's token are those of a plain web session:
 
 ```
 azp = iberia_web | scope = profile email | typ = Bearer
 exp, iat, jti, iss, sub, sid, acr, realm_access, email_verified, preferred_username
 ```
 
-Nada de Avios, redemption ou loyalty. A hipótese de que o resgate ia no token
-está descartada.
+Nothing about Avios, redemption or loyalty. The hypothesis that the redemption
+went in the token is ruled out.
 
-**O 404 do calendário é semântico, não de rota.** O corpo diz:
+**The calendar's 404 is semantic, not a missing route.** The body says:
 
 ```json
 {"errors":[{"code":"SSE_RPA_10402",
             "reason":"Disponibilidade não encontrada para a pesquisa selecionada."}]}
 ```
 
-Testado com `marketCode` BR, US, ES e GB — os quatro iguais. *(Resolvido na
-seção 10: insistir valeu, mas o caminho era outra rota — `/calendar/grid`.)*
+Tested with `marketCode` BR, US, ES and GB, all four the same. *(Solved in
+section 10: insisting paid off, but the path was another route,
+`/calendar/grid`.)*
 
-### Onde procurar o número de Avios (próxima rodada)
+### Where to look for the Avios number (next run)
 
-O filtro de captura só olhava `ibisservices` e `ibisauth`. Se o preço vier de
-outra rota da casa, ele estava invisível — o filtro agora pega qualquer host
-`*.iberia.com`, menos estático e rastreador. Junto disso, o recon passa a
-imprimir **os valores em Avios renderizados na tela**: se a página mostra o
-número e nenhuma resposta capturada o contém, a conta é feita no cliente (a
-Iberia resgata por tabela de distância), e aí a fonte precisa de outro caminho.
+The capture filter only looked at `ibisservices` and `ibisauth`. If the price
+came from another route of the site it was invisible; the filter now takes any
+`*.iberia.com` host, except static files and trackers. Along with that, the
+recon now prints **the Avios values rendered on screen**: if the page shows the
+number and no captured response contains it, the math happens on the client
+(Iberia redeems by distance chart), and then the source needs another path.
 
-## 10. O achado que muda o desenho: `/calendar/grid` (2026-09-22)
+## 10. The finding that changes the design: `/calendar/grid` (2026-09-22)
 
-O link **"Vista mensal de voos"**, na tela de seleção, dispara:
+The **"Vista mensal de voos"** link, on the selection screen, fires:
 
 ```
 POST https://ibisservices.iberia.com/api/sse-rpa/rs/v1/calendar/grid   → 200
 ```
 
-A resposta (`fixtures/iberia-mensal-0.json`, 8 KB) traz **191 dias numa única
-chamada** — de 2026-09-22 a 2027-03-31, seis meses — no formato:
+The response (`fixtures/iberia-monthly-0.json`, 8 KB) brings **191 days in a
+single call**, from 2026-09-22 to 2027-03-31, six months, in this shape:
 
 ```json
 {"contextMetadata":{"language":"pt","country":"US"},
@@ -301,33 +311,36 @@ chamada** — de 2026-09-22 a 2027-03-31, seis meses — no formato:
                {"date":"2026-10-26","avios":18000,"lock":false}]}}
 ```
 
-**93 dos 191 dias trazem `avios`** (18.000 a 50.500 nesta busca). O campo
-simplesmente não existe nos dias sem disponibilidade — o que casa com a regra da
-casa: ausência de dado é ausência, não zero.
+**93 of the 191 days carry `avios`** (18,000 to 50,500 in this search). The field
+simply does not exist on days without availability, which matches the house
+rule: missing data is missing, not zero.
 
-### Por que isso resolve dois problemas de uma vez
+### Why this solves two problems at once
 
-**O preço apareceu.** A `/availability` não tem preço nenhum e a tela dela
-também não (só o saldo "0 Avios" do cabeçalho). O número de Avios mora aqui.
+**The price showed up.** `/availability` has no price at all and neither does
+its screen (only the "0 Avios" balance in the header). The Avios number lives
+here.
 
-**O custo caiu de ordem de grandeza.** A leitura anterior — "uma requisição por
-dia, 359 por ano" — está **errada**. São ~2 chamadas para cobrir um ano.
+**The cost dropped by an order of magnitude.** The previous reading, "one
+request per day, 359 per year", is **wrong**. It takes ~2 calls to cover a year.
 
-### Desenho que isso sugere para a fonte
+### Design this suggests for the source
 
-O mesmo formato de duas camadas que a AA já usa neste repositório:
+The same two-layer shape AA already uses in this repository:
 
-1. `/calendar/grid` — que dias têm prêmio e por quantos Avios (1 chamada por
-   ~6 meses). Dá `data` + `valorK`.
-2. `/availability` — só nos dias que interessam, pra `remainingSeats` por voo.
+1. `/calendar/grid`: which days have awards and for how many Avios (1 call per
+   ~6 months). Gives `date` + `valueK`.
+2. `/availability`: only on the days that matter, for `remainingSeats` per
+   flight.
 
-Falta confirmar, antes de escrever a fonte: o **corpo** da requisição do
-`/calendar/grid` (o passo 8 do recon imprimia só URL e tamanho — corrigido), se
-ele aceita janela maior que 6 meses, e se `lock: true` significa data bloqueada.
+Still to confirm before writing the source: the request **body** of
+`/calendar/grid` (step 8 of the recon only printed URL and size; fixed), whether
+it accepts a window longer than 6 months, and whether `lock: true` means a
+blocked date.
 
-## 11. A busca parou de responder depois de muitas rodadas (2026-09-22)
+## 11. The search stopped answering after many runs (2026-09-22)
 
-Depois de ~9 execuções do recon em cerca de 90 minutos, a busca passou a cair em:
+After ~9 recon runs in about 90 minutes, the search started landing on:
 
 ```
 URL: ...#!/ibbkerror
@@ -335,172 +348,182 @@ URL: ...#!/ibbkerror
  é impossível mostrar a disponibilidade de voos neste momento"
 ```
 
-As quatro chamadas da busca (`/availability` e `/calendar`, nos dois mercados)
-ficaram com **status ausente e 0 bytes** — nenhuma resposta chegou, não é erro
-HTTP com corpo. Antes disso, as mesmas chamadas vinham 200 com 27 KB.
+The search's four calls (`/availability` and `/calendar`, on both markets) were
+left with **no status and 0 bytes**: no response arrived, it is not an HTTP
+error with a body. Before that, the same calls came back 200 with 27 KB.
 
-**Duas explicações cabem no que foi observado, e elas não foram separadas:**
-corte por frequência (a mais provável, dado o ritmo) ou sessão em estado ruim
-depois de dois logins em poucos minutos — consequência do falso positivo do
-detector de modal, que mandou o script logar de novo sem necessidade.
+**Two explanations fit what was observed, and they were not told apart:** a
+frequency cut (the most likely, given the pace) or a session in a bad state after
+two logins within a few minutes, a consequence of the modal detector's false
+positive, which made the script log in again for no reason.
 
-O que **não** é: anti-bot no sentido do `cheap-flights`. Nenhum desafio, nenhum
-403 — em nenhuma das rodadas do dia.
+What it is **not**: anti-bot in the `cheap-flights` sense. No challenge, no
+403, in any of the day's runs.
 
-Para decidir entre as duas: esperar 30+ minutos e rodar **uma** vez. Se voltar
-limpo, é frequência, e aí o intervalo do `LimitadorFrequencia` precisa ser
-medido antes de escrever a fonte.
+To decide between the two: wait 30+ minutes and run **once**. If it comes back
+clean, it is frequency, and then the `RateLimiter` interval needs measuring
+before writing the source.
 
-Independente da causa, uma coisa está estabelecida e vale para o desenho:
+Whatever the cause, one thing is established and applies to the design:
 
-- **`status` ausente com 0 byte é um terceiro estado**, diferente de 200 (tem
-  disponibilidade) e de 204 (não tem). Tratar isso como "sem disponibilidade"
-  mandaria "não achei nada" pro cliente quando a busca nem saiu — é o mesmo erro
-  do HTTP 400 com dois significados que o AGENTS.md lista. O `ResultadoFonte` da
-  fonte precisa carregar esse caso.
+- **A missing `status` with 0 bytes is a third state**, different from 200 (has
+  availability) and 204 (has none). Treating it as "no availability" would send
+  "found nothing" to the client when the search never went out; it is the same
+  mistake as the HTTP 400 with two meanings that AGENTS.md lists. The source's
+  `SourceResult` must carry that case.
 
-## 12. Procedência dos fixtures (importante)
+## 12. Provenance of the fixtures (important)
 
-- `iberia-mensal-0.json` — **confiável**. Veio de rodada limpa; é o achado
-  principal (seção 10).
-- `iberia-real-mais1.json`, `iberia-real-mais30.json` — **confiáveis**. Vêm do
-  replay, que dispara uma chamada isolada por vez.
-- `iberia-real.json` — **usar com cuidado**. Foi sobrescrito várias vezes ao
-  longo do dia; a versão em disco (27688 bytes) veio da rodada que se perdeu
-  indo pro home dos EUA depois do falso positivo do modal. O formato confere com
-  os outros dois, mas se algum detalhe importar, regrave.
+- `iberia-monthly-0.json`: **reliable**. It came from a clean run; it is the main
+  finding (section 10).
+- `iberia-real-plus1.json`, `iberia-real-plus30.json`: **reliable**. They come
+  from the replay, which fires one isolated call at a time.
+- `iberia-real.json`: **use with care**. It was overwritten several times during
+  the day; the version on disk (27688 bytes) came from the run that got lost
+  going to the US home page after the modal's false positive. The shape matches
+  the other two, but if any detail matters, record it again.
 
-## 13. Fase 2: a fonte funciona (2026-09-22)
+## 13. Phase 2: the source works (2026-09-22)
 
-`src/fontes/iberia/bot-iberia.ts` + `scripts/buscar-iberia.ts`
-(`npm run iberia GRU MAD 40000`). Varredura real de um ano:
+`src/scrapers/iberia/iberia.scraper.ts` + `scripts/search-iberia.ts`
+(`npm run iberia GRU MAD 40000`). A real one-year sweep:
 
 ```
-Calendário a partir de 2026-09-23:  42 dias, até 2026-12-31
-Calendário a partir de 2027-01-01: 120 dias, até 2027-04-30
-Calendário a partir de 2027-05-01: 189 dias, até 2027-08-31
-Calendário a partir de 2027-09-01:  99 dias, até 2027-09-30
+Calendar from 2026-09-23:  42 days, until 2026-12-31
+Calendar from 2027-01-01: 120 days, until 2027-04-30
+Calendar from 2027-05-01: 189 days, until 2027-08-31
+Calendar from 2027-09-01:  99 days, until 2027-09-30
 
-Janela 2026-09-23 → 2027-09-30 · 248 dias com prêmio · 18K a 50,5K Avios
+Window 2026-09-23 → 2027-09-30 · 248 days with awards · 18K to 50.5K Avios
 ```
 
-**A janela se move com o `date` do corpo** — pergunta que estava aberta. Um ano
-sai em **4 chamadas**, não 359.
+**The window moves with the body's `date`**, a question that was open. A year
+takes **4 calls**, not 359.
 
-### Três coisas que só apareceram ao rodar de verdade
+### Three things that only showed up running for real
 
-1. **401 sem o bearer.** O `ibisservices` exige `authorization: Bearer`, que o
-   SPA guarda em memória (não é cookie) — então `fetch` de dentro da página não
-   o herda. A fonte escuta as requisições que a própria página faz e reusa o
-   token de lá. Sem token, erro nomeado em vez de busca vazia.
-2. **`ERR_ABORTED` no `goto` é normal.** O site reescreve a URL durante a
-   navegação; quem decide se deu certo é a URL final, não o retorno do `goto`.
-3. **A rota por hash demora a assentar.** Checar uma vez 8s depois do load pega
-   estado intermediário; a fonte espera a URL virar `#!/availability` ou
-   `#!/ibbkerror` antes de julgar.
+1. **401 without the bearer.** `ibisservices` requires `authorization: Bearer`,
+   which the SPA keeps in memory (it is not a cookie), so a `fetch` from inside
+   the page does not inherit it. The source listens to the requests the page
+   itself makes and reuses the token from there. Without a token, a named error
+   instead of an empty search.
+2. **`ERR_ABORTED` on `goto` is normal.** The site rewrites the URL during
+   navigation; what decides whether it worked is the final URL, not what `goto`
+   returns.
+3. **The hash route takes a while to settle.** Checking once 8s after load
+   catches an intermediate state; the source waits for the URL to become
+   `#!/availability` or `#!/ibbkerror` before judging.
 
-E o `#!/ibbkerror` de mais cedo era **transitório**: passada a pausa, a mesma
-URL que a fonte monta chegou aos resultados igual à que o site monta (testado
-lado a lado em `scripts/testar-url-iberia.ts`).
+And the earlier `#!/ibbkerror` was **transient**: after the pause, the URL the
+source builds reached the results just like the one the site builds (tested side
+by side in `scripts/test-iberia-url.ts`).
 
-### `lock: true` — o que se sabe
+### `lock: true`: what is known
 
-Apareceu em 13 dias da varredura de um ano. **Nenhum deles tinha `avios`.** A
-fonte descarta dia travado e só declara o resultado parcial quando o dia
-descartado TINHA preço — dia travado sem prêmio não é perda e não vira ruído.
+It showed up on 13 days of the one-year sweep. **None of them had `avios`.** The
+source discards a locked day and only declares the result partial when the
+discarded day HAD a price; a locked day without an award is no loss and does not
+become noise.
 
-### O que esta fonte ainda não faz
+### What this source still does not do
 
-**Não separa cabine.** A grade tem `preferredCabin: ""` e devolve um número por
-dia — o mais barato, sem dizer de qual cabine. A AA busca por cabine e sabe o
-que está olhando; aqui não. Separar exige a segunda camada (`/availability`,
-que traz `bookingClass` por oferta) e uma decisão de produto.
+**It does not split cabins.** The grid has `preferredCabin: ""` and returns one
+number per day, the cheapest, without saying which cabin. AA searches per cabin
+and knows what it is looking at; here it does not. Splitting needs the second
+layer (`/availability`, which brings `bookingClass` per offer) and a product
+decision.
 
-**Não traz vagas**, pelo motivo documentado no fim do `bot-iberia.ts`: preço e
-assento vêm de chamadas diferentes e não há como ligar um ao outro pelo dado.
+**It does not bring seats**, for the reason documented at the end of
+`iberia.scraper.ts`: price and seat come from different calls and there is no
+way to link one to the other through the data.
 
-**Não está no servidor nem no front** — roda pelo script. Integrar é a Fase 2b.
+**It is not in the server or the front**; it runs through the script.
+Integrating it is phase 2b. *(Done since: the source is in the server and has
+its own tab.)*
 
-## 14. Camada de voos: o que trava (2026-09-23)
+## 14. Flight layer: what blocks it (2026-09-23)
 
-A segunda camada (`/availability`, uma requisição por data) está escrita e
-tipada, mas **não roda de ponta a ponta**. Vem desligada (`--dias=0`).
+The second layer (`/availability`, one request per date) is written and typed,
+but **does not run end to end**. It ships off (`--days=0`).
 
-O que foi medido, em ordem:
+What was measured, in order:
 
-1. **`fetch` da aba, aba na busca** → funciona (foi assim no recon).
-2. **`fetch` da aba, aba derivada pro login** → `TypeError: Failed to fetch`.
-   Não é bloqueio: é cross-origin, porque a aba não está mais no
+1. **`fetch` from the tab, tab on the search** → works (that is how the recon
+   did it).
+2. **`fetch` from the tab, tab sent to the login** → `TypeError: Failed to
+   fetch`. It is not a block: it is cross-origin, because the tab is no longer on
    `www.iberia.com`.
-3. **`context.request` do Playwright** (não depende da aba) → **401**, com o
-   MESMO bearer e os MESMOS headers que o `/calendar/grid` aceita. Alguma coisa
-   da sessão só existe no contexto da aba.
-4. **Headers reais copiados do site** (`x-request-appversion`,
-   `x-request-device`, `x-observations-*`) → não mudou o 401 do item 3.
+3. **Playwright's `context.request`** (does not depend on the tab) → **401**,
+   with the SAME bearer and the SAME headers `/calendar/grid` accepts. Something
+   of the session only exists in the tab's context.
+4. **Real headers copied from the site** (`x-request-appversion`,
+   `x-request-device`, `x-observations-*`) → did not change item 3's 401.
 
-E a causa de fundo: **a sessão da Iberia cai em poucos minutos**. O calendário
-(4 chamadas, ~1 min) termina bem; quando o detalhe começa, a aba já foi mandada
-pro `login.iberia.com` — e reabrir a busca volta pro login. Logar de novo pelo
-`.env` (implementado em `fazerLogin`) não resolveu: a aba é mandada pro login
-de novo logo depois.
+And the underlying cause: **Iberia's session drops within a few minutes.** The
+calendar (4 calls, ~1 min) finishes fine; by the time the detail starts, the tab
+has already been sent to `login.iberia.com`, and reopening the search goes back
+to the login. Logging in again from `.env` (implemented in `ensureLoggedIn`) did
+not solve it: the tab is sent to the login again right after.
 
-Caminhos ainda não tentados, para quem pegar isso:
+Paths not tried yet, for whoever picks this up:
 
-- fazer o detalhe **junto** do calendário, na mesma janela de sessão saudável,
-  em vez de depois;
-- descobrir por que o `context.request` toma 401 — comparar byte a byte os
-  headers reais (incluindo `origin`/`referer`) com os que ele manda;
-- aceitar uma vez a tela `RemoteAccessAuthorizationPage` do Salesforce na mão e
-  ver se a queda de sessão para.
+- run the detail **together** with the calendar, within the same healthy session
+  window, instead of after it;
+- find out why `context.request` gets 401: compare the real headers byte by byte
+  (including `origin`/`referer`) with the ones it sends;
+- accept Salesforce's `RemoteAccessAuthorizationPage` screen once by hand and see
+  whether the session drop stops.
 
-## 15. `preferredCabin` é ignorado pelo calendário (2026-09-23)
+## 15. `preferredCabin` is ignored by the calendar (2026-09-23)
 
-Medido com `scripts/probe-cabine-iberia.ts`: mesma rota, mesma data, mesmo
-token, só mudando o campo do corpo.
-
-```
-preferredCabin=(vazio):   100 dias, 42 com preço, 18000 a 35100 Avios
-preferredCabin=BUSINESS:  100 dias, 42 com preço, 18000 a 35100 Avios
-preferredCabin=ECONOMY:   idem   | TOURIST: idem | PREMIUMTOURIST: idem | FIRST: idem
-```
-
-Resposta **idêntica** nas seis. O `/calendar/grid` não sabe responder por
-cabine — o valor é sempre o mais barato do dia, seja qual for a classe.
-
-Consequência para o produto, e ela é séria: **não existe "datas de executiva"
-com preço de executiva nesta fonte.** O seletor de cabine do front só filtra a
-planilha de voos (via `bookingClass` das ofertas do `/availability`). Por isso
-o job agora devolve um aviso explícito junto do resultado quando uma cabine é
-escolhida — número de econômica anunciado como executiva é erro que chega no
-cliente.
-
-Caminho possível, não explorado: descobrir se um dia tem prêmio em executiva
-exige o `/availability` daquele dia (~15s cada). Serve para uma lista curta de
-datas, não para varrer um ano.
-
-## 16. Detalhe em escala: a Iberia corta por volta de 40–60 consultas (2026-09-28)
-
-Tentativa de voltar ao ritmo do `cheap-flights` (lotes de 30 a cada 7s no
-`/availability`), agora de dentro da aba — que é o que passa pelo anti-bot.
-Medido com `scripts/medir-lotes-iberia.ts`, GRU→MAD, ~247 datas, sessão
-logada, logo depois do calendário, com 10–20 min de pausa entre as rodadas:
+Measured with `scripts/probe-iberia-cabin.ts`: same route, same date, same token,
+changing only the body field.
 
 ```
-30 em paralelo:            todas "Failed to fetch" em 1,2s (depois de 15 ok)
-lotes de 10, 7s de pausa:  1º lote 10/10; 2º lote 6/10
-lotes de 5, 8s entre eles: tela ibbkerror no dia ~30; corte definitivo no ~40
-1 por vez, a cada 3s:      corte definitivo no dia 59 (8,3 min), 9 repetições antes
+preferredCabin=(empty):   100 days, 42 with price, 18000 to 35100 Avios
+preferredCabin=BUSINESS:  100 days, 42 with price, 18000 to 35100 Avios
+preferredCabin=ECONOMY:   same   | TOURIST: same | PREMIUMTOURIST: same | FIRST: same
 ```
 
-O corte aparece como `TypeError: Failed to fetch` com a aba ainda em
-`www.iberia.com/flights/` — não é a sessão caindo, é o site recusando. Reabrir
-a busca nessa hora cai na tela de erro "não podemos mostrar os voos".
+An **identical** response on all six. `/calendar/grid` cannot answer per cabin;
+the value is always the day's cheapest, whatever the class.
 
-Leitura: **o ritmo muda pouco o total.** Rajada é cortada logo; espaçar leva o
-corte de ~40 pra ~60 consultas, não pra 247. Parece cota por janela de tempo
-(ou por sessão), não limite de velocidade. Não medido: se um login novo zera a
-cota, e quanto tempo de pausa a devolve.
+The consequence for the product is serious: **there are no "business dates" with
+a business price on this source.** The front's cabin selector only filters the
+flight spreadsheet (through the `bookingClass` of the `/availability` offers).
+That is why the job now returns an explicit notice with the result when a cabin
+is chosen: an economy number announced as business is an error that reaches the
+client.
 
-Consequência: "todas as datas detalhadas" do bot antigo não cabe numa rodada
-só. O detalhe ficou sequencial (`IBERIA_DETAIL_BATCH`, padrão 1), que é mais
-leve que o carregamento de página por dia que ele substituiu.
+A possible path, not explored: finding out whether a day has a business award
+needs that day's `/availability` (~15s each). It works for a short list of
+dates, not for sweeping a year.
+
+## 16. Detail at scale: Iberia cuts off around 40–60 queries (2026-09-28)
+
+An attempt to return to `cheap-flights`' pace (batches of 30 every 7s on
+`/availability`), now from inside the tab, which is what gets past the anti-bot.
+Measured with `scripts/measure-iberia-batches.ts`, GRU→MAD, ~247 dates,
+logged-in session, right after the calendar, with a 10–20 min pause between
+runs:
+
+```
+30 in parallel:              all "Failed to fetch" in 1.2s (after 15 ok)
+batches of 10, 7s pause:     1st batch 10/10; 2nd batch 6/10
+batches of 5, 8s apart:      ibbkerror screen on day ~30; final cut at ~40
+1 at a time, every 3s:       final cut on day 59 (8.3 min), 9 retries before
+```
+
+The cut shows up as `TypeError: Failed to fetch` with the tab still on
+`www.iberia.com/flights/`: it is not the session dropping, it is the site
+refusing. Reopening the search at that point lands on the "não podemos mostrar
+os voos" error screen.
+
+Reading: **the pace changes the total little.** A burst is cut right away;
+spacing moves the cut from ~40 to ~60 queries, not to 247. It looks like a quota
+per time window (or per session), not a speed limit. Not measured: whether a new
+login resets the quota, and how long a pause gives it back.
+
+Consequence: the old bot's "every date detailed" does not fit in a single run.
+The detail became sequential (`IBERIA_DETAIL_BATCH`, default 1), which is
+lighter than the per-day page load it replaced.

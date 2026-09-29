@@ -1,14 +1,14 @@
-# Recon LATAM (Etapa 0) — anotações
+# LATAM recon (step 0): notes
 
-> Levantado em 2026-08-06 na janela do bot (Chrome real via CDP), primeiro anônimo
-> e depois com a sessão logada herdada por importação de cookies.
+> Gathered on 2026-08-06 in the bot's window (real Chrome through CDP), first
+> anonymous and then with the logged-in session inherited through cookie import.
 
-## Resumo em uma linha
+## One-line summary
 
-**Dinheiro**: calendário mensal completo, ~6 requisições por ano, sem login. **Milhas**:
-exige login e só existe dia-a-dia — ~365 requisições por direção/ano.
+**Cash**: full monthly calendar, ~6 requests per year, no login. **Miles**:
+needs login and only exists day by day, ~365 requests per direction/year.
 
-## 1. Deep link (funciona)
+## 1. Deep link (works)
 
 ```
 https://www.latamairlines.com/br/pt/oferta-voos?origin=GRU&destination=SCL
@@ -16,22 +16,22 @@ https://www.latamairlines.com/br/pt/oferta-voos?origin=GRU&destination=SCL
   &adt=1&chd=0&inf=0&trip=RT&cabin=Economy&redemption=false&sort=RECOMMENDED
 ```
 
-- `redemption=false` (dinheiro): abre direto, **sem login**, sem desafio anti-bot.
-- `redemption=true` (milhas): **anônimo redireciona pro login**
-  (`auth.latamairlines.com`). Com sessão logada, abre normalmente.
+- `redemption=false` (cash): opens directly, **no login**, no anti-bot challenge.
+- `redemption=true` (miles): **anonymous redirects to the login**
+  (`auth.latamairlines.com`). With a logged-in session it opens normally.
 
-## 2. Calendário de tarifas — o endpoint bom (DINHEIRO)
+## 2. Fare calendar: the good endpoint (CASH)
 
 ```
 GET /bff/web-products-searchbox/v1/calendar
     ?origin=GRU&destination=SCL&month=9&year=2026&isRoundTrip=true&extended=true
 ```
 
-É este que alimenta a fita de datas da home. **`extended=true` é o que traz os preços.**
-Cuidado: existe um `/bff/air-offers/v2/calendar` parecido que devolve **sempre vazio** —
-não é ele.
+This is the one that feeds the home page's date strip. **`extended=true` is what
+brings the prices.** Careful: there is a similar `/bff/air-offers/v2/calendar`
+that **always** returns empty; it is not that one.
 
-Uma resposta traz **dois meses** e **as duas direções**:
+One response brings **two months** and **both directions**:
 
 ```json
 { "disabledDays": ["2026-08-01", ...],
@@ -41,73 +41,74 @@ Uma resposta traz **dois meses** e **as duas direções**:
         "detailsCalendar":[
           {"date":"2026-09-06","fare":{"amount":908.6,"roundedAmount":909,"currency":"BRL"},
            "formattedAmount":"909","percentile":0,"enabled":true,"lowPrice":true}, ...]},
-      { "...direction":"INBOUND"... } ] }, { "...mês seguinte..." } ] }
+      { "...direction":"INBOUND"... } ] }, { "...next month..." } ] }
 ```
 
-- 30–31 dias por mês, com preço em ~26+ deles.
-- **`lowPrice: true`** é exatamente o "Menor tarifa" destacado na interface — dá o filtro
-  de graça, sem precisar comparar valores.
-- `enabled: false` / `disabledDays` = dias no passado ou sem venda.
+- 30–31 days per month, with a price on ~26+ of them.
+- **`lowPrice: true`** is exactly the "Menor tarifa" highlighted in the
+  interface; it gives the filter for free, with no need to compare values.
+- `enabled: false` / `disabledDays` = days in the past or not on sale.
 
-**Custo de um ano: ~6 requisições** (2 meses cada), já cobrindo ida e volta. Melhor que a AA.
+**Cost of a year: ~6 requests** (2 months each), already covering outbound and
+return. Better than AA.
 
-**Só devolve BRL.** Testei `redemption=true`, `isRedemption=true`,
-`currency=LOYALTY_POINTS` e `cabinType=Economy`: a resposta é idêntica, sempre em reais.
-Não existe versão em milhas deste endpoint.
+**It only returns BRL.** I tried `redemption=true`, `isRedemption=true`,
+`currency=LOYALTY_POINTS` and `cabinType=Economy`: the response is identical,
+always in reais. There is no miles version of this endpoint.
 
-## 3. Milhas — só dia a dia, e logado
+## 3. Miles: day by day only, and logged in
 
 ```
-GET /bff/air-offers/v2/offers/search/redemption?adult=1&outFrom=<data>&...
+GET /bff/air-offers/v2/offers/search/redemption?adult=1&outFrom=<date>&...
 ```
 
-Devolve 50 voos daquele dia, com
+It returns 50 flights for that day, with
 `summary.lowestPrice = {"currency":"LOYALTY_POINTS","amount":29307,"display":"29.307 milhas"}`.
-Também tem `summary.stopOvers` (0 = direto) e `duration`.
+It also has `summary.stopOvers` (0 = direct) and `duration`.
 
-**Uma requisição = um dia.** Um ano por direção = ~365 chamadas.
+**One request = one day.** A year per direction = ~365 calls.
 
-## 4. Cabeçalhos obrigatórios (senão 400)
+## 4. Required headers (otherwise 400)
 
 ```
 accept: application/json, text/plain, */*
 x-latam-application-country: br     x-latam-application-oc: br
 x-latam-application-lang: pt        x-latam-application-name: xp-web-products-searchbox-lib
 x-latam-client-name: xp-web-products-searchbox-lib
-x-latam-request-id / x-latam-app-session-id / x-latam-track-id: uuid gerado por nós
+x-latam-request-id / x-latam-app-session-id / x-latam-track-id: a uuid we generate
 ```
 
-## 5. Sessão logada sem senha
+## 5. Logged-in session without a password
 
-`bash scripts/importar-cookies.sh latamairlines.com` copia os cookies do domínio do Chrome
-do usuário pro perfil do bot (mescla, não substitui — aa.com continua lá). Foi assim que a
-sessão logada chegou no bot, sem credencial guardada em lugar nenhum. Refazer quando a
-sessão expirar.
+`bash scripts/import-cookies.sh latamairlines.com` copies the domain's cookies
+from the user's Chrome into the bot's profile (it merges, it does not replace;
+aa.com stays there). That is how the logged-in session reached the bot, with no
+credential stored anywhere. Redo it when the session expires.
 
 ## 6. Anti-bot
 
-Nenhum desafio nesta sessão, nos dois modos. O playbook da AA (janela do bot + pacing +
-importação de cookies) cobre o risco.
+No challenge in this session, in either mode. AA's playbook (bot window +
+pacing + cookie import) covers the risk.
 
-## 7. Decisão de desenho que isso força
+## 7. Design decision this forces
 
-- **Modo dinheiro**: ano inteiro tranquilo, ~6 requisições.
-- **Modo milhas**: inviável varrer o ano (365 chamadas/direção). Precisa de intervalo
-  escolhido pelo usuário, ou de uma estratégia em duas fases (usar o calendário de
-  dinheiro pra escolher os dias candidatos e só então consultar milhas neles).
+- **Cash mode**: a whole year is easy, ~6 requests.
+- **Miles mode**: sweeping the year is not viable (365 calls/direction). It needs
+  a range chosen by the user, or a two-phase strategy (use the cash calendar to
+  pick the candidate days and only then query miles on them).
 
 ---
 
-## Ida e volta: o preço do PAR (levantado em 2026-08-18)
+## Round trip: the price of the PAIR (gathered on 2026-08-18)
 
-**Perna a perna dá um número errado.** Medido em GRU⇄JNB: confirmando cada
-direção sozinha, 119.560 + 123.975 = **243.535 milhas**. O mesmo par comprado
-junto no site: **90.302 milhas + R$ 255,69**. Não é tarifa diferente — a LATAM
-precifica o par.
+**Leg by leg gives a wrong number.** Measured on GRU⇄JNB: confirming each
+direction alone, 119,560 + 123,975 = **243,535 miles**. The same pair bought
+together on the site: **90,302 miles + R$ 255.69**. It is not a different fare;
+LATAM prices the pair.
 
-Esse número **não está** em `/offers/search/redemption`, que é o que o bot lia.
-A tela "Combine suas milhas + dinheiro" só aparece depois de escolher um voo de
-ida **e** um de volta, e o preço vem daqui:
+That number **is not** in `/offers/search/redemption`, which is what the bot
+used to read. The "Combine suas milhas + dinheiro" screen only shows up after
+choosing an outbound **and** a return flight, and the price comes from here:
 
 ```
 POST https://www.latamairlines.com/bff/air-offers/v2/offers/redemption-options
@@ -123,45 +124,47 @@ POST https://www.latamairlines.com/bff/air-offers/v2/offers/redemption-options
 }
 ```
 
-**O que a tela mostra é `money.amount + tax.amount`** — conferido nas quatro
-linhas: 469,56 + 255,69 = 725,25; 1.164,87 + 255,69 = 1.420,56; 1.760,89 +
-255,69 = 2.016,58. E as linhas por perna da mesma tela (45.151 + R$ 68,61 e
-45.151 + R$ 187,08) fecham com a opção 1: 45.151 × 2 = 90.302, e 68,61 + 187,08
-= 255,69. Essas duas identidades são o teste barato de que a linha certa foi
-lida.
+**What the screen shows is `money.amount + tax.amount`**, checked on all four
+rows: 469.56 + 255.69 = 725.25; 1,164.87 + 255.69 = 1,420.56; 1,760.89 + 255.69
+= 2,016.58. And the per-leg rows on the same screen (45,151 + R$ 68.61 and
+45,151 + R$ 187.08) add up to option 1: 45,151 × 2 = 90,302, and 68.61 + 187.08
+= 255.69. Those two identities are the cheap test that the right row was read.
 
-**São quatro opções, não um preço.** É uma escada de milhas ↔ dinheiro, igual
-ao `amountLevel` da Azul e ao desconto do Smiles: o módulo guarda as quatro e
-deixa a escolha explícita.
+**There are four options, not one price.** It is a miles ↔ cash ladder, like
+Azul's `amountLevel` and Smiles' discount: the module keeps all four and makes
+the choice explicit.
 
-Outro achado do caminho: a busca da volta reaparece como
-`/offers/search/redemption?...&outOfferId=<id da ida>` — ou seja, a volta já é
-precificada em função da ida escolhida.
+Another finding along the way: the return search shows up again as
+`/offers/search/redemption?...&outOfferId=<outbound id>`, so the return is
+already priced based on the chosen outbound.
 
-**Custo:** cada par é um fluxo completo (deep link → escolhe ida → escolhe
-volta). `LATAM_PAIRS` controla quantos (padrão 3).
+**Cost:** each pair is a full flow (deep link → choose outbound → choose
+return). `LATAM_PAIRS` controls how many (default 3).
 
 Fixture: `fixtures/latam-redemption-options-real.json`.
-Recon: `npm run recon:latam GRU JNB <ida> <volta>` (precisa de sessão logada).
+Recon: `npm run recon:latam GRU JNB <outbound> <return>` (needs a logged-in
+session).
 
-## Como o par de teste é escolhido (2026-09-15)
+## How the test pair is chosen (2026-09-15)
 
-A confirmação em milhas roda em 3 pares de datas. Ela não é uma varredura: é
-uma **simulação de uma busca do grupo**, feita pra ver se o preço em pontos
-muda ao longo do ano. Daí as regras:
+The miles confirmation runs on 3 date pairs. It is not a sweep: it is a
+**simulation of a search from the group**, made to see whether the price in
+points changes throughout the year. Hence the rules:
 
-1. **As duas datas têm que estar no resultado que o cartão mostra.** O par sai
-   de `filtrarPorTetos(dias, tetos)`, a mesma lista que vira relatório. Antes
-   ele saía do calendário cru: apareceu um print de dezembro num resultado que
-   só tinha setembro, porque dezembro passava na margem (`menor + R$ 100`) mas
-   não passava no teto — ficava fora do cartão e dentro do teste.
-2. **Estada de 3 a 14 dias** (`LATAM_MIN_STAY` / `LATAM_MAX_STAY`).
-   Ida num dia e volta no seguinte é fácil de achar e não é viagem de ninguém;
-   acima de duas semanas o preço já é de outra faixa.
-3. **Datas espalhadas.** Primeira passada exige 90 dias entre as idas
-   (`LATAM_PAIR_DISTANCE`). Quando o resultado não tem esse alcance, a
-   segunda passada pega sempre a data mais longe das já escolhidas em vez das
-   mais baratas — três dias seguidos devolveriam o mesmo número três vezes.
+1. **Both dates must be in the result the card shows.** The pair comes from
+   `filterByCeilings(days, ceilings)`, the same list that becomes the report.
+   It used to come from the raw calendar: a December screenshot showed up in a
+   result that only had September, because December passed the margin
+   (`lowest + R$ 100`) but not the ceiling, so it was out of the card and inside
+   the test.
+2. **Stay of 3 to 14 days** (`LATAM_MIN_STAY` / `LATAM_MAX_STAY`). Outbound one
+   day and return the next is easy to find and is nobody's trip; above two weeks
+   the price is already in another range.
+3. **Spread-out dates.** The first pass requires 90 days between outbound dates
+   (`LATAM_PAIR_DISTANCE`). When the result does not have that reach, the second
+   pass always takes the date furthest from those already chosen instead of the
+   cheapest ones; three days in a row would return the same number three times.
 
-Se nada satisfizer as regras, a confirmação não roda e o aviso diz por quê. É
-melhor que devolver um print que não corresponde ao resultado.
+If nothing satisfies the rules, the confirmation does not run and the notice
+says why. That is better than returning a screenshot that does not match the
+result.
