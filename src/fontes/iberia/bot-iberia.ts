@@ -46,6 +46,8 @@ export type ResultadoIberia =
   | { tipo: "erro"; motivo: string; http?: number };
 
 const INTERVALO_MIN_IBERIA_MS = Number(process.env.IBERIA_INTERVALO_BUSCAS_MS) || 8000;
+const TAMANHO_LOTE_DETALHE = Number(process.env.IBERIA_LOTE_DETALHE) || 1;
+const PAUSA_APOS_FALHA_MS = 30_000;
 const limitadorIberia = new LimitadorFrequencia(INTERVALO_MIN_IBERIA_MS);
 
 // A grade observada devolveu 191 dias pedindo `maxSearchTime: 359` e começou em
@@ -601,66 +603,6 @@ type RespostaDisponibilidade = {
 
 const unicos = (valores: (string | undefined)[]) => [...new Set(valores.filter(Boolean) as string[])];
 
-// A chamada própria de `/availability` esbarra em tudo: cross-origin quando a
-// aba deriva, 401 pelo cliente HTTP do Playwright, e `ibbkerror` quando a
-// sessão já gastou a paciência do site. Mas há um caminho que sempre funciona:
-// **a própria página chama `/availability` ao abrir a busca do dia**. Então em
-// vez de emitir a requisição, a fonte abre o deep link daquela data e lê a
-// resposta que o site fez sozinho.
-//
-// Custa um carregamento de página por data (uns 15s), contra ~1s de um fetch.
-// É caro, e é por isso que o detalhe roda só nos dias que interessam.
-export async function buscarVoosDoDiaPelaPagina(
-  page: Page,
-  params: ParametrosIberia,
-  data: string,
-  onLog: OnLog = () => {},
-): Promise<VooIberia[]> {
-  let corpo: string | null = null;
-  const statusVistos: number[] = [];
-  const ouvir = async (res: import("playwright").Response) => {
-    if (!/\/sse-rpa\/rs\/v1\/availability$/.test(new URL(res.url()).pathname)) return;
-    // Registra TODO status: 204 é "não tem voo nesse dia" e é resposta
-    // legítima. Tratar 204 como "a página não buscou" misturaria ausência de
-    // dado com falha de busca.
-    statusVistos.push(res.status());
-    if (res.status() !== 200) return;
-    const texto = await res.text().catch(() => null);
-    if (texto && texto.length > 500) corpo = texto;
-  };
-
-  page.on("response", ouvir);
-  try {
-    // Sem passar por uma página em branco, o `goto` cai no mesmo documento do
-    // SPA (muda só a data e o hash) e ele NÃO refaz a busca — a aba abre, mas
-    // nenhuma chamada de disponibilidade sai. Descarregar primeiro força
-    // documento novo, e com ele a chamada que a fonte quer ler.
-    await page.goto("about:blank", { waitUntil: "domcontentloaded", timeout: 30_000 }).catch(() => {});
-    await abrirPaginaDeResultados(page, params, data, onLog);
-    // A resposta costuma chegar durante o `abrirPaginaDeResultados`; este laço
-    // cobre o caso de ela vir logo depois.
-    const limite = Date.now() + 20_000;
-    while (!corpo && Date.now() < limite) await page.waitForTimeout(1000);
-  } finally {
-    page.off("response", ouvir);
-  }
-
-  if (!corpo) {
-    if (statusVistos.length === 0) {
-      throw new Error(`A página de ${data} abriu mas não fez nenhuma chamada de disponibilidade.`);
-    }
-    // Chamou e não trouxe voo: dia sem disponibilidade, não erro.
-    if (statusVistos.every((s) => s === 204)) {
-      onLog(`${data}: a Iberia respondeu 204 (sem voos nesse dia).`);
-      return [];
-    }
-    throw new Error(
-      `A disponibilidade de ${data} não veio utilizável (status vistos: ${statusVistos.join(", ")}).`,
-    );
-  }
-  return lerVoos(corpo, data);
-}
-
 export async function buscarVoosDoDia(
   page: Page,
   params: ParametrosIberia,
@@ -782,7 +724,7 @@ export function lerVoos(texto: string, data: string): VooIberia[] {
 //
 // O teste é o mais direto que existe: abrir a página de login. Se o formulário
 // aparecer, não estamos logados; se a Iberia nos tirar de lá, estamos.
-async function garantirLogado(page: Page, onLog: OnLog): Promise<void> {
+export async function garantirLogado(page: Page, onLog: OnLog): Promise<void> {
   await page
     .goto("https://login.iberia.com/IDY_LoginPage?market=BRpt", { waitUntil: "domcontentloaded", timeout: 60_000 })
     .catch((erro: Error) => {
@@ -836,8 +778,19 @@ export function filtrarVoos(voos: VooIberia[], filtros: FiltrosVoo): VooIberia[]
 
 export type DiaComFalha = { data: string; erro: string };
 
-// Detalha os dias pedidos, um por requisição, respeitando o limitador. Devolve
-// o que conseguiu e a lista do que falhou — busca parcial se declara parcial.
+// Detalha os dias pedidos em lotes paralelos de `/availability`, de dentro da
+// aba e na sessão em que o calendário acabou de rodar — o ritmo do
+// `cheap-flights`, mas pelo navegador. Medido com
+// `scripts/medir-lotes-iberia.ts`: 30 de uma vez são cortados na hora
+// ("Failed to fetch" em todas), lotes de 10 em sequência perdem dias já no
+// segundo lote, e lotes de 5 a cada 8s são cortados de vez por volta do dia
+// 40. Por isso o padrão é 1: sequencial, sem rajada. O limitador segura a
+// distância entre LOTES, não entre requisições.
+//
+// Um lote com falha é repetido uma vez depois de reabrir a busca (a sessão cai
+// em minutos e reabrir reloga). Um lote que falha INTEIRO duas vezes é corte
+// do site: insistir só prolonga o bloqueio, então o resto vira falha declarada
+// e a busca sai parcial.
 export async function detalharDias(
   page: Page,
   params: ParametrosIberia,
@@ -848,51 +801,75 @@ export async function detalharDias(
 ): Promise<{ voos: VooIberia[]; diasComFalha: DiaComFalha[] }> {
   const voos: VooIberia[] = [];
   const diasComFalha: DiaComFalha[] = [];
+  if (datas.length === 0) return { voos, diasComFalha };
 
-  // Uma vez só, antes de gastar um carregamento de página por data: sem conta
-  // logada, TODA chamada de disponibilidade volta 401 e a varredura inteira se
-  // perde dia a dia.
+  // Sem conta logada, TODA chamada de disponibilidade volta 401: conferir uma
+  // vez antes poupa a varredura inteira de falhar dia a dia.
   try {
     await garantirLogado(page, onLog);
+    await abrirPaginaDeResultados(page, params, datas[0]!, onLog);
   } catch (erro) {
     const motivo = erro instanceof Error ? erro.message : String(erro);
-    onLog(`Não consegui garantir a sessão da Iberia Club: ${motivo}`);
+    onLog(`Não consegui abrir a busca logada da Iberia: ${motivo}`);
     return { voos, diasComFalha: datas.map((data) => ({ data, erro: motivo })) };
   }
 
-  for (let i = 0; i < datas.length; i++) {
+  const consultarLote = async (lote: string[]) => {
+    await garantirNaBusca(page, params, lote[0]!, onLog);
+    await limitadorIberia.aguardarVez();
+    const autorizacao = obterAutorizacao(page);
+    if (!autorizacao) throw new Error("a página de busca não fez nenhuma chamada com Authorization");
+    return Promise.all(
+      lote.map(async (data) => {
+        try {
+          return { data, voos: await buscarVoosDoDia(page, params, data, autorizacao) };
+        } catch (erro) {
+          return { data, erro: erro instanceof Error ? erro.message : String(erro) };
+        }
+      }),
+    );
+  };
+
+  for (let i = 0; i < datas.length; i += TAMANHO_LOTE_DETALHE) {
     if (deveParar()) {
       onLog("Detalhamento cancelado; devolvendo os dias já consultados.");
       break;
     }
-    const data = datas[i]!;
-    const buscar = async () => {
-      await limitadorIberia.aguardarVez();
-      return buscarVoosDoDiaPelaPagina(page, params, data, onLog);
-    };
-
-    try {
-      const doDia = await buscar();
-      voos.push(...doDia);
-      onLog(`${data}: ${doDia.length} voo(s).`);
-    } catch (erro) {
-      // A sessão da Iberia cai em minutos, e a aba é mandada pro login no meio
-      // da varredura: a primeira falha quase sempre é isso, não o dia em si.
-      // Reabrir a busca reloga (ver `fazerLogin`) e a segunda tentativa pega a
-      // sessão nova. Só a SEGUNDA falha conta como falha de verdade.
-      const primeiro = erro instanceof Error ? erro.message : String(erro);
-      onLog(`${data} falhou (${primeiro.slice(0, 80)}); reabrindo a busca e tentando de novo.`);
-      try {
-        const doDia = await buscar();
-        voos.push(...doDia);
-        onLog(`${data}: ${doDia.length} voo(s) na segunda tentativa.`);
-      } catch (erro2) {
-        const motivo = erro2 instanceof Error ? erro2.message : String(erro2);
-        diasComFalha.push({ data, erro: motivo });
-        onLog(`${data} falhou de novo: ${motivo}`);
+    const lote = datas.slice(i, i + TAMANHO_LOTE_DETALHE);
+    let pendentes = lote;
+    for (let tentativa = 1; tentativa <= 2 && pendentes.length > 0; tentativa++) {
+      if (tentativa === 2) {
+        onLog(`${pendentes.length} dia(s) do lote falharam; reabrindo a busca e tentando de novo.`);
+        await page.waitForTimeout(PAUSA_APOS_FALHA_MS);
+        try {
+          await abrirPaginaDeResultados(page, params, pendentes[0]!, onLog);
+        } catch (erro) {
+          onLog(`Reabrir a busca falhou: ${erro instanceof Error ? erro.message : String(erro)}`);
+        }
+      }
+      const resultados = await consultarLote(pendentes).catch((erro: unknown) =>
+        pendentes.map((data) => ({ data, erro: erro instanceof Error ? erro.message : String(erro) })),
+      );
+      pendentes = [];
+      for (const r of resultados) {
+        if ("voos" in r) {
+          voos.push(...r.voos);
+        } else if (tentativa === 2) {
+          diasComFalha.push({ data: r.data, erro: r.erro });
+        } else {
+          pendentes.push(r.data);
+        }
+      }
+      if (tentativa === 2 && resultados.every((r) => "erro" in r)) {
+        const motivo = `a Iberia cortou as consultas (lote inteiro falhou duas vezes: ${diasComFalha.at(-1)!.erro.slice(0, 100)})`;
+        onLog(`Parando o detalhe: ${motivo}`);
+        for (const data of datas.slice(i + TAMANHO_LOTE_DETALHE)) diasComFalha.push({ data, erro: motivo });
+        return { voos, diasComFalha };
       }
     }
-    onProgresso((i + 1) / datas.length);
+    const feitos = Math.min(i + TAMANHO_LOTE_DETALHE, datas.length);
+    onLog(`Detalhe: ${feitos} de ${datas.length} dia(s) consultados.`);
+    onProgresso(feitos / datas.length);
   }
 
   return { voos, diasComFalha };
