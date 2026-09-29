@@ -36,7 +36,8 @@ LATAM, 6s na AA.
 **Na minha máquina, na mão.** Não tem VPS, não tem cron, não tem deploy.
 
 ```
-npm run server     # tsx watch server.ts → http://localhost:5555
+npm run server     # NestJS com --watch → http://localhost:5555
+npm test           # servidor de ponta a ponta com uma fonte falsa, sem navegador
 npm run chrome     # abre um Chrome com perfil dedicado + porta de depuração
 npm run tunnel     # ngrok, quando quero disparar busca do celular
 ```
@@ -51,27 +52,34 @@ O servidor tem Basic Auth (`BOT_AUTH_USER`/`BOT_AUTH_PASS`) justamente porque
 quando exponho por ngrok qualquer um que achasse a URL dispararia busca nas
 contas pagas.
 
-**Stack:** TypeScript + Node (tsx, sem build), Express, Playwright. Front é HTML +
-JS puro, sem framework, sem bundler — `public/index.html` + `public/app.js`.
+**Stack:** TypeScript + Node, NestJS (sobre Express) rodando via loader SWC,
+class-validator nos corpos de requisição, Playwright. Front é HTML + JS puro, sem
+framework, sem bundler — `public/index.html` + `public/app.js`.
 
 ```
 src/
   fontes/                    uma pasta por programa — é onde mora o scraping
-    tap/bot-tap.ts             531  AwardTool/TAP
-    seatspy/bot-seatspy.ts     407  SeatSpy (9 programas)
-    aa/bot-aa.ts               380  American
-    latam/bot-latam.ts         532  LATAM (calendário em R$ + confirmação em milhas)
-    smiles/bot-smiles.ts       629  Smiles/GOL
+    tap/bot-tap.ts             AwardTool/TAP
+    seatspy/bot-seatspy.ts     SeatSpy (9 programas)
+    aa/bot-aa.ts               American
+    latam/bot-latam.ts         LATAM (calendário em R$ + confirmação em milhas)
+    smiles/bot-smiles.ts       Smiles/GOL
+    iberia/bot-iberia.ts       Iberia (Avios)
   nucleo/                    o que toda fonte usa
-    comum.ts                    82  limitador de frequência, formatação de datas, tipos
-    sessao-chrome.ts           148  um Chrome por processo (CDP ou perfil próprio)
-    pool-sessoes.ts            125  reaproveita sessões logadas entre buscas
-    caminhos.ts                 22  todo caminho de disco sai daqui
+    comum.ts                   limitador de frequência, formatação de datas, tipos
+    sessao-chrome.ts           um Chrome por processo (CDP ou perfil próprio)
+    pool-sessoes.ts            reaproveita sessões logadas entre buscas
+    caminhos.ts                todo caminho de disco sai daqui
   saidas/                    o que vira entregável
-    alertas.ts                 157  gera a imagem do alerta a partir do resultado
-    planilha.ts                414  CSV + Google Sheets (uma aba por busca)
-  servidor/server.ts           923  API, fila de jobs, SSE
-  cli.ts                        96  busca pelo terminal, sem servidor
+    alertas.ts                 gera a imagem do alerta a partir do resultado
+    planilha.ts                CSV + Google Sheets (uma aba por busca)
+  servidor/                  app NestJS
+    main.ts                    sobe o app; configure-app.ts liga Basic Auth, estáticos, filtro e validação
+    jobs/                      estado dos jobs, eventos SSE, fila no pool, cancelar/responder
+    search/                    POST /api/buscar: escolhe a fonte no registro e valida com o DTO dela
+    sources/<fonte>/           um módulo Nest por fonte: pool de sessões, DTO e o executor
+    alerts/                    POST /api/alerta
+  cli.ts                     busca pelo terminal, sem servidor
 public/                      front (HTML + JS puro, sem bundler)
 contexto/                    este documento e as notas de recon
 scripts/                     recon, sondas e setup (não entram no servidor)
