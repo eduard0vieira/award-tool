@@ -1,263 +1,278 @@
-# Bot de Emissões — contexto do projeto
+# Award Tool: project context
 
-Ferramenta interna de uma agência de viagens que trabalha com emissão por milhas.
-Ela varre a disponibilidade de passagens-prêmio em quatro fontes e devolve as datas
-com disponibilidade dentro de um teto de milhas/preço, no formato que a gente usa
-para avisar o grupo de clientes.
+Internal tool of a travel agency that issues tickets with miles. It sweeps award
+availability across several sources and returns the dates with availability
+under a miles/price ceiling, in the format we use to notify the clients' group.
 
-Sem credenciais aqui: tudo que é login mora em `.env` (chaves abaixo, valores fora).
+No credentials here: everything related to login lives in `.env` (keys below,
+values left out).
 
 ---
 
-## 1. O que ele faz hoje
+## 1. What it does today
 
-Quatro fontes, cada uma numa aba do front:
+Each source has its own tab in the front:
 
-| Fonte | O que é | Login | Como extrai |
+| Source | What it is | Login | How it extracts |
 |---|---|---|---|
-| **AwardTool** (TAP) | agregador pago | sim (usuário/senha no `.env`) | navegação real na página |
-| **SeatSpy** | agregador pago, 9 programas (AF, B6, BA, CX, EY, IB, KLM, QF, VIR) | sim | intercepta a resposta de rede da API interna |
-| **American** | aa.com, busca de prêmio | não | `fetch` de dentro da página no endpoint de calendário |
-| **LATAM** | latamairlines.com | sessão do navegador | endpoint de calendário (dinheiro) + busca real (milhas) |
+| **AwardTool** (TAP) | paid aggregator | yes (user/password in `.env`) | real navigation of the page |
+| **SeatSpy** | paid aggregator, 9 programs (AF, B6, BA, CX, EY, IB, KLM, QF, VIR) | yes | intercepts the network response of the internal API |
+| **American** | aa.com, award search | no | `fetch` from inside the page on the calendar endpoint |
+| **LATAM** | latamairlines.com | browser session | calendar endpoint (cash) + real search (miles) |
+| **Smiles** | smiles.com.br (GOL) | browser session | the site's own search API, one day per request |
+| **Iberia** | iberia.com, Avios | yes | monthly calendar + optional flight detail |
 
-Saída padronizada de todas: `menor`, `maior` e a lista de datas agrupada por mês —
-`Ago 2026: 07 (9), 25 (3)` (o número entre parênteses, no SeatSpy, é a quantidade
-de assentos). Esse formato existe porque é exatamente o que o gerador de alertas
-já sabe interpretar.
+Every source has the same output: `min`, `max` and the list of dates grouped by
+month, `Ago 2026: 07 (9), 25 (3)` (on SeatSpy the number in parentheses is the
+seat count). The format exists because it is exactly what the alert generator
+already knows how to read.
 
-**Volume de requisição por busca:** ~13 (uma varredura de 12 meses, um mês por
-requisição), com limitador de frequência entre elas — 15s no AwardTool, 8s na
-LATAM, 6s na AA.
+**Request volume per search:** ~13 (a 12-month sweep, one month per request),
+with a rate limiter between them: 15s on AwardTool, 8s on LATAM, 6s on AA.
 
 ---
 
-## 2. Como roda hoje
+## 2. How it runs today
 
-**Na minha máquina, na mão.** Não tem VPS, não tem cron, não tem deploy.
+**On my machine, by hand.** No VPS, no cron, no deploy.
 
 ```
-npm run server     # NestJS com --watch → http://localhost:5555
-npm test           # servidor de ponta a ponta com uma fonte falsa, sem navegador
-npm run chrome     # abre um Chrome com perfil dedicado + porta de depuração
-npm run tunnel     # ngrok, quando quero disparar busca do celular
+npm run server     # NestJS with --watch → http://localhost:5555
+npm test           # server end to end with a fake source, no browser
+npm run chrome     # opens a Chrome with a dedicated profile + debugging port
+npm run tunnel     # ngrok, when I want to trigger searches from my phone
 ```
 
-Eu abro o navegador em `localhost:5555`, preencho origem/destino/cabine/teto e
-clico buscar. Cada busca vira um card na fila da aba, com barra de progresso
-alimentada por SSE. Dá para ter várias rodando ao mesmo tempo (pool de sessões:
-3 AwardTool, 3 SeatSpy, 2 AA, 2 LATAM), e trocar de aba não derruba o progresso
-das outras.
+I open the browser on `localhost:5555`, fill origin/destination/cabin/ceiling and
+click search. Each search becomes a card in the tab's queue, with a progress bar
+fed by SSE. Several can run at once (session pool: 3 AwardTool, 3 SeatSpy, 2 AA,
+2 LATAM), and switching tabs does not drop the others' progress.
 
-O servidor tem Basic Auth (`BOT_AUTH_USER`/`BOT_AUTH_PASS`) justamente porque
-quando exponho por ngrok qualquer um que achasse a URL dispararia busca nas
-contas pagas.
+The server has Basic Auth (`BOT_AUTH_USER`/`BOT_AUTH_PASS`) precisely because,
+when it is exposed through ngrok, anyone who found the URL could trigger
+searches on the paid accounts.
 
-**Stack:** TypeScript + Node, NestJS (sobre Express) rodando via loader SWC,
-class-validator nos corpos de requisição, Playwright. Front é HTML + JS puro, sem
-framework, sem bundler — `public/index.html` + `public/app.js`.
+**Stack:** TypeScript + Node, NestJS (on Express) running through the SWC
+loader, class-validator on request bodies, Playwright, Prisma (SQLite, no models
+yet). The front is plain HTML + JS, no framework, no bundler:
+`public/index.html` + `public/app.js`.
 
 ```
 src/
-  fontes/                    uma pasta por programa — é onde mora o scraping
-    tap/bot-tap.ts             AwardTool/TAP
-    seatspy/bot-seatspy.ts     SeatSpy (9 programas)
-    aa/bot-aa.ts               American
-    latam/bot-latam.ts         LATAM (calendário em R$ + confirmação em milhas)
-    smiles/bot-smiles.ts       Smiles/GOL
-    iberia/bot-iberia.ts       Iberia (Avios)
-  nucleo/                    o que toda fonte usa
-    comum.ts                   limitador de frequência, formatação de datas, tipos
-    sessao-chrome.ts           um Chrome por processo (CDP ou perfil próprio)
-    pool-sessoes.ts            reaproveita sessões logadas entre buscas
-    caminhos.ts                todo caminho de disco sai daqui
-  saidas/                    o que vira entregável
-    alertas.ts                 gera a imagem do alerta a partir do resultado
-    planilha.ts                CSV + Google Sheets (uma aba por busca)
-  servidor/                  app NestJS
-    main.ts                    sobe o app; configure-app.ts liga Basic Auth, estáticos, filtro e validação
-    jobs/                      estado dos jobs, eventos SSE, fila no pool, cancelar/responder
-    search/                    POST /api/buscar: escolhe a fonte no registro e valida com o DTO dela
-    sources/<fonte>/           um módulo Nest por fonte: pool de sessões, DTO e o executor
-    alerts/                    POST /api/alerta
-  cli.ts                     busca pelo terminal, sem servidor
-public/                      front (HTML + JS puro, sem bundler)
-contexto/                    este documento e as notas de recon
-scripts/                     recon, sondas e setup (não entram no servidor)
-fixtures/                    respostas cruas das APIs, pra mexer no parser sem gastar requisição
+  scrapers/                  one folder per program; this is where scraping lives
+    tap/tap.scraper.ts         AwardTool/TAP
+    seatspy/seatspy.scraper.ts SeatSpy (9 programs)
+    aa/aa.scraper.ts           American
+    latam/latam.scraper.ts     LATAM (calendar in R$ + confirmation in miles)
+    smiles/smiles.scraper.ts   Smiles/GOL
+    iberia/iberia.scraper.ts   Iberia (Avios)
+  core/                      what every source uses
+    common.ts                  rate limiter, date formatting, types
+    chrome-session.ts          one Chrome per process (CDP or its own profile)
+    session-pool.ts            reuses logged-in sessions across searches
+    paths.ts                   every disk path comes from here
+  outputs/                   what becomes a deliverable
+    alerts.ts                  generates the alert image from the result
+    spreadsheet.ts             CSV + Google Sheets (one tab per search)
+  server/                    NestJS app
+    main.ts                    boots the app; configure-app.ts wires Basic Auth, static files, filter and validation
+    jobs/                      job state, SSE events, pool queue, cancel/answer
+    search/                    POST /api/searches: picks the source in the registry and validates with its DTO
+    sources/<source>/          one Nest module per source: session pool, DTO and runner
+    alerts/                    POST /api/alerts
+  cli.ts                     search from the terminal, no server
+public/                      front (plain HTML + JS, no bundler)
+docs/                        this document and the recon notes
+scripts/                     recon, probes and setup (not part of the server)
+fixtures/                    raw API responses, to work on a parser without spending requests
+prisma/                      database schema
 ```
 
-**Por que assim:** uma fonte por pasta porque é a unidade em que o trabalho
-acontece — quando o Smiles muda o schema, tudo que precisa mudar está num lugar
-só, e nada em `nucleo/` deveria precisar saber que o Smiles existe. A dependência
-só aponta pra dentro: `fontes/` e `saidas/` usam `nucleo/`, `servidor/` usa os
-três, e `nucleo/` não importa ninguém.
+**Why this way:** one source per folder because that is the unit where work
+happens. When Smiles changes its schema, everything that has to change is in one
+place, and nothing in `core/` should need to know Smiles exists. Dependencies
+only point inward: `scrapers/` and `outputs/` use `core/`, `server/` uses all
+three, and `core/` imports nothing.
 
 ---
 
-## 3. Armazenamento: nenhum banco
+## 3. Storage: no database yet
 
-- **Jobs em memória** — `Map<jobId, {...}>` no processo. Reiniciou o servidor,
-  perdeu tudo que estava rodando.
-- **Histórico de buscas no `localStorage` do navegador.** É o que me avisa
-  "você já buscou esse trecho há menos de 5 dias" (importa porque as fontes pagas
-  têm limite de consulta). Se eu limpar o navegador, some.
-- **Imagens dos alertas em disco**, em `./alertas/<timestamp>-<classe>/`.
-- Nenhum registro de o que foi enviado, quando, com qual preço, nem de resultado
-  histórico por rota. **Não dá para responder "esse trecho está mais barato que
-  no mês passado?"** — o dado não existe depois que fecho a aba.
-
----
-
-## 4. Onde ainda entra trabalho manual (é aqui que dói)
-
-De ponta a ponta, hoje:
-
-1. **Eu decido quais trechos buscar** e digito um por um. Não existe lista de
-   rotas monitoradas — é memória e feeling.
-2. **Disparo cada busca na mão.** Um formulário por vez, por cabine. Uma varredura
-   ida e volta de uma cabine leva ~2–4 min; uma rodada de trabalho são dezenas
-   dessas.
-3. **Leio o resultado e decido o que vira alerta.** Nenhum critério codificado:
-   olho o menor valor e comparo com o que eu lembro que era normal naquele trecho.
-4. **Clico "Gerar alerta"** por cabine, **baixo as imagens**, abro o WhatsApp,
-   **encaminho no grupo** com a legenda. Isso é 100% manual.
-5. **A LATAM nem tem botão de alerta** — o card do gerador fala "milhas + taxas"
-   de um programa só e não sabe exibir R$ nem duas pernas com taxas separadas.
-   Alerta de LATAM eu monto na mão no portal.
-6. **Manutenção de sessão:** quando a AA ou a LATAM começam a bloquear, rodo
-   `scripts/importar-cookies.sh <domínio>`, que copia os cookies daquele domínio
-   do meu Chrome de todo dia para o perfil do bot.
-7. **Nada deduplica contra o que já foi enviado.** Se eu buscar e alertar o mesmo
-   trecho duas vezes na semana, o grupo recebe duas vezes.
-
-**Onde está o ganho maior, na minha leitura:** os passos 1, 2 e 4. Uma lista de
-rotas + varredura agendada + comparação com a rodada anterior transformaria isso
-em "de manhã tem uma pasta com os alertas que valem a pena, eu reviso e encaminho".
+- **Jobs in memory**: a `Map<jobId, {...}>` in the process. Restart the server
+  and everything that was running is gone.
+- **Search history in the browser's `localStorage`.** It is what warns me "you
+  already searched this route less than 5 days ago" (it matters because the paid
+  sources have a query limit). Clearing the browser wipes it.
+- **Alert images on disk**, in `./alerts/<timestamp>-<class>/`.
+- **Search log** in `./spreadsheets/buscas.csv`, one row per day found, and in
+  Google Sheets when configured.
+- No record of what was sent, when, at what price. **"Is this route cheaper
+  than last month?" cannot be answered**: the data is gone once I close the tab.
+  That is what Prisma is here for.
 
 ---
 
-## 5. Como o alerta é gerado (a parte que já automatizei)
+## 4. Where manual work still comes in (this is where it hurts)
 
-Existe um segundo repositório, `vcc-alertas-portal` (React + Vite), que é o gerador
-de imagem de alerta que a equipe usa manualmente. Em vez de reimplementar o layout
-do card no bot — e virar dois templates divergindo com o tempo — eu **reuso o
-portal**:
+End to end, today:
 
-- o servidor do bot serve o `dist/` do portal em `/portal`;
-- o portal ganhou uma página pública `?render`, que monta o card a partir de um
-  JSON serializado no hash da URL (sem Supabase, sem login);
-- `alertas.ts` abre essa página num Chromium headless, tira screenshot dos
-  elementos `#render-card-N` e lê a legenda de WhatsApp pronta.
+1. **I decide which routes to search** and type them one by one. There is no
+   list of monitored routes; it is memory and feeling.
+2. **I trigger each search by hand.** One form at a time, per cabin. A
+   round-trip sweep of one cabin takes ~2–4 min; a work session is dozens of
+   them.
+3. **I read the result and decide what becomes an alert.** No criterion in code:
+   I look at the lowest value and compare it with what I remember was normal for
+   that route.
+4. **I click "generate alert"** per cabin, **download the images**, open
+   WhatsApp and **forward them to the group** with the caption. That is 100%
+   manual.
+5. **The LATAM alert takes its price from the miles confirmation**: without a
+   confirmed pair there is no button, since a card without the points number
+   would carry a blank price.
+6. **Session maintenance:** when AA or LATAM start blocking, I run
+   `scripts/import-cookies.sh <domain>`, which copies that domain's cookies from
+   my everyday Chrome into the bot's profile.
+7. **Nothing deduplicates against what was already sent.** If I search and
+   alert the same route twice in a week, the group gets it twice.
+
+**Where the biggest gain is, as I read it:** steps 1, 2 and 4. A route list +
+scheduled sweep + comparison with the previous round would turn this into "in
+the morning there is a folder with the alerts worth sending, I review and
+forward".
+
+---
+
+## 5. How the alert is generated (the part already automated)
+
+There is a second repository, `vcc-alertas-portal` (React + Vite), the alert
+image generator the team uses by hand. Instead of reimplementing the card layout
+in the bot, and ending up with two templates drifting apart, the bot **reuses
+the portal**:
+
+- the bot's server serves the portal's `dist/` under `/portal`;
+- the portal gained a public `?render` page, which builds the card from a JSON
+  serialized in the URL hash (no Supabase, no login);
+- `alerts.ts` opens that page in a headless Chromium, screenshots the
+  `#render-card-N` elements and reads the ready WhatsApp caption.
 
 ```ts
-const url = `${baseUrl}/portal/?render#dados=${encodeURIComponent(JSON.stringify(rota))}`;
-// ... screenshot de #render-card-0, -1 ... + #render-combo (combinações ida+volta)
-// nome do arquivo igual ao download manual do portal: alerta-GRU-MIA.png
+const url = `${baseUrl}/portal/?render#dados=${encodeURIComponent(JSON.stringify(route))}`;
+// ... screenshot of #render-card-0, -1 ... + #render-combo (outbound+return combinations)
+// file name identical to the portal's manual download: alerta-GRU-MIA.png
 ```
 
-Resultado: o alerta do bot sai idêntico ao gerado na mão, com o mesmo nome de
-arquivo. **Só o encaminhar continua manual.**
+The `dados` hash key and the fields inside it are the portal's contract and stay
+in Portuguese.
+
+Result: the bot's alert comes out identical to the one made by hand, with the
+same file name. **Only the forwarding is still manual.**
 
 ---
 
-## 6. O que quebra, e como eu descubro
+## 6. What breaks, and how I find out
 
-Descubro **olhando** — o card fica vermelho ou o resultado vem estranho. Não tem
-log estruturado, não tem métrica, não tem alerta de falha. O que existe é
-`console.log` no terminal do servidor e um aviso de resultado parcial no card.
+I find out **by looking**: the card turns red or the result looks odd. There is
+no structured logging, no metrics, no failure alerting. What exists is
+`console.log` in the server terminal and a partial-result notice on the card.
 
-Por frequência:
+By frequency:
 
-1. **Anti-bot da American (Akamai).** Foi o problema mais caro do projeto. A escada
-   que eu levantei empiricamente: Chromium do Playwright → 403 na hora; Chrome real
-   com flag de automação escondida + aquecimento na home → passa; requisição feita
-   de fora do navegador → 403 (o TLS não é o do Chrome); `fetch` de dentro da
-   página → 200. E a causa raiz final: **o Akamai bloqueia qualquer navegador que
-   não tenha os cookies dele**, mesmo Chrome limpo sem automação nenhuma. Por isso
-   o script de importar cookies.
-2. **Sessão/cookie expirando** (LATAM principalmente). Sintoma: a fase de
-   confirmação em milhas falha. Conserto: reimportar cookies.
-3. **Print da LATAM falhando** (o painel de tarifa fecha ao rolar a página). Isso
-   me custava a busca inteira — hoje tem fallback em camadas, o print pode falhar
-   que as datas (a parte cara) sobrevivem.
-4. **Servidor velho em memória.** Já me pegou duas vezes: os arquivos do front são
-   lidos do disco a cada request, então a mudança de interface aparece na hora, mas
-   `server.ts`/`bot-*.ts` continuam os antigos. Eu via o campo novo na tela e ele
-   silenciosamente não fazia nada. Mitigado com `tsx watch` + mostrar no resultado
-   o valor que foi realmente aplicado.
-5. **Rota que não existe na fonte.** Ficava pendurada até dar timeout; hoje
-   responde na hora com erro nomeando companhia e trecho.
+1. **American's anti-bot (Akamai).** The most expensive problem of the project.
+   The ladder I worked out empirically: Playwright's Chromium → 403 right away;
+   real Chrome with the automation flag hidden + warming up on the home page →
+   passes; a request made outside the browser → 403 (the TLS is not Chrome's);
+   `fetch` from inside the page → 200. And the final root cause: **Akamai blocks
+   any browser that does not have its cookies**, even a clean Chrome with no
+   automation at all. Hence the cookie import script.
+2. **Session/cookie expiring** (mostly LATAM). Symptom: the miles confirmation
+   step fails. Fix: import the cookies again.
+3. **LATAM screenshot failing** (the fare panel closes when the page scrolls).
+   It used to cost me the whole search; today there is a layered fallback, so
+   the screenshot can fail while the dates (the expensive part) survive.
+4. **Stale server in memory.** It caught me twice: the front files are read from
+   disk on every request, so an interface change shows up immediately, but the
+   server and scrapers kept the old code. I would see the new field on screen
+   and it silently did nothing. Mitigated with `node --watch` + showing in the
+   result the value that was actually applied.
+5. **A route that does not exist on the source.** It used to hang until a
+   timeout; today it answers right away with an error naming the airline and
+   the route.
 
-Classe de bug que eu tenho medo: **falha que parece resultado vazio.** Encontrei
-uma essa semana na AA — o status 400 significa tanto "esse mês ainda não está à
-venda" quanto "seu pedido está errado", e o código tratava os dois igual. Um pedido
-recusado pararia a varredura no primeiro mês e sairia como "nenhuma
-disponibilidade", sem erro nenhum. Corrigido lendo o motivo no corpo da resposta.
+The class of bug I fear: **a failure that looks like an empty result.** I found
+one on AA: status 400 means both "this month is not on sale yet" and "your
+request is wrong", and the code handled both the same way. A refused request
+would stop the sweep at the first month and come out as "no availability", with
+no error at all. Fixed by reading the reason in the response body.
 
 ---
 
-## 7. Trechos de código que mostram a estrutura
+## 7. Code that shows the structure
 
-**Tipo comum de saída** (`comum.ts`) — é o que faz as quatro fontes caberem no
-mesmo front e no mesmo gerador de alerta:
+**Common output type** (`src/core/common.ts`): what makes every source fit the
+same front and the same alert generator:
 
 ```ts
-export type SecaoRelatorio = {
-  menor: number | null;
-  maior: number | null;
-  dias: { data: string; valorK: number | null; assentos?: number }[];
-  texto: string;              // "Ago 2026: 07 (9), 25 (3)"
-  unidade?: "K" | "BRL";      // LATAM em dinheiro; ausente = milhas
+export type ReportSection = {
+  min: number | null;
+  max: number | null;
+  days: FormattedDay[];       // chronological
+  text: string;               // "Ago 2026: 07 (9), 25 (3)"
+  unit?: "K" | "BRL";         // LATAM in cash; absent = miles
 };
 ```
 
-**Extração da AA** — o calendário não depende de estado de sessão, então dá para
-varrer o ano trocando só a data:
+**AA extraction**: the calendar does not depend on session state, so the year
+can be swept by changing only the date:
 
 ```ts
-const resultado = await page.evaluate(async (corpo) => {
-  const res = await fetch("/booking/api/search/calendar", {
+const result = await page.evaluate(async (body) => {
+  const response = await fetch("/booking/api/search/calendar", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(corpo),
+    body: JSON.stringify(body),
   });
-  return { status: res.status, texto: await res.text() };
-}, corpoCalendario(params, departureDate));
+  return { status: response.status, text: await response.text() };
+}, calendarRequestBody(params, departureDate));
 ```
 
-**LATAM em duas fases** — o calendário em dinheiro é barato (6 requisições cobrem
-o ano, cada resposta traz 2 meses nas duas direções) e serve para achar candidatos;
-só o melhor par ida/volta é confirmado em milhas com uma busca real, que gera o
-print. A premissa é que voo barato em dinheiro é voo barato em milhas.
+**LATAM in two phases**: the cash calendar is cheap (6 requests cover the year,
+each response brings 2 months in both directions) and is used to find
+candidates; only the best outbound/return pair is confirmed in miles with a real
+search, which produces the screenshot. The premise is that a flight cheap in
+cash is cheap in miles.
 
-**Pool de sessões** — cada fonte tem um pool que reaproveita a sessão logada entre
-buscas, porque refazer login a cada busca é lento e chama atenção do anti-bot.
-Sessão parada também custa: uma do SeatSpy medida aqui fica em ~450 MB ociosa, e o
-servidor fica dias de pé. Por isso o slot fecha a sessão depois de
-`IDLE_MINUTES` sem uso e recria na busca seguinte — reabrir custa ~6s (launch
-+ login), pagos uma vez por rajada. AA, LATAM e Smiles dividem um Chrome só, então
-para elas a ociosidade fecha apenas a aba.
+**Session pool**: each source has a pool that reuses the logged-in session
+across searches, because logging in again for every search is slow and draws
+the anti-bot's attention. An idle session also costs: a SeatSpy one measured
+here sits at ~450 MB idle, and the server stays up for days. So a slot closes
+its session after `IDLE_MINUTES` without use and recreates it on the next
+search; reopening costs ~6s (launch + login), paid once per burst. AA, LATAM and
+Smiles share a single Chrome, so for them idleness only closes the tab.
 
 ---
 
-## 8. Chaves de configuração (só os nomes)
+## 8. Configuration keys (names only)
+
+See `.env.example` for the full list.
 
 ```
 LOGIN_URL, EMAIL_ACCOUNT, PASSWORD_ACCOUNT        # AwardTool
 SEATSPY_LOGIN_URL, SEATSPY_EMAIL, SEATSPY_PASSWORD
-BOT_AUTH_USER, BOT_AUTH_PASS                      # Basic Auth do servidor
-CONCORRENCIA_*                                    # jobs simultâneos por fonte
-IDLE_MINUTES                                # fecha a sessão parada (0 desliga)
-*_INTERVALO_BUSCAS_MS                             # limitador de frequência
-AA_CHROME_PROFILE, AA_CDP_PORT                    # perfil/porta do Chrome do bot
+BOT_AUTH_USER, BOT_AUTH_PASS                      # server Basic Auth
+*_CONCURRENCY                                     # simultaneous jobs per source
+IDLE_MINUTES                                      # closes an idle session (0 turns it off)
+*_SEARCH_INTERVAL_MS                              # rate limiter
+AA_CHROME_PROFILE, AA_CDP_PORT                    # the bot Chrome's profile/port
+DATABASE_URL                                      # Prisma
 ```
 
-## AA: o código 309 do calendário
+## AA: calendar code 309
 
-`POST /booking/api/search/calendar` responde **HTTP 200 com `error: "309"` e
-`calendarMonths: []`** quando não há prêmio naquele mês para a rota. É ausência
-de dado, não falha — medido em 2026-09-25 com HEL→NRT executiva, onde setembro
-a janeiro dão 309 e julho/2027 dá 23 dias a 75.000.
+`POST /booking/api/search/calendar` answers **HTTP 200 with `error: "309"` and
+`calendarMonths: []`** when there is no award that month for the route. It is
+missing data, not a failure: measured on 2026-09-25 with HEL→NRT business, where
+September to January give 309 and July 2027 gives 23 days at 75,000.
 
-Tratá-lo como erro fazia a varredura desistir depois de três meses seguidos e
-devolver "nenhuma disponibilidade" para o ano inteiro numa rota sazonal.
+Treating it as an error made the sweep give up after three months in a row and
+return "no availability" for the whole year on a seasonal route.
