@@ -1,27 +1,31 @@
 # Fixtures
 
-Respostas cruas das APIs, salvas byte a byte, sem parse e sem transformação.
+Raw API responses, saved byte for byte, with no parsing and no transformation.
 
-Servem pra mexer no parser sem gastar requisição — importante no Smiles, onde o
-orçamento por IP é limitado e cada busca de teste queima parte dele (ver o 406 em
-`CONTEXTO.md`).
+They let you work on a parser without spending requests. That matters on Smiles,
+where the budget per IP is limited and every test search burns part of it (see
+the 406 in `docs/CONTEXT.md`).
 
-| arquivo | fonte | como regerar |
+| file | source | how to regenerate |
 |---|---|---|
-| `smiles-real.json` | Smiles — busca GRU→MIA | `npx tsx scripts/recon-smiles.ts` |
-| `azul-real.json` | Azul — uma data, chamada do próprio site | `npx tsx scripts/recon-azul.ts` |
-| `azul-real-multidata.json` | Azul — seis datas, chamada sequestrada | `LOTES=6 npx tsx scripts/recon-azul.ts` |
-| `latam-redemption-options-real.json` | LATAM — as 4 combinações milhas+dinheiro de um par ida e volta | `npm run recon:latam GRU JNB <ida> <volta>` (sessão logada) |
-| `seatsaero-real.json` | Seats.aero — API Partner | `SEATS_API_KEY=... npx tsx scripts/salvar-fixture-seatsaero.ts` |
-| `seatsaero-real.headers.json` | headers da resposta acima | idem |
+| `smiles-real.json` | Smiles, GRU→MIA search | `npx tsx scripts/recon-smiles.ts` |
+| `smiles-real-congener.json` | Smiles, a day that also brings congener airlines | saved by hand from a real response |
+| `smiles-452-date.json` | Smiles, 452 for a date outside the sale window | saved by hand from a real response |
+| `smiles-452-airport.json` | Smiles, 452 for an unknown airport | saved by hand from a real response |
+| `azul-real.json` | Azul, one date, called by the site itself | `npx tsx scripts/recon-azul.ts` |
+| `azul-real-multidata.json` | Azul, six dates, hijacked call | `BATCHES=6 npx tsx scripts/recon-azul.ts` |
+| `iberia-real.json` | Iberia, day availability | `npm run recon:iberia` (logged-in session) |
+| `iberia-real-plus1.json`, `iberia-real-plus30.json` | Iberia, the same route 1 and 30 days later | `npm run recon:iberia` (logged-in session) |
+| `iberia-monthly-0.json` | Iberia, monthly calendar | saved by hand from a real response |
+| `latam-redemption-options-real.json` | LATAM, the 4 miles+cash combinations of a round-trip pair | `npm run recon:latam GRU JNB <outbound> <return>` (logged-in session) |
 
-## Regra antes de commitar uma fixture nova
+## Rule before committing a new fixture
 
-São respostas de busca pública, sem login — por isso podem ficar no repositório.
-Confira antes de adicionar:
+Check before adding one:
 
-- nada de token, cookie, `Authorization` ou chave de API (os scripts salvam só os
-  headers de **resposta**, nunca os de requisição);
-- nada de dado de cliente (nome, CPF, e-mail, número de fidelidade, reserva).
+- no token, cookie, `Authorization` or API key (the scripts save only the
+  **response** headers, never the request ones);
+- no client data (name, CPF, e-mail, loyalty number, booking).
 
-Se a resposta trouxer qualquer um desses, ela não entra no git.
+If the response carries any of these, it stays out of git. The screenshots in
+this folder come from logged-in sessions and are ignored for that reason.
