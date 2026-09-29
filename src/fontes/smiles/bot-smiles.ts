@@ -83,7 +83,8 @@ export type ParametrosSmiles = {
   destino: string; // IATA
 };
 
-// Período a varrer. Vazio = de amanhã até SMILES_DIAS_VARREDURA dias à frente.
+// Período a varrer. Vazio = de amanhã até SMILES_DIAS_VARREDURA dias à frente,
+// nunca além do último dia à venda.
 //
 // Existe porque um ano inteiro raramente cabe no orçamento de IP: em rota sem
 // calendário cada dia custa uma consulta, e a busca acaba entregando um pedaço
@@ -590,10 +591,13 @@ const DIAS_A_VARRER = Number(process.env.SMILES_DIAS_VARREDURA) || 365;
 // Teto de segurança: mesmo pedindo um período maior, a varredura não passa
 // disso. Sem teto, um intervalo digitado errado viraria milhares de consultas.
 const MAX_DIAS_PERIODO = Number(process.env.SMILES_MAX_DIAS_PERIODO) || 365;
+// O Smiles vende até hoje + 329 dias; do 330º em diante responde 452 "data não
+// permitida" (medido em 2026-09-29). Pedir além disso só gasta consulta.
+const JANELA_VENDA_DIAS = 330;
 
 // Traduz o período pedido em datas concretas, corrigindo o que não faz sentido
 // em vez de estourar: data no passado vira amanhã, fim antes do início vira o
-// padrão, e intervalo grande demais é cortado no teto.
+// padrão, e intervalo grande demais é cortado no teto e na janela de venda.
 function diasNoPeriodo(inicio: string, fim: string): number {
   return Math.round((Date.parse(fim) - Date.parse(inicio)) / 86_400_000) + 1;
 }
@@ -611,6 +615,12 @@ export function limitesDoPeriodo(periodo: PeriodoSmiles = {}): { inicio: string;
 
   const limite = somarDias(inicio, MAX_DIAS_PERIODO);
   if (fim > limite) fim = limite;
+
+  const ultimoDiaVenda = hojeMais(JANELA_VENDA_DIAS - 1);
+  if (inicio > ultimoDiaVenda) {
+    throw new Error(`O período pedido começa em ${inicio}, mas o Smiles só vende até ${ultimoDiaVenda}.`);
+  }
+  if (fim > ultimoDiaVenda) fim = ultimoDiaVenda;
   return { inicio, fim };
 }
 const PASSO_AMOSTRAGEM = 7; // o calendário cobre ±3 dias
