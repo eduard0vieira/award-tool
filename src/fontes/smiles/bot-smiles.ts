@@ -411,6 +411,44 @@ function referenciaAkamai(texto: string): string | null {
   return achado ? achado[1]! : null;
 }
 
+// Data depois do último dia à venda. Não é falha do dia: é a borda do período,
+// e a varredura para ali sem contar como erro.
+export class ErroForaDaJanelaSmiles extends Error {
+  readonly data: string;
+
+  constructor(data: string) {
+    super(`O Smiles não vende passagem para ${data}: a data está fora da janela de venda.`);
+    this.data = data;
+  }
+}
+
+// 452 é código próprio deles com dois sentidos, e só o corpo separa um do outro
+// (medido em 2026-09-29, fixtures/smiles-452-*.json):
+//
+//   {"errorMessage":"data não permitida"}                       → data fora da venda
+//   {"error":"Error: Falha ao obter os dados do aeroporto: XQZ"} → sigla desconhecida
+//
+// Tratar tudo como aeroporto fez uma varredura de GRU→MRU acusar sigla errada
+// em datas que só não estavam à venda ainda.
+function erro452(texto: string, params: ParametrosSmiles, data: string): Error {
+  let corpo: { errorMessage?: unknown; error?: unknown } = {};
+  try {
+    corpo = JSON.parse(texto);
+  } catch (err) {
+    if (!(err instanceof SyntaxError)) throw err;
+    return new Error(`O Smiles respondeu 452 para ${data}. ${resumirCorpo(texto)}`);
+  }
+
+  if (corpo.errorMessage === "data não permitida") return new ErroForaDaJanelaSmiles(data);
+  if (typeof corpo.error === "string" && corpo.error.includes("Falha ao obter os dados do aeroporto")) {
+    return new Error(
+      `O Smiles não reconheceu um dos aeroportos de ${params.origem.toUpperCase()} → ${params.destino.toUpperCase()}. ` +
+        "Confira as siglas IATA.",
+    );
+  }
+  return new Error(`O Smiles respondeu 452 para ${data}. ${resumirCorpo(texto)}`);
+}
+
 async function chamarApi(page: Page, params: ParametrosSmiles, data: string) {
   await limitadorSmiles.aguardarVez();
   return page.evaluate(
@@ -455,14 +493,7 @@ export async function buscarDiaSmiles(
 
   if (resultado.status === 403) throw new ErroAcessoNegadoSmiles(referenciaAkamai(resultado.texto));
 
-  if (resultado.status === 452) {
-    // Código próprio deles pra aeroporto inválido — vale mensagem específica,
-    // senão vira "erro 452" e o usuário não descobre que errou a sigla.
-    throw new Error(
-      `O Smiles não reconheceu um dos aeroportos de ${params.origem.toUpperCase()} → ${params.destino.toUpperCase()}. ` +
-        "Confira as siglas IATA.",
-    );
-  }
+  if (resultado.status === 452) throw erro452(resultado.texto, params, data);
   if (resultado.status !== 200) {
     throw new Error(`O Smiles respondeu ${resultado.status} para ${data}. ${resumirCorpo(resultado.texto)}`);
   }
@@ -626,6 +657,9 @@ export async function pesquisarAnoSmiles(
   const jaBuscados = new Set<string>();
   // menor valor conhecido por dia, vindo do calendário
   const calendario = new Map<string, number>();
+  // Primeira data recusada como fora da venda. Daí em diante nada é consultado.
+  const janela: { recusadaDesde: string | null } = { recusadaDesde: null };
+  const dentroDaJanela = (data: string) => janela.recusadaDesde == null || data < janela.recusadaDesde;
 
   const buscar = async (data: string): Promise<RespostaSmiles | null> => {
     if (jaBuscados.has(data)) return null;
@@ -645,6 +679,10 @@ export async function pesquisarAnoSmiles(
       // Bloqueio não é falha de um dia: é o fim da varredura. Insistir só
       // queima o pouco de orçamento que ainda houver.
       if (err instanceof ErroBloqueioSmiles) throw err;
+      if (err instanceof ErroForaDaJanelaSmiles) {
+        if (dentroDaJanela(data)) janela.recusadaDesde = data;
+        return null;
+      }
       const mensagem = err instanceof Error ? err.message : String(err);
       diasComFalha.push({ data, erro: mensagem });
       onLog(`Falha em ${data}: ${mensagem}`);
@@ -671,6 +709,7 @@ export async function pesquisarAnoSmiles(
       break;
     }
     const resposta = await buscar(amostras[i]!);
+    if (janela.recusadaDesde) break;
     if (resposta) {
       falhasSeguidas = 0;
     } else if (++falhasSeguidas >= MAX_FALHAS_SEGUIDAS) {
@@ -692,7 +731,7 @@ export async function pesquisarAnoSmiles(
     onLog("Esta rota não devolve calendário. Preenchendo os dias entre as sondagens, um a um.");
     const faltando: string[] = [];
     for (let d = inicio; d <= fim; d = somarDias(d, 1)) {
-      if (!jaBuscados.has(d)) faltando.push(d);
+      if (!jaBuscados.has(d) && dentroDaJanela(d)) faltando.push(d);
     }
 
     const aBuscar = faltando.slice(0, MAX_DETALHES);
@@ -705,12 +744,13 @@ export async function pesquisarAnoSmiles(
     }
 
     for (let i = 0; i < aBuscar.length; i++) {
+      if (!dentroDaJanela(aBuscar[i]!)) break;
       await buscar(aBuscar[i]!);
       onProgresso(0.6 + 0.4 * ((i + 1) / aBuscar.length));
     }
   } else {
     const candidatos = Array.from(calendario.entries())
-      .filter(([data]) => data >= inicio && data <= fim && !jaBuscados.has(data))
+      .filter(([data]) => data >= inicio && data <= fim && !jaBuscados.has(data) && dentroDaJanela(data))
       .filter(([, milhas]) => teto == null || milhas <= teto)
       .sort((a, b) => a[1] - b[1]); // mais baratos primeiro
 
@@ -743,6 +783,18 @@ export async function pesquisarAnoSmiles(
       );
     } else {
       throw err;
+    }
+  }
+
+  if (janela.recusadaDesde) {
+    onLog(`O Smiles só vende até ${somarDias(janela.recusadaDesde, -1)}. A varredura parou aí.`);
+    // `fim` já está cortado na janela conhecida. Recusa antes dele quer dizer
+    // que a janela encolheu, e os dias entre um e outro ficaram sem consulta.
+    if (janela.recusadaDesde < fim) {
+      lacunas.push(
+        `o Smiles recusou as datas a partir de ${janela.recusadaDesde} como fora da venda, antes do fim esperado ` +
+          `(${fim}); os dias entre elas não foram consultados`,
+      );
     }
   }
 
