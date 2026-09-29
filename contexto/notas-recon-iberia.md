@@ -477,3 +477,30 @@ cliente.
 Caminho possível, não explorado: descobrir se um dia tem prêmio em executiva
 exige o `/availability` daquele dia (~15s cada). Serve para uma lista curta de
 datas, não para varrer um ano.
+
+## 16. Detalhe em escala: a Iberia corta por volta de 40–60 consultas (2026-09-28)
+
+Tentativa de voltar ao ritmo do `cheap-flights` (lotes de 30 a cada 7s no
+`/availability`), agora de dentro da aba — que é o que passa pelo anti-bot.
+Medido com `scripts/medir-lotes-iberia.ts`, GRU→MAD, ~247 datas, sessão
+logada, logo depois do calendário, com 10–20 min de pausa entre as rodadas:
+
+```
+30 em paralelo:            todas "Failed to fetch" em 1,2s (depois de 15 ok)
+lotes de 10, 7s de pausa:  1º lote 10/10; 2º lote 6/10
+lotes de 5, 8s entre eles: tela ibbkerror no dia ~30; corte definitivo no ~40
+1 por vez, a cada 3s:      corte definitivo no dia 59 (8,3 min), 9 repetições antes
+```
+
+O corte aparece como `TypeError: Failed to fetch` com a aba ainda em
+`www.iberia.com/flights/` — não é a sessão caindo, é o site recusando. Reabrir
+a busca nessa hora cai na tela de erro "não podemos mostrar os voos".
+
+Leitura: **o ritmo muda pouco o total.** Rajada é cortada logo; espaçar leva o
+corte de ~40 pra ~60 consultas, não pra 247. Parece cota por janela de tempo
+(ou por sessão), não limite de velocidade. Não medido: se um login novo zera a
+cota, e quanto tempo de pausa a devolve.
+
+Consequência: "todas as datas detalhadas" do bot antigo não cabe numa rodada
+só. O detalhe ficou sequencial (`IBERIA_LOTE_DETALHE`, padrão 1), que é mais
+leve que o carregamento de página por dia que ele substituiu.
