@@ -4,9 +4,9 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node --import @swc-node/register/esm-register --test src/servidor/server.e2e.test.ts",
     "start": "tsx src/cli.ts",
-    "server": "tsx watch src/servidor/server.ts",
+    "server": "node --watch --import @swc-node/register/esm-register src/servidor/main.ts",
     "tunnel": "ngrok http 5555",
     "chrome": "bash scripts/chrome-aa.sh",
     "chrome:parar": "bash scripts/parar-chrome.sh",
@@ -14,18 +14,29 @@
     "formatar": "tsx scripts/formatar-datas.ts",
     "recon:iberia": "tsx scripts/recon-iberia.ts",
     "iberia": "tsx scripts/buscar-iberia.ts",
-    "recon:latam": "tsx scripts/recon-latam-rt.ts"
+    "recon:latam": "tsx scripts/recon-latam-rt.ts",
+    "typecheck": "tsc --noEmit"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@nestjs/common": "^12.1.1",
+    "@nestjs/core": "^12.1.1",
+    "@nestjs/platform-express": "^12.1.1",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.15.1",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
-    "playwright": "^1.61.1"
+    "playwright": "^1.61.1",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2"
   },
   "devDependencies": {
+    "@nestjs/testing": "^12.1.1",
+    "@swc-node/register": "^1.12.1",
+    "@swc/core": "^1.16.12",
     "@types/express": "^5.0.6",
     "@types/node": "^26.1.0",
     "tsx": "^4.23.0",

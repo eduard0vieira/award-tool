@@ -35,5 +35,9 @@
     "noUncheckedSideEffectImports": true,
     "moduleDetection": "force",
     "skipLibCheck": true,
+
+    // NestJS reads constructor and DTO types from decorator metadata.
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
   }
 }
