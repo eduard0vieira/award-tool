@@ -2,7 +2,7 @@ import { Module } from "@nestjs/common";
 import { startSeatspySession, type SeatspySession } from "../../../scrapers/seatspy/seatspy.scraper.ts";
 import { config } from "../../config.ts";
 import { JobsModule } from "../../jobs/jobs.module.ts";
-import { sessionPoolProvider } from "../session-pool.ts";
+import { sessionPoolProvider } from "../session-pool.provider.ts";
 import { SEATSPY_POOL, SeatspySource } from "./seatspy.source.ts";
 
 @Module({

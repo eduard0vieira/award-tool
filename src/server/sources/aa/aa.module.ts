@@ -3,7 +3,7 @@ import { startAaSession, type AaSession } from "../../../scrapers/aa/aa.scraper.
 import { closeChromeSession, isSessionAlive } from "../../../core/chrome-session.ts";
 import { config } from "../../config.ts";
 import { JobsModule } from "../../jobs/jobs.module.ts";
-import { sessionPoolProvider } from "../session-pool.ts";
+import { sessionPoolProvider } from "../session-pool.provider.ts";
 import { AA_POOL, AaSource } from "./aa.source.ts";
 
 @Module({

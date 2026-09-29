@@ -3,7 +3,7 @@ import { startIberiaSession, type IberiaSession } from "../../../scrapers/iberia
 import { closeChromeSession, isSessionAlive } from "../../../core/chrome-session.ts";
 import { config } from "../../config.ts";
 import { JobsModule } from "../../jobs/jobs.module.ts";
-import { sessionPoolProvider } from "../session-pool.ts";
+import { sessionPoolProvider } from "../session-pool.provider.ts";
 import { IBERIA_POOL, IberiaSource } from "./iberia.source.ts";
 
 @Module({

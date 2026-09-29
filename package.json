@@ -6,7 +6,7 @@
   "scripts": {
     "test": "node --import @swc-node/register/esm-register --test $(find src -name \"*.test.ts\")",
     "start": "tsx src/cli.ts",
-    "server": "node --watch --import @swc-node/register/esm-register src/servidor/main.ts",
+    "server": "node --watch --import @swc-node/register/esm-register src/server/main.ts",
     "tunnel": "ngrok http 5555",
     "chrome": "bash scripts/chrome-aa.sh",
     "chrome:parar": "bash scripts/parar-chrome.sh",

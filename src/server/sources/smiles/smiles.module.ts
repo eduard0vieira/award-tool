@@ -3,7 +3,7 @@ import { startSmilesSession, type SmilesSession } from "../../../scrapers/smiles
 import { closeChromeSession, isSessionAlive } from "../../../core/chrome-session.ts";
 import { config } from "../../config.ts";
 import { JobsModule } from "../../jobs/jobs.module.ts";
-import { sessionPoolProvider } from "../session-pool.ts";
+import { sessionPoolProvider } from "../session-pool.provider.ts";
 import { SMILES_POOL, SmilesSource } from "./smiles.source.ts";
 
 @Module({
