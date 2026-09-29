@@ -26,3 +26,8 @@ fixtures/latam-rt/
 # Capturas de diagnóstico do recon: mostram a tela logada (nome do titular,
 # saldo de milhas). Ficam em disco pra depurar, nunca no repositório.
 fixtures/*.png
+
+# Prisma: local SQLite database and the generated client.
+*.db
+*.db-journal
+/generated/
