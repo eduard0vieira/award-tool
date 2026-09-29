@@ -1,5 +1,5 @@
 import { IsIn } from "class-validator";
-import { NOME_COMPANHIA, type CompanhiaSeatspy } from "../../../fontes/seatspy/bot-seatspy.ts";
+import { AIRLINE_NAMES, type SeatspyAirline } from "../../../scrapers/seatspy/seatspy.scraper.ts";
 import {
   OptionalBooleanField,
   OptionalCeilingField,
@@ -7,7 +7,7 @@ import {
   RouteRequestDto,
 } from "../../search/request-fields.ts";
 
-const AIRLINES = Object.keys(NOME_COMPANHIA);
+const AIRLINES = Object.keys(AIRLINE_NAMES);
 
 export class SeatspyCeilingsDto {
   @OptionalCeilingField("tetos.economica")
@@ -25,7 +25,7 @@ export class SeatspyCeilingsDto {
 
 export class SeatspySearchDto extends RouteRequestDto {
   @IsIn(AIRLINES, { message: `companhia deve ser uma destas para buscas no SeatSpy: ${AIRLINES.join(", ")}.` })
-  companhia!: CompanhiaSeatspy;
+  companhia!: SeatspyAirline;
 
   @OptionalBooleanField("idaEVolta")
   idaEVolta?: boolean;

@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { construirRelatorioAA, linkEmissaoAA } from "./aa/bot-aa.ts";
-import { construirRelatorioSeatspy, type ValorCabine } from "./seatspy/bot-seatspy.ts";
+import { buildSeatspyReport, type CabinAvailability } from "../scrapers/seatspy/seatspy.scraper.ts";
 import { construirRelatorio } from "./tap/bot-tap.ts";
 
-const cabin = (miles: number | null, seats = 0): ValorCabine => ({ disponivel: miles !== null, milhas: miles, assentos: seats });
+const cabin = (miles: number | null, seats = 0): CabinAvailability => ({ available: miles !== null, miles, seats });
 
 describe("report builders", () => {
   test("TAP splits business and economy, parsing values in K", () => {
@@ -31,16 +31,16 @@ describe("report builders", () => {
   });
 
   test("SeatSpy builds four cabins, applies ceilings and shows seats", () => {
-    const { secoes } = construirRelatorioSeatspy(
+    const { sections } = buildSeatspyReport(
       [
-        { data: "2026-10-01", economica: cabin(30000, 4), premium: cabin(null), executiva: cabin(90000, 2), primeira: cabin(null) },
-        { data: "2026-10-03", economica: cabin(45000, 9), premium: cabin(null), executiva: cabin(null), primeira: cabin(null) },
+        { date: "2026-10-01", economy: cabin(30000, 4), premium: cabin(null), business: cabin(90000, 2), first: cabin(null) },
+        { date: "2026-10-03", economy: cabin(45000, 9), premium: cabin(null), business: cabin(null), first: cabin(null) },
       ],
-      { economica: 40000 },
+      { economy: 40000 },
       true,
     );
     assert.deepEqual(
-      secoes.map((s) => [s.rotulo, s.corClasse, s.menor, s.maior, s.texto]),
+      sections.map((s) => [s.rotulo, s.corClasse, s.menor, s.maior, s.texto]),
       [
         ["Econômica", "cartao-economica", 30, 30, "Out 2026: 01 (4)"],
         ["Premium", "cartao-premium", null, null, "Nenhuma disponibilidade encontrada nesse período."],
@@ -48,7 +48,7 @@ describe("report builders", () => {
         ["Primeira Classe", "cartao-primeira", null, null, "Nenhuma disponibilidade encontrada nesse período."],
       ],
     );
-    assert.deepEqual(secoes[0]!.dias, [{ data: "2026-10-01", valorK: 30, assentos: 4 }]);
+    assert.deepEqual(sections[0]!.dias, [{ data: "2026-10-01", valorK: 30, assentos: 4 }]);
   });
 
   test("AA keeps days under the ceiling and links each one to the booking page", () => {

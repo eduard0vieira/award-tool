@@ -1,7 +1,7 @@
-import type { SecaoSeatspy } from "../../fontes/seatspy/bot-seatspy.ts";
+import type { SeatspySection } from "../../scrapers/seatspy/seatspy.scraper.ts";
 import { saveSearch, type SearchToSave } from "../../outputs/spreadsheet.ts";
 
-export type Leg = { rotulo: string; secoes: SecaoSeatspy[] };
+export type Leg = { rotulo: string; secoes: SeatspySection[] };
 
 // Recorded here rather than in each bot because this is where every source
 // already converges on the same report shape. A recording failure never fails the search.

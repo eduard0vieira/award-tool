@@ -1,9 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import {
-  construirRelatorioSeatspy,
-  pesquisarSeatspy,
-  type SessaoSeatspy,
-} from "../../../fontes/seatspy/bot-seatspy.ts";
+import { buildSeatspyReport, searchSeatspy, type SeatspySession } from "../../../scrapers/seatspy/seatspy.scraper.ts";
 import { SessionPool } from "../../../core/session-pool.ts";
 import { JobRunner } from "../../jobs/job-runner.service.ts";
 import { JobStore } from "../../jobs/job-store.service.ts";
@@ -21,7 +17,7 @@ export class SeatspySource implements SearchSource<SeatspySearchDto> {
   readonly requestDto = SeatspySearchDto;
 
   constructor(
-    @Inject(SEATSPY_POOL) private readonly pool: SessionPool<SessaoSeatspy>,
+    @Inject(SEATSPY_POOL) private readonly pool: SessionPool<SeatspySession>,
     private readonly runner: JobRunner,
     private readonly jobs: JobStore,
   ) {}
@@ -32,17 +28,17 @@ export class SeatspySource implements SearchSource<SeatspySearchDto> {
     // Absent means show: an old tab that never sends the field keeps getting seats.
     const showSeats = request.mostrarAssentos !== false;
     const ceilings = {
-      economica: request.tetos?.economica ?? null,
+      economy: request.tetos?.economica ?? null,
       premium: request.tetos?.premium ?? null,
-      executiva: request.tetos?.executiva ?? null,
-      primeira: request.tetos?.primeira ?? null,
+      business: request.tetos?.executiva ?? null,
+      first: request.tetos?.primeira ?? null,
     };
 
     return this.runner.run(this.pool, jobId, async ({ page }) => {
       const job = this.jobs.callbacks(jobId);
-      const { ida: outbound, volta: inbound } = await pesquisarSeatspy(
+      const { outbound, inbound } = await searchSeatspy(
         page,
-        { companhia, origem, destino, idaEVolta: roundTrip },
+        { airline: companhia, origin: origem, destination: destino, roundTrip },
         job.log,
         job.progress,
       );
@@ -50,13 +46,13 @@ export class SeatspySource implements SearchSource<SeatspySearchDto> {
       const legs: Leg[] = [
         {
           rotulo: roundTrip ? `Ida: ${origem} → ${destino}` : `${origem} → ${destino}`,
-          secoes: construirRelatorioSeatspy(outbound, ceilings, showSeats).secoes,
+          secoes: buildSeatspyReport(outbound, ceilings, showSeats).sections,
         },
       ];
       if (inbound) {
         legs.push({
           rotulo: `Volta: ${destino} → ${origem}`,
-          secoes: construirRelatorioSeatspy(inbound, ceilings, showSeats).secoes,
+          secoes: buildSeatspyReport(inbound, ceilings, showSeats).sections,
         });
       }
 
@@ -66,10 +62,10 @@ export class SeatspySource implements SearchSource<SeatspySearchDto> {
         destination: destino,
         legs,
         ceilings: {
-          "Econômica": ceilings.economica,
+          "Econômica": ceilings.economy,
           Premium: ceilings.premium,
-          Executiva: ceilings.executiva,
-          "Primeira Classe": ceilings.primeira,
+          Executiva: ceilings.business,
+          "Primeira Classe": ceilings.first,
         },
       });
       this.jobs.complete(jobId, { pernas: legs });
