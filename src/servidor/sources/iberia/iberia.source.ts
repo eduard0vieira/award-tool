@@ -26,6 +26,14 @@ export function pickDatesToDetail(dates: string[], aviosByDate: Map<string, numb
   return detailDays === -1 ? cheapestFirst : cheapestFirst.slice(0, detailDays);
 }
 
+// A date that failed or was never reached has no flights either, so narrowing
+// would present it as "no matching flight" instead of "not looked at".
+export function narrowingBlocker(detail: { failedDates: number; stopped: boolean }): string | null {
+  if (detail.stopped) return "o detalhe foi interrompido antes de olhar todas as datas";
+  if (detail.failedDates > 0) return `${detail.failedDates} data(s) não puderam ser detalhadas`;
+  return null;
+}
+
 // No cabin selector: the Avios grid returns one value per day, the cheapest,
 // without saying which cabin it belongs to (contexto/notas-recon-iberia.md, 10 and 13).
 @Injectable()
@@ -104,7 +112,12 @@ export class IberiaSource implements SearchSource<IberiaSearchDto> {
         // With every date detailed the filter can also narrow the date list. With
         // partial detail that would hide good dates that were simply not looked at.
         const hasFilter = Boolean(filters.cabines?.length) || filters.maxEscalas != null;
-        if (detailAll && hasFilter) {
+        const blocker = narrowingBlocker({ failedDates: diasComFalha.length, stopped: job.shouldStop() });
+        if (detailAll && hasFilter && blocker) {
+          spreadsheetNotices.push(
+            `A lista de datas não foi filtrada pelo detalhe porque ${blocker}; as datas sem detalhe continuam na lista.`,
+          );
+        } else if (detailAll && hasFilter) {
           const datesWithFlight = new Set(filtered.map((flight) => flight.data));
           const before = section.dias.length;
           section = {
