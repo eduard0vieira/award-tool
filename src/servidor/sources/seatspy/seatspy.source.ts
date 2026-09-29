@@ -61,11 +61,11 @@ export class SeatspySource implements SearchSource<SeatspySearchDto> {
       }
 
       recordSearch(jobId, {
-        fonte: companhia,
-        origem,
-        destino,
-        pernas: legs,
-        tetos: {
+        source: companhia,
+        origin: origem,
+        destination: destino,
+        legs,
+        ceilings: {
           "Econômica": ceilings.economica,
           Premium: ceilings.premium,
           Executiva: ceilings.executiva,

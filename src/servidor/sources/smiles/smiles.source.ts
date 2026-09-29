@@ -6,7 +6,7 @@ import {
   type SessaoSmiles,
 } from "../../../fontes/smiles/bot-smiles.ts";
 import { SessionPool } from "../../../core/session-pool.ts";
-import { criarPlanilhaDaBusca, type LinhaVoo } from "../../../saidas/planilha.ts";
+import { createSearchSheet, type FlightRow } from "../../../outputs/spreadsheet.ts";
 import { JobRunner } from "../../jobs/job-runner.service.ts";
 import { JobStore } from "../../jobs/job-store.service.ts";
 import type { SearchSource } from "../../search/search-source.ts";
@@ -96,7 +96,7 @@ export class SmilesSource implements SearchSource<SmilesSearchDto> {
       }
       const partialNotice = gaps.length > 0 ? `Cobertura parcial. ${gaps.join("; ")}.` : undefined;
 
-      const rows: LinhaVoo[] = [];
+      const rows: FlightRow[] = [];
       for (const day of dias) {
         for (const flight of day.voos) {
           const detail = flight.detalhe;
@@ -122,20 +122,18 @@ export class SmilesSource implements SearchSource<SmilesSearchDto> {
           });
         }
       }
-      const spreadsheetUrl = await criarPlanilhaDaBusca(
-        {
-          titulo: `Smiles ${origem}-${destino} ${new Date().toISOString().slice(0, 16).replace("T", " ")}`,
-          linhas: rows,
+      const spreadsheetUrl = await createSearchSheet({ title: `Smiles ${origem}-${destino} ${new Date().toISOString().slice(0, 16).replace("T", " ")}`,
+          rows,
         },
         job.log,
       );
 
       recordSearch(jobId, {
-        fonte: "SMILES",
-        origem,
-        destino,
-        pernas: legs,
-        tetos: { "Econômica": ceilings.economica, Conforto: ceilings.premium, Executiva: ceilings.executiva },
+        source: "SMILES",
+        origin: origem,
+        destination: destino,
+        legs,
+        ceilings: { "Econômica": ceilings.economica, Conforto: ceilings.premium, Executiva: ceilings.executiva },
       });
       this.jobs.complete(jobId, { pernas: legs, avisoParcial: partialNotice, planilhaUrl: spreadsheetUrl });
     });

@@ -62,10 +62,10 @@ export class TapSource implements SearchSource<TapSearchDto> {
           : undefined;
 
       recordSearch(jobId, {
-        fonte: "tap",
-        origem,
-        destino,
-        pernas: [
+        source: "tap",
+        origin: origem,
+        destination: destino,
+        legs: [
           {
             rotulo: `${origem} → ${destino}`,
             secoes: [
@@ -74,7 +74,7 @@ export class TapSource implements SearchSource<TapSearchDto> {
             ],
           },
         ],
-        tetos: { Executiva: appliedCeilings.executivaK, "Econômica": appliedCeilings.economicaK },
+        ceilings: { Executiva: appliedCeilings.executivaK, "Econômica": appliedCeilings.economicaK },
       });
       this.jobs.complete(jobId, {
         relatorio: report,

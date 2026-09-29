@@ -55,11 +55,11 @@ export class AaSource implements SearchSource<AaSearchDto> {
         : undefined;
 
       recordSearch(jobId, {
-        fonte: "AA",
-        origem,
-        destino,
-        pernas: [{ rotulo: `${origem} → ${destino}`, secoes: [section] }],
-        tetos: { [section.rotulo]: ceiling },
+        source: "AA",
+        origin: origem,
+        destination: destino,
+        legs: [{ rotulo: `${origem} → ${destino}`, secoes: [section] }],
+        ceilings: { [section.rotulo]: ceiling },
       });
       this.jobs.complete(jobId, { secaoAA: section, avisoParcial: partialNotice });
     });

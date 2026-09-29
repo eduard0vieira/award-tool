@@ -1,5 +1,5 @@
 #!/bin/bash
-# Cria a conta de serviço que escreve na planilha de buscas (ver src/saidas/planilha.ts).
+# Cria a conta de serviço que escreve na planilha de buscas (ver src/outputs/spreadsheet.ts).
 #
 # Roda DEPOIS de `gcloud auth login` — é o único passo que precisa de você,
 # porque envolve a sua conta Google.
@@ -64,7 +64,7 @@ touch "$ENV_FILE"
 if ! grep -q "^GOOGLE_CREDENCIAIS=" "$ENV_FILE"; then
   {
     echo ""
-    echo "# Planilha de buscas (ver src/saidas/planilha.ts)"
+    echo "# Planilha de buscas (ver src/outputs/spreadsheet.ts)"
     echo "GOOGLE_CREDENCIAIS=$ARQ_CRED"
   } >> "$ENV_FILE"
   echo "✅ GOOGLE_CREDENCIAIS escrito no .env"

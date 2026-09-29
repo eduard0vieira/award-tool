@@ -2,12 +2,7 @@ import "dotenv/config";
 import crypto from "node:crypto";
 import path from "node:path";
 import { SPREADSHEETS_DIR } from "../src/core/paths.ts";
-import {
-  criarPlanilhaDaBusca,
-  gravarCsvDeVoos,
-  registrarBusca,
-  type LinhaVoo,
-} from "../src/saidas/planilha.ts";
+import { createSearchSheet, saveSearch, writeFlightsCsv, type FlightRow } from "../src/outputs/spreadsheet.ts";
 import {
   construirRelatorioIberia,
   detalharDias,
@@ -116,19 +111,19 @@ async function main() {
     console.log(secao.texto);
 
     // Registro acumulado, igual às outras fontes: uma linha por dia.
-    await registrarBusca(
+    await saveSearch(
       {
-        fonte: "IBERIA",
-        origem: origem.toUpperCase(),
-        destino: destino.toUpperCase(),
-        pernas: [
+        source: "IBERIA",
+        origin: origem.toUpperCase(),
+        destination: destino.toUpperCase(),
+        legs: [
           {
             rotulo: `Ida: ${origem.toUpperCase()} → ${destino.toUpperCase()}`,
             secoes: [{ rotulo: "Avios", dias: secao.dias.map((d) => ({ data: d.data, valorK: d.valorK })) }],
           },
         ],
-        tetos: teto != null ? { Avios: Math.round(teto / 10) / 100 } : {},
-        busca: crypto.randomUUID(),
+        ceilings: teto != null ? { Avios: Math.round(teto / 10) / 100 } : {},
+        searchId: crypto.randomUUID(),
       },
       (m) => console.log(`  ${m}`),
     );
@@ -169,7 +164,7 @@ async function main() {
       console.log(`⚠️  ${diasComFalha.length} dia(s) falharam. O primeiro: ${diasComFalha[0]!.data} — ${diasComFalha[0]!.erro}`);
     }
 
-    const linhas: LinhaVoo[] = filtrados.map((v) => ({
+    const linhas: FlightRow[] = filtrados.map((v) => ({
       departure_date: v.data,
       arrival_date: v.chegadaData,
       departure_station: v.origem,
@@ -202,11 +197,11 @@ async function main() {
       SPREADSHEETS_DIR,
       `iberia-${origem.toUpperCase()}-${destino.toUpperCase()}-${carimbo.replace(/[: ]/g, "-")}.csv`,
     );
-    gravarCsvDeVoos(linhas, arquivo);
+    writeFlightsCsv(linhas, arquivo);
     console.log(`\n✅ ${linhas.length} voo(s) em ${path.relative(process.cwd(), arquivo)}`);
 
-    const url = await criarPlanilhaDaBusca(
-      { titulo: `Iberia ${origem.toUpperCase()}-${destino.toUpperCase()} ${carimbo}`, linhas },
+    const url = await createSearchSheet(
+      { title: `Iberia ${origem.toUpperCase()}-${destino.toUpperCase()} ${carimbo}`, rows: linhas },
       (m) => console.log(`  ${m}`),
     );
     if (url) console.log(`   também no Google: ${url}`);

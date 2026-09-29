@@ -11,7 +11,7 @@ import {
 } from "../../../fontes/iberia/bot-iberia.ts";
 import { SPREADSHEETS_DIR } from "../../../core/paths.ts";
 import { SessionPool } from "../../../core/session-pool.ts";
-import { criarPlanilhaDaBusca, gravarCsvDeVoos, type LinhaVoo } from "../../../saidas/planilha.ts";
+import { createSearchSheet, writeFlightsCsv, type FlightRow } from "../../../outputs/spreadsheet.ts";
 import { JobRunner } from "../../jobs/job-runner.service.ts";
 import { JobStore } from "../../jobs/job-store.service.ts";
 import type { SearchSource } from "../../search/search-source.ts";
@@ -134,7 +134,7 @@ export class IberiaSource implements SearchSource<IberiaSearchDto> {
           );
         }
 
-        const rows: LinhaVoo[] = filtered.map((flight) => ({
+        const rows: FlightRow[] = filtered.map((flight) => ({
           departure_date: flight.data,
           arrival_date: flight.chegadaData,
           departure_station: flight.origem,
@@ -160,7 +160,7 @@ export class IberiaSource implements SearchSource<IberiaSearchDto> {
           const stamp = new Date().toISOString().slice(0, 16).replace("T", " ");
           const fileName = `iberia-${origem}-${destino}-${stamp.replace(/[: ]/g, "-")}.csv`;
           try {
-            gravarCsvDeVoos(rows, path.join(SPREADSHEETS_DIR, fileName));
+            writeFlightsCsv(rows, path.join(SPREADSHEETS_DIR, fileName));
             // The local file always exists while Google may be down or unconfigured;
             // without sending it to the screen a saved sheet looked like it was never made.
             localFile = `planilhas/${fileName}`;
@@ -169,8 +169,7 @@ export class IberiaSource implements SearchSource<IberiaSearchDto> {
               `Não consegui gravar o CSV de voos: ${err instanceof Error ? err.message : String(err)}`,
             );
           }
-          spreadsheetUrl = await criarPlanilhaDaBusca(
-            { titulo: `Iberia ${origem}-${destino} ${stamp}`, linhas: rows },
+          spreadsheetUrl = await createSearchSheet({ title: `Iberia ${origem}-${destino} ${stamp}`, rows },
             job.log,
           );
         } else {
@@ -189,11 +188,11 @@ export class IberiaSource implements SearchSource<IberiaSearchDto> {
       const finalNotice = [cabinNotice, partialNotice, ...spreadsheetNotices].filter(Boolean).join(" ") || undefined;
 
       recordSearch(jobId, {
-        fonte: "IBERIA",
-        origem,
-        destino,
-        pernas: [{ rotulo: `${origem} → ${destino}`, secoes: [section] }],
-        tetos: { Avios: ceiling == null ? null : Math.round(ceiling / 10) / 100 },
+        source: "IBERIA",
+        origin: origem,
+        destination: destino,
+        legs: [{ rotulo: `${origem} → ${destino}`, secoes: [section] }],
+        ceilings: { Avios: ceiling == null ? null : Math.round(ceiling / 10) / 100 },
       });
       this.jobs.complete(jobId, {
         secaoIberia: section,

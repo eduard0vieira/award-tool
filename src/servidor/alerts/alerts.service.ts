@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { gerarAlerta, type AlertaGerado } from "../../saidas/alertas.ts";
+import { generateAlert, type GeneratedAlert } from "../../outputs/alerts.ts";
 import { config } from "../config.ts";
 import { CreateAlertDto } from "./create-alert.dto.ts";
 
@@ -9,18 +9,18 @@ function positiveOrNull(value: number | null | undefined): number | null {
 
 @Injectable()
 export class AlertsService {
-  create(request: CreateAlertDto): Promise<AlertaGerado> {
+  create(request: CreateAlertDto): Promise<GeneratedAlert> {
     const { credentials, port } = config;
-    return gerarAlerta(
+    return generateAlert(
       {
-        fonte: request.fonte ?? "",
-        origem: request.origem,
-        destino: request.destino,
-        classe: request.classe,
-        menorK: positiveOrNull(request.menorK),
-        maiorK: positiveOrNull(request.maiorK),
-        textoIda: request.textoIda ?? "",
-        textoVolta: request.textoVolta ?? "",
+        source: request.fonte ?? "",
+        origin: request.origem,
+        destination: request.destino,
+        cabinClass: request.classe,
+        minK: positiveOrNull(request.menorK),
+        maxK: positiveOrNull(request.maiorK),
+        outboundText: request.textoIda ?? "",
+        inboundText: request.textoVolta ?? "",
       },
       {
         // The alert is rendered by loading this same server's portal, behind the same Basic Auth.

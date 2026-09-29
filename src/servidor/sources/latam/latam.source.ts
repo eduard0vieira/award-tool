@@ -14,8 +14,8 @@ import {
   type TetosLatam,
 } from "../../../fontes/latam/bot-latam.ts";
 import { formatDatesByMonth } from "../../../core/common.ts";
+import { ALERTS_DIR } from "../../../core/paths.ts";
 import { SessionPool } from "../../../core/session-pool.ts";
-import { DIR_ALERTAS } from "../../../saidas/alertas.ts";
 import { config } from "../../config.ts";
 import { JobRunner } from "../../jobs/job-runner.service.ts";
 import { JobStore } from "../../jobs/job-store.service.ts";
@@ -99,11 +99,11 @@ export class LatamSource implements SearchSource<LatamSearchDto> {
       }
 
       recordSearch(jobId, {
-        fonte: "LATAM",
-        origem,
-        destino,
-        pernas: legs,
-        tetos: { "Econômica": ceilings.tetoReais },
+        source: "LATAM",
+        origin: origem,
+        destination: destino,
+        legs,
+        ceilings: { "Econômica": ceilings.tetoReais },
       });
       this.jobs.complete(jobId, { pernas: legs, avisoParcial: partialNotice, confirmacao: confirmation });
     });
@@ -128,7 +128,7 @@ export class LatamSource implements SearchSource<LatamSearchDto> {
           "Confirmação em milhas não executada.";
       } else {
         const folder = `latam-${search.origem}-${search.destino}-${Date.now()}`;
-        fs.mkdirSync(path.join(DIR_ALERTAS, folder), { recursive: true });
+        fs.mkdirSync(path.join(ALERTS_DIR, folder), { recursive: true });
 
         const confirmed: ConfirmacaoPar[] = [];
         const failures: string[] = [];
@@ -143,7 +143,7 @@ export class LatamSource implements SearchSource<LatamSearchDto> {
                 destino: search.destino,
                 dataIda: pair.ida.data,
                 dataVolta: pair.volta.data,
-                caminhoImagem: path.join(DIR_ALERTAS, folder, file),
+                caminhoImagem: path.join(ALERTS_DIR, folder, file),
               },
               job.log,
               // A login prompt becomes a notice: it is the only way the user learns
