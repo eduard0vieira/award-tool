@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { iniciarSessaoAA, linkEmissaoAA, type CabineAA } from "../src/fontes/aa/bot-aa.ts";
+import { aaBookingLink, startAaSession, type AaCabin } from "../src/scrapers/aa/aa.scraper.ts";
 
 // Reproduz a chamada de calendário que a fonte da AA faz, mês a mês, e mostra a
 // RESPOSTA CRUA. Existe porque uma busca HEL→NRT em executiva devolveu
@@ -50,11 +50,11 @@ function corpo(departureDate: string, cabinReq: string, stops: number | null) {
 }
 
 async function main() {
-  const sessao = await iniciarSessaoAA(false);
+  const sessao = await startAaSession(false);
   const page = sessao.page;
   try {
-    const url = linkEmissaoAA(
-      { origem: origem.toUpperCase(), destino: destino.toUpperCase(), passageiros: 1, cabine: cabine as CabineAA },
+    const url = aaBookingLink(
+      { origin: origem.toUpperCase(), destination: destino.toUpperCase(), passengers: 1, cabin: cabine as AaCabin },
       "2027-07-15",
     );
     console.log(`abrindo ${url.slice(0, 110)}...`);

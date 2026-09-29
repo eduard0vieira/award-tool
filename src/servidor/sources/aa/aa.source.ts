@@ -1,10 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import {
-  CABINE_AA_LABEL,
-  construirRelatorioAA,
-  pesquisarAnoAA,
-  type SessaoAA,
-} from "../../../fontes/aa/bot-aa.ts";
+import { AA_CABIN_LABELS, buildAaReport, searchAaYear, type AaSession } from "../../../scrapers/aa/aa.scraper.ts";
 import { SessionPool } from "../../../core/session-pool.ts";
 import { JobRunner } from "../../jobs/job-runner.service.ts";
 import { JobStore } from "../../jobs/job-store.service.ts";
@@ -21,7 +16,7 @@ export class AaSource implements SearchSource<AaSearchDto> {
   readonly requestDto = AaSearchDto;
 
   constructor(
-    @Inject(AA_POOL) private readonly pool: SessionPool<SessaoAA>,
+    @Inject(AA_POOL) private readonly pool: SessionPool<AaSession>,
     private readonly runner: JobRunner,
     private readonly jobs: JobStore,
   ) {}
@@ -33,9 +28,9 @@ export class AaSource implements SearchSource<AaSearchDto> {
 
     return this.runner.run(this.pool, jobId, async ({ page }) => {
       const job = this.jobs.callbacks(jobId);
-      const { dias, mesesComFalha } = await pesquisarAnoAA(
+      const { days, failedMonths } = await searchAaYear(
         page,
-        { origem, destino, cabine, maxConexoes: request.maxConexoes ?? null, passageiros: passengers },
+        { origin: origem, destination: destino, cabin: cabine, maxStops: request.maxConexoes ?? null, passengers },
         job.log,
         job.progress,
         job.notice,
@@ -43,15 +38,15 @@ export class AaSource implements SearchSource<AaSearchDto> {
       );
 
       const section = {
-        rotulo: CABINE_AA_LABEL[cabine],
-        ...construirRelatorioAA(dias, ceiling, { origem, destino, passageiros: passengers, cabine }),
+        rotulo: AA_CABIN_LABELS[cabine],
+        ...buildAaReport(days, ceiling, { origin: origem, destination: destino, passengers, cabin: cabine }),
       };
       // Without the first failure's reason the user would only see "partial" and
       // have to open the server terminal to tell a block from a bad route.
-      const firstFailure = mesesComFalha[0];
+      const firstFailure = failedMonths[0];
       const partialNotice = firstFailure
-        ? `${mesesComFalha.length} mês(es) não puderam ser buscados. O resultado abaixo é parcial. ` +
-          `Primeira falha (${firstFailure.mes}): ${firstFailure.erro}`
+        ? `${failedMonths.length} mês(es) não puderam ser buscados. O resultado abaixo é parcial. ` +
+          `Primeira falha (${firstFailure.month}): ${firstFailure.error}`
         : undefined;
 
       recordSearch(jobId, {

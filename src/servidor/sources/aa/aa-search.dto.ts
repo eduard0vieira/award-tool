@@ -1,12 +1,12 @@
 import { IsIn, IsOptional } from "class-validator";
-import { CABINE_AA_LABEL, MAX_PASSAGEIROS_AA, type CabineAA } from "../../../fontes/aa/bot-aa.ts";
+import { AA_CABIN_LABELS, AA_MAX_PASSENGERS, type AaCabin } from "../../../scrapers/aa/aa.scraper.ts";
 import { OptionalCeilingField, OptionalIntField, RouteRequestDto } from "../../search/request-fields.ts";
 
-const CABINS = Object.keys(CABINE_AA_LABEL);
+const CABINS = Object.keys(AA_CABIN_LABELS);
 
 export class AaSearchDto extends RouteRequestDto {
   @IsIn(CABINS, { message: `cabine deve ser uma destas para buscas na AA: ${CABINS.join(", ")}.` })
-  cabine!: CabineAA;
+  cabine!: AaCabin;
 
   @IsOptional()
   @IsIn([0, 1], { message: "O campo maxConexoes deve ser 0, 1 ou vazio." })
@@ -15,6 +15,6 @@ export class AaSearchDto extends RouteRequestDto {
   @OptionalCeilingField("teto")
   teto?: number | null;
 
-  @OptionalIntField("passageiros", 1, MAX_PASSAGEIROS_AA)
+  @OptionalIntField("passageiros", 1, AA_MAX_PASSENGERS)
   passageiros?: number;
 }

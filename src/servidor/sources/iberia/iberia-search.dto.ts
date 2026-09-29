@@ -1,12 +1,12 @@
 import { IsArray, IsIn, IsOptional, IsString } from "class-validator";
-import { MAX_PASSAGEIROS_AA } from "../../../fontes/aa/bot-aa.ts";
+import { AA_MAX_PASSENGERS } from "../../../scrapers/aa/aa.scraper.ts";
 import { OptionalCeilingField, OptionalIntField, RouteRequestDto } from "../../search/request-fields.ts";
 
 export class IberiaSearchDto extends RouteRequestDto {
   @OptionalCeilingField("teto")
   teto?: number | null;
 
-  @OptionalIntField("passageiros", 1, MAX_PASSAGEIROS_AA)
+  @OptionalIntField("passageiros", 1, AA_MAX_PASSENGERS)
   passageiros?: number;
 
   // -1 details every date, the old bot's mode: ~15s per date, can pass an hour.

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { construirRelatorioAA, linkEmissaoAA } from "./aa/bot-aa.ts";
+import { aaBookingLink, buildAaReport } from "../scrapers/aa/aa.scraper.ts";
 import { buildSeatspyReport, type CabinAvailability } from "../scrapers/seatspy/seatspy.scraper.ts";
 import { construirRelatorio } from "./tap/bot-tap.ts";
 
@@ -52,11 +52,11 @@ describe("report builders", () => {
   });
 
   test("AA keeps days under the ceiling and links each one to the booking page", () => {
-    const route = { origem: "GRU", destino: "MIA", passageiros: 2, cabine: "executiva" as const };
-    const report = construirRelatorioAA(
+    const route = { origin: "GRU", destination: "MIA", passengers: 2, cabin: "executiva" as const };
+    const report = buildAaReport(
       [
-        { data: "2026-10-01", milhas: 60000 },
-        { data: "2026-10-02", milhas: 90000 },
+        { date: "2026-10-01", miles: 60000 },
+        { date: "2026-10-02", miles: 90000 },
       ],
       70000,
       route,
@@ -64,7 +64,7 @@ describe("report builders", () => {
     assert.equal(report.menor, 60);
     assert.equal(report.texto, "Out 2026: 01");
     assert.equal(report.dias.length, 1);
-    assert.equal(report.dias[0]!.link, linkEmissaoAA(route, "2026-10-01"));
-    assert.match(linkEmissaoAA(route, "2026-10-01"), /pax=2&adult=2&type=OneWay&searchType=Award&cabin=BUSINESS/);
+    assert.equal(report.dias[0]!.link, aaBookingLink(route, "2026-10-01"));
+    assert.match(aaBookingLink(route, "2026-10-01"), /pax=2&adult=2&type=OneWay&searchType=Award&cabin=BUSINESS/);
   });
 });
