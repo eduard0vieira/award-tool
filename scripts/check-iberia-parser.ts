@@ -6,7 +6,7 @@ import { filterFlights, readFlights } from "../src/scrapers/iberia/iberia.scrape
 // Checks the flight parser against the real responses saved in fixtures/. Runs
 // without network or browser: what can be verified while the site is rate-limiting.
 
-const files = ["iberia-real.json", "iberia-real-mais1.json", "iberia-real-mais30.json"];
+const files = ["iberia-real.json", "iberia-real-plus1.json", "iberia-real-plus30.json"];
 
 for (const name of files) {
   const filePath = path.join(FIXTURES_DIR, name);

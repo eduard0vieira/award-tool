@@ -54,8 +54,8 @@ describe("Smiles response parser", () => {
 
   test("tells an out-of-sale date apart from an unknown airport on 452", () => {
     const route = { origin: "gru", destination: "xqz" };
-    assert.ok(error452(fixture("smiles-452-data.json"), route, "2027-09-01") instanceof SmilesOutOfSaleWindowError);
-    assert.match(error452(fixture("smiles-452-aeroporto.json"), route, "2027-09-01").message, /GRU → XQZ/);
+    assert.ok(error452(fixture("smiles-452-date.json"), route, "2027-09-01") instanceof SmilesOutOfSaleWindowError);
+    assert.match(error452(fixture("smiles-452-airport.json"), route, "2027-09-01").message, /GRU → XQZ/);
   });
 
   test("builds one section per cabin with seats in the copied text", () => {

@@ -32,7 +32,7 @@ describe("Iberia availability parser", () => {
   });
 
   test("filters flights by stops and by cabin", () => {
-    const flights = readFlights(fixture("iberia-real-mais1.json"), "2026-12-16");
+    const flights = readFlights(fixture("iberia-real-plus1.json"), "2026-12-16");
     assert.equal(flights.length, 9);
     assert.equal(filterFlights(flights, { maxStops: 0 }).length, 0);
     assert.equal(filterFlights(flights, { maxStops: 1 }).length, 1);
