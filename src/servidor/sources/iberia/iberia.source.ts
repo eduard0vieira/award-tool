@@ -21,8 +21,9 @@ import { IberiaSearchDto } from "./iberia-search.dto.ts";
 export const IBERIA_POOL = Symbol("IBERIA_POOL");
 
 export function pickDatesToDetail(dates: string[], aviosByDate: Map<string, number>, detailDays: number): string[] {
-  if (!(detailDays > 0)) return [];
-  return [...dates].sort((a, b) => (aviosByDate.get(a) ?? 0) - (aviosByDate.get(b) ?? 0)).slice(0, detailDays);
+  if (detailDays === 0) return [];
+  const cheapestFirst = [...dates].sort((a, b) => (aviosByDate.get(a) ?? 0) - (aviosByDate.get(b) ?? 0));
+  return detailDays === -1 ? cheapestFirst : cheapestFirst.slice(0, detailDays);
 }
 
 // No cabin selector: the Avios grid returns one value per day, the cheapest,

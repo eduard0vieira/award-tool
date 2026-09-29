@@ -16,6 +16,10 @@ describe("pickDatesToDetail", () => {
     assert.deepEqual(pickDatesToDetail(dates, aviosByDate, 2), ["2026-10-02", "2026-10-04"]);
   });
 
+  test("details every date, cheapest first, when asked for all (-1)", () => {
+    assert.deepEqual(pickDatesToDetail(dates, aviosByDate, -1), ["2026-10-02", "2026-10-04", "2026-10-01", "2026-10-03"]);
+  });
+
   test("details nothing when asked for zero", () => {
     assert.deepEqual(pickDatesToDetail(dates, aviosByDate, 0), []);
   });
