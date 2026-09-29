@@ -4,7 +4,7 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "test": "node --import @swc-node/register/esm-register --test src/servidor/server.e2e.test.ts src/servidor/sources/iberia/iberia.source.test.ts",
+    "test": "node --import @swc-node/register/esm-register --test $(find src -name \"*.test.ts\")",
     "start": "tsx src/cli.ts",
     "server": "node --watch --import @swc-node/register/esm-register src/servidor/main.ts",
     "tunnel": "ngrok http 5555",
