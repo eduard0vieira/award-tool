@@ -2,13 +2,13 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { aaBookingLink, buildAaReport } from "../scrapers/aa/aa.scraper.ts";
 import { buildSeatspyReport, type CabinAvailability } from "../scrapers/seatspy/seatspy.scraper.ts";
-import { construirRelatorio } from "./tap/bot-tap.ts";
+import { buildTapReport } from "../scrapers/tap/tap.scraper.ts";
 
 const cabin = (miles: number | null, seats = 0): CabinAvailability => ({ available: miles !== null, miles, seats });
 
 describe("report builders", () => {
   test("TAP splits business and economy, parsing values in K", () => {
-    const report = construirRelatorio(
+    const report = buildTapReport(
       [
         { date: "2026-10-01", found: 1, total: 1, economy: "45K", premiumEconomy: "-", business: "170K", first: "-" },
         { date: "2026-10-02", found: 1, total: 1, economy: "60K", premiumEconomy: "-", business: "200K", first: "-" },

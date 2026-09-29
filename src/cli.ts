@@ -1,96 +1,67 @@
-import { stdin as input, stdout as output } from "process";
-import * as readline from "readline/promises";
-import {
-  cabineParamDe,
-  construirRelatorio,
-  iniciarSessao,
-  pesquisarAnoCompleto,
-  type ReportSection,
-} from "./fontes/tap/bot-tap.ts";
+import { stdin as input, stdout as output } from "node:process";
+import * as readline from "node:readline/promises";
+import type { ReportSection } from "./core/common.ts";
+import { buildTapReport, cabinParamOf, searchTapYear, startTapSession } from "./scrapers/tap/tap.scraper.ts";
 
-function formatarSecaoParaTexto(nome: string, secao: ReportSection): string {
-  if (secao.dias.length === 0) {
-    return `${nome}:\n${secao.texto}`;
-  }
-  const resumo = `Menor valor: ${secao.menor}K | Maior valor: ${secao.maior}K | Dias com disponibilidade: ${secao.dias.length}`;
-  return `${nome}:\n${resumo}\n${secao.texto}`;
+function sectionAsText(name: string, section: ReportSection): string {
+  if (section.dias.length === 0) return `${name}:\n${section.texto}`;
+  const summary = `Menor valor: ${section.menor}K | Maior valor: ${section.maior}K | Dias com disponibilidade: ${section.dias.length}`;
+  return `${name}:\n${summary}\n${section.texto}`;
 }
 
-async function perguntarComPadrao(
-  rl: readline.Interface,
-  pergunta: string,
-  padrao: string,
-): Promise<string> {
-  const resposta = await rl.question(`${pergunta} (Enter para "${padrao}"): `);
-  return resposta.trim() === "" ? padrao : resposta.trim();
+async function askWithDefault(rl: readline.Interface, question: string, fallback: string): Promise<string> {
+  const answer = await rl.question(`${question} (Enter para "${fallback}"): `);
+  return answer.trim() === "" ? fallback : answer.trim();
 }
 
-async function perguntarSimNao(rl: readline.Interface, pergunta: string): Promise<boolean> {
-  const resposta = await rl.question(`${pergunta} (s/n): `);
-  return /^s(im)?$/i.test(resposta.trim());
+async function askYesNo(rl: readline.Interface, question: string): Promise<boolean> {
+  const answer = await rl.question(`${question} (s/n): `);
+  return /^s(im)?$/i.test(answer.trim());
 }
 
-async function buscarEmissoes() {
+async function searchFromTerminal() {
   const rl = readline.createInterface({ input, output });
 
   console.log("✈️  Bot de Emissões TAP Iniciado!\n");
 
   console.log("Acessando a página de login...");
-  const { browser, page, baseUrl } = await iniciarSessao(false);
+  const { browser, page, baseUrl } = await startTapSession(false);
   console.log("Login concluído!");
 
-  let origem = (
-    await rl.question("🛫 Digite a origem (código IATA, ex.: GRU): ")
-  ).toUpperCase();
-  let destino = (
-    await rl.question("🛬 Digite o destino (código IATA, ex.: LIS): ")
-  ).toUpperCase();
-  let cabine = await rl.question(
-    "💺 Cabine (1 para Executiva, 2 para Econômica): ",
-  );
+  let origin = (await rl.question("🛫 Digite a origem (código IATA, ex.: GRU): ")).toUpperCase();
+  let destination = (await rl.question("🛬 Digite o destino (código IATA, ex.: LIS): ")).toUpperCase();
+  let cabin = await rl.question("💺 Cabine (1 para Executiva, 2 para Econômica): ");
 
   for (;;) {
-    console.log(`\nBuscando ${origem} -> ${destino}...`);
-    const cabineParam = cabineParamDe(cabine);
+    console.log(`\nBuscando ${origin} -> ${destination}...`);
 
-    const { dias: todasAsDatas, janelasComFalha } = await pesquisarAnoCompleto(
+    const { days, failedWindows } = await searchTapYear(
       page,
-      { baseUrl, origem, destino, cabineParam },
-      (msg) => console.log(msg),
+      { baseUrl, origin, destination, cabinParam: cabinParamOf(cabin) },
+      (message) => console.log(message),
     );
-    if (janelasComFalha.length > 0) {
-      console.log(`\n⚠️  ${janelasComFalha.length} janela(s) não puderam ser buscadas e foram puladas.`);
+    if (failedWindows.length > 0) {
+      console.log(`\n⚠️  ${failedWindows.length} janela(s) não puderam ser buscadas e foram puladas.`);
     }
-    const relatorio = construirRelatorio(todasAsDatas);
+    const report = buildTapReport(days);
 
     console.log("\n--- RESULTADO ---\n");
-    console.log(formatarSecaoParaTexto("Executivas", relatorio.executivas));
+    console.log(sectionAsText("Executivas", report.executivas));
     console.log("");
-    console.log(formatarSecaoParaTexto("Economicas", relatorio.economicas));
+    console.log(sectionAsText("Economicas", report.economicas));
 
-    const querOutroTrecho = await perguntarSimNao(
-      rl,
-      "\nDeseja pesquisar mais algum trecho (ex.: a volta)?",
-    );
-    if (!querOutroTrecho) break;
+    if (!(await askYesNo(rl, "\nDeseja pesquisar mais algum trecho (ex.: a volta)?"))) break;
 
-    // Sugere a volta do trecho pesquisado (origem/destino invertidos) como
-    // padrão, mas deixa o usuário digitar outra coisa se quiser.
-    const novaOrigem = await perguntarComPadrao(rl, "🛫 Origem", destino);
-    const novoDestino = await perguntarComPadrao(rl, "🛬 Destino", origem);
-    const novaCabine = await perguntarComPadrao(
-      rl,
-      "💺 Cabine (1 para Executiva, 2 para Econômica)",
-      cabine,
-    );
-
-    origem = novaOrigem.toUpperCase();
-    destino = novoDestino.toUpperCase();
-    cabine = novaCabine;
+    // Suggests the return of the route just searched, but any other can be typed.
+    const nextOrigin = await askWithDefault(rl, "🛫 Origem", destination);
+    const nextDestination = await askWithDefault(rl, "🛬 Destino", origin);
+    cabin = await askWithDefault(rl, "💺 Cabine (1 para Executiva, 2 para Econômica)", cabin);
+    origin = nextOrigin.toUpperCase();
+    destination = nextDestination.toUpperCase();
   }
 
   rl.close();
   await browser.close();
 }
 
-buscarEmissoes();
+searchFromTerminal();

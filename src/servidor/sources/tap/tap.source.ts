@@ -1,11 +1,11 @@
 import { Inject, Injectable } from "@nestjs/common";
 import {
-  construirRelatorio,
-  pesquisarAnoCompleto,
-  TETO_ECONOMICA_K_PADRAO,
-  TETO_EXECUTIVA_K_PADRAO,
-  type Sessao,
-} from "../../../fontes/tap/bot-tap.ts";
+  buildTapReport,
+  DEFAULT_BUSINESS_CEILING_K,
+  DEFAULT_ECONOMY_CEILING_K,
+  searchTapYear,
+  type TapSession,
+} from "../../../scrapers/tap/tap.scraper.ts";
 import { SessionPool } from "../../../core/session-pool.ts";
 import { JobRunner } from "../../jobs/job-runner.service.ts";
 import { JobStore } from "../../jobs/job-store.service.ts";
@@ -25,7 +25,7 @@ export class TapSource implements SearchSource<TapSearchDto> {
   readonly requestDto = TapSearchDto;
 
   constructor(
-    @Inject(TAP_POOL) private readonly pool: SessionPool<Sessao>,
+    @Inject(TAP_POOL) private readonly pool: SessionPool<TapSession>,
     private readonly runner: JobRunner,
     private readonly jobs: JobStore,
   ) {}
@@ -33,13 +33,13 @@ export class TapSource implements SearchSource<TapSearchDto> {
   start(jobId: string, request: TapSearchDto) {
     const { origem, destino } = request;
     // Ceilings are in K here: the TAP table is spoken in thousands, unlike SeatSpy and AA.
-    const ceilings = { executivaK: request.tetos?.executiva ?? null, economicaK: request.tetos?.economica ?? null };
+    const ceilings = { businessK: request.tetos?.executiva ?? null, economyK: request.tetos?.economica ?? null };
 
     return this.runner.run(this.pool, jobId, async ({ page, baseUrl }) => {
       const job = this.jobs.callbacks(jobId);
-      const { dias, janelasComFalha, interrompidaPorVoce } = await pesquisarAnoCompleto(
+      const { days, failedWindows, stoppedByUser } = await searchTapYear(
         page,
-        { baseUrl, origem, destino, cabineParam: CABIN_PARAM },
+        { baseUrl, origin: origem, destination: destino, cabinParam: CABIN_PARAM },
         job.log,
         job.progress,
         job.window,
@@ -48,17 +48,17 @@ export class TapSource implements SearchSource<TapSearchDto> {
         job.shouldStop,
       );
 
-      const report = construirRelatorio(dias, ceilings);
+      const report = buildTapReport(days, ceilings);
       // Sent to the front so the ceiling actually applied is explicit instead of
       // an outdated server silently applying the default.
       const appliedCeilings = {
-        executivaK: ceilings.executivaK ?? TETO_EXECUTIVA_K_PADRAO,
-        economicaK: ceilings.economicaK ?? TETO_ECONOMICA_K_PADRAO,
+        executivaK: ceilings.businessK ?? DEFAULT_BUSINESS_CEILING_K,
+        economicaK: ceilings.economyK ?? DEFAULT_ECONOMY_CEILING_K,
       };
-      const partialNotice = interrompidaPorVoce
+      const partialNotice = stoppedByUser
         ? "Você interrompeu a busca depois das janelas vazias. O resultado abaixo cobre só o período já consultado."
-        : janelasComFalha.length > 0
-          ? `${janelasComFalha.length} janela(s) não puderam ser buscadas (ver detalhes no terminal do servidor). O resultado abaixo é parcial.`
+        : failedWindows.length > 0
+          ? `${failedWindows.length} janela(s) não puderam ser buscadas (ver detalhes no terminal do servidor). O resultado abaixo é parcial.`
           : undefined;
 
       recordSearch(jobId, {
@@ -80,7 +80,7 @@ export class TapSource implements SearchSource<TapSearchDto> {
         relatorio: report,
         avisoParcial: partialNotice,
         tetosAplicados: appliedCeilings,
-        interrompidaPorVoce,
+        interrompidaPorVoce: stoppedByUser,
       });
     });
   }
