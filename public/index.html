@@ -193,10 +193,9 @@
       <div id="aa-fila-buscas" class="fila-buscas"></div>
     </section>
 
-    <!-- Iberia (Avios). Sem seletor de cabine de propósito: o calendário de
-         resgate da Iberia devolve UM valor por dia, o mais barato, e não diz de
-         qual cabine ele é. Oferecer o seletor aqui prometeria um filtro que a
-         fonte não tem. Ver contexto/notas-recon-iberia.md, seções 10 e 13. -->
+    <!-- Iberia (Avios). O calendário de resgate devolve UM valor por dia, o
+         mais barato, sem dizer de qual cabine ele é: cabine e conexões só agem
+         sobre as datas detalhadas. Ver contexto/notas-recon-iberia.md, seção 15. -->
     <section id="painel-iberia" class="painel" hidden>
       <form id="form-busca-iberia">
         <div class="campo">
@@ -225,15 +224,6 @@
             <option value="40">As 40 mais baratas (~10 min a mais)</option>
             <option value="-1">TODAS as datas — como o bot antigo (pode passar de 1 hora)</option>
           </select>
-          <small class="dica">
-            Só as datas detalhadas entram na planilha por voo, com companhia,
-            escalas e vagas. As demais continuam na lista de datas.
-            <strong>O preço de cada data é sempre o mais barato do dia, em
-            qualquer cabine</strong> — a Iberia não publica preço por cabine no
-            calendário. Só no modo <em>TODAS as datas</em> os filtros de cabine e
-            conexões também reduzem a lista de datas, porque aí todas foram
-            olhadas.
-          </small>
         </div>
         <div class="campo">
           <label for="iberia-conexoes">Conexões (só filtra as datas detalhadas)</label>
@@ -245,7 +235,7 @@
           </select>
         </div>
         <div class="campo">
-          <label for="iberia-cabine">Cabine — não muda datas nem preços</label>
+          <label for="iberia-cabine">Cabine (só filtra as datas detalhadas)</label>
           <select id="iberia-cabine">
             <option value="">Todas</option>
             <option value="ECONOMY">Econômica</option>
@@ -259,6 +249,13 @@
           Ida e volta
         </label>
         <button type="submit">Buscar</button>
+        <small class="dica">
+          Só as datas detalhadas entram na planilha por voo, com companhia,
+          escalas e vagas. <strong>O preço de cada data é sempre o mais barato do
+          dia, em qualquer cabine</strong> — a Iberia não publica preço por
+          cabine. Só no modo <em>TODAS as datas</em> os filtros de cabine e
+          conexões também reduzem a lista de datas, porque aí todas foram olhadas.
+        </small>
       </form>
 
       <p class="aviso" style="display:block">

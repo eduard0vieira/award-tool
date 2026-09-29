@@ -265,16 +265,17 @@ main > h1 {
 
 /* Texto de ajuda abaixo de um campo, quando o rótulo sozinho não explica o
    que a opção custa ou sobre o que ela age. */
-.campo .dica {
+.campo .dica,
+.painel > form > .dica {
   font-size: 11px;
   line-height: 1.35;
   color: var(--texto-suave);
 }
 
-/* O campo com dica precisa de mais largura que os 200px padrão dos selects,
-   senão a explicação vira uma coluna estreita de três palavras. */
-.campo:has(.dica) {
-  flex-basis: 280px;
+/* Dica do formulário inteiro fica numa linha própria: dentro de um campo ela
+   esticava a altura da linha e desalinhava os vizinhos. */
+.painel > form > .dica {
+  flex-basis: 100%;
 }
 
 input,
