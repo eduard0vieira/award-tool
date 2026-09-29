@@ -24,7 +24,7 @@ if [ -z "$DOMAIN" ]; then
   exit 1
 fi
 
-BOT_PROFILE="${AA_CHROME_PERFIL:-$HOME/.chrome-bot-aa}"
+BOT_PROFILE="${AA_CHROME_PROFILE:-$HOME/.chrome-bot-aa}"
 SOURCE="$HOME/Library/Application Support/Google/Chrome/Default/Cookies"
 TARGET="$BOT_PROFILE/Default/Cookies"
 

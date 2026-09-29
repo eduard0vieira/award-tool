@@ -97,7 +97,7 @@ export type AaDay = {
 export type FailedMonth = { month: string; error: string };
 export type AaYearResult = { days: AaDay[]; failedMonths: FailedMonth[] };
 
-const AA_MIN_INTERVAL_MS = Number(process.env.AA_INTERVALO_BUSCAS_MS) || 6000;
+const AA_MIN_INTERVAL_MS = Number(process.env.AA_SEARCH_INTERVAL_MS) || 6000;
 const aaRateLimiter = new RateLimiter(AA_MIN_INTERVAL_MS);
 
 // One failed month may be transient, several in a row mean a block or a broken
@@ -208,7 +208,7 @@ async function openResultsPage(page: Page, params: AaSearchParams, firstDate: st
 
   if (/access denied/i.test(await page.title())) {
     throw new Error(
-      "AA bloqueou o acesso (Access Denied). Aguarde alguns minutos e repita; se persistir, aumente AA_INTERVALO_BUSCAS_MS no .env.",
+      "AA bloqueou o acesso (Access Denied). Aguarde alguns minutos e repita; se persistir, aumente AA_SEARCH_INTERVAL_MS no .env.",
     );
   }
   if (!page.url().includes("choose-flights")) {

@@ -24,8 +24,8 @@
 # time. If AA complains at first, browse aa.com a little in this window
 # (searching any flight helps): it earns reputation and gets treated as normal browsing.
 
-PORT="${AA_CDP_PORTA:-9222}"
-PROFILE="${AA_CHROME_PERFIL:-$HOME/.chrome-bot-aa}"
+PORT="${AA_CDP_PORT:-9222}"
+PROFILE="${AA_CHROME_PROFILE:-$HOME/.chrome-bot-aa}"
 CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
 if curl -s --max-time 2 "http://localhost:$PORT/json/version" > /dev/null 2>&1; then

@@ -234,7 +234,7 @@ print. A premissa é que voo barato em dinheiro é voo barato em milhas.
 buscas, porque refazer login a cada busca é lento e chama atenção do anti-bot.
 Sessão parada também custa: uma do SeatSpy medida aqui fica em ~450 MB ociosa, e o
 servidor fica dias de pé. Por isso o slot fecha a sessão depois de
-`OCIOSIDADE_MINUTOS` sem uso e recria na busca seguinte — reabrir custa ~6s (launch
+`IDLE_MINUTES` sem uso e recria na busca seguinte — reabrir custa ~6s (launch
 + login), pagos uma vez por rajada. AA, LATAM e Smiles dividem um Chrome só, então
 para elas a ociosidade fecha apenas a aba.
 
@@ -247,9 +247,9 @@ LOGIN_URL, EMAIL_ACCOUNT, PASSWORD_ACCOUNT        # AwardTool
 SEATSPY_LOGIN_URL, SEATSPY_EMAIL, SEATSPY_PASSWORD
 BOT_AUTH_USER, BOT_AUTH_PASS                      # Basic Auth do servidor
 CONCORRENCIA_*                                    # jobs simultâneos por fonte
-OCIOSIDADE_MINUTOS                                # fecha a sessão parada (0 desliga)
+IDLE_MINUTES                                # fecha a sessão parada (0 desliga)
 *_INTERVALO_BUSCAS_MS                             # limitador de frequência
-AA_CHROME_PERFIL, AA_CDP_PORTA                    # perfil/porta do Chrome do bot
+AA_CHROME_PROFILE, AA_CDP_PORT                    # perfil/porta do Chrome do bot
 ```
 
 ## AA: o código 309 do calendário

@@ -28,7 +28,7 @@ export type TapReport = {
   economy: ReportSection;
 };
 
-const TAP_MIN_INTERVAL_MS = Number(process.env.AWARDTOOL_INTERVALO_BUSCAS_MS) || 15000;
+const TAP_MIN_INTERVAL_MS = Number(process.env.AWARDTOOL_SEARCH_INTERVAL_MS) || 15000;
 const awardtoolRateLimiter = new RateLimiter(TAP_MIN_INTERVAL_MS);
 
 // Each row of the "Date" popover has a "YYYY-MM-DD (found/total)" paragraph
@@ -288,7 +288,7 @@ export type OnQuestion = (message: string) => Promise<boolean>;
 
 // Empty windows in a row before suspecting the source. Three is over 100
 // calendar days: a route without sales for that long exists, but is rare enough to ask.
-const MAX_CONSECUTIVE_EMPTY_WINDOWS = Number(process.env.TAP_JANELAS_VAZIAS) || 3;
+const MAX_CONSECUTIVE_EMPTY_WINDOWS = Number(process.env.TAP_EMPTY_WINDOWS) || 3;
 
 // "Empty" is what AwardTool shows when its own feed is down: the date strip
 // appears but no day has a flight. Unlike a failed window (error, timeout), this

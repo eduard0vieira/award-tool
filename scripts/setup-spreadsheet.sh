@@ -8,13 +8,13 @@
 #   2. enables the Sheets API on it;
 #   3. creates the bot's service account;
 #   4. downloads the JSON key OUTSIDE the repository (~/.config/award-tool/);
-#   5. writes GOOGLE_CREDENCIAIS to .env and prints the e-mail to share with.
+#   5. writes GOOGLE_CREDENTIALS to .env and prints the e-mail to share with.
 #
 # The key never enters git: that is why it goes to ~/.config and not here.
 
 set -e
 
-PROJECT="${PROJETO_GCP:-bot-emissoes-vcc}"
+PROJECT="${GCP_PROJECT:-bot-emissoes-vcc}"
 ACCOUNT="bot-emissoes"
 CREDENTIALS_DIR="$HOME/.config/award-tool"
 # Kept as it is: an existing key file on disk is reused instead of generating another.
@@ -61,15 +61,15 @@ fi
 
 # Appends only what is missing to .env, leaving what is there untouched.
 touch "$ENV_FILE"
-if ! grep -q "^GOOGLE_CREDENCIAIS=" "$ENV_FILE"; then
+if ! grep -q "^GOOGLE_CREDENTIALS=" "$ENV_FILE"; then
   {
     echo ""
     echo "# Planilha de buscas (ver src/outputs/spreadsheet.ts)"
-    echo "GOOGLE_CREDENCIAIS=$CREDENTIALS_FILE"
+    echo "GOOGLE_CREDENTIALS=$CREDENTIALS_FILE"
   } >> "$ENV_FILE"
-  echo "✅ GOOGLE_CREDENCIAIS escrito no .env"
+  echo "✅ GOOGLE_CREDENTIALS escrito no .env"
 else
-  echo "ℹ️  GOOGLE_CREDENCIAIS já estava no .env — não mexi."
+  echo "ℹ️  GOOGLE_CREDENTIALS já estava no .env — não mexi."
 fi
 
 echo ""
@@ -83,5 +83,5 @@ echo ""
 echo "       $ACCOUNT_EMAIL"
 echo ""
 echo "  4. Copie o ID da URL (a parte entre /d/ e /edit) e rode:"
-echo "       echo 'PLANILHA_ID=<id>' >> .env"
+echo "       echo 'SPREADSHEET_ID=<id>' >> .env"
 echo "────────────────────────────────────────────────────────────"

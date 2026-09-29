@@ -11,9 +11,9 @@ import { FIXTURES_DIR } from "../src/core/paths.ts";
 
 async function main() {
   const email = process.env.IBERIA_EMAIL;
-  const password = process.env.IBERIA_SENHA;
+  const password = process.env.IBERIA_PASSWORD;
   if (!email || !password) {
-    console.error("Sem IBERIA_EMAIL/IBERIA_SENHA no .env.");
+    console.error("Sem IBERIA_EMAIL/IBERIA_PASSWORD no .env.");
     process.exit(1);
   }
 

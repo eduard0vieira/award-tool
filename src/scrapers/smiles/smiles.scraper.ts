@@ -47,7 +47,7 @@ const API_HEADERS: Record<string, string> = {
   "accept-language": "pt-BR,pt;q=0.9",
 };
 
-const SMILES_MIN_INTERVAL_MS = Number(process.env.SMILES_INTERVALO_BUSCAS_MS) || 4000;
+const SMILES_MIN_INTERVAL_MS = Number(process.env.SMILES_SEARCH_INTERVAL_MS) || 4000;
 const smilesRateLimiter = new RateLimiter(SMILES_MIN_INTERVAL_MS);
 
 export type SmilesCabin = "economy" | "premium" | "business";
@@ -63,7 +63,7 @@ const CABIN_BY_CODE: Record<string, SmilesCabin> = {
 
 export type SmilesRoute = { origin: string; destination: string };
 
-// The period to sweep. Empty means tomorrow to SMILES_DIAS_VARREDURA days
+// The period to sweep. Empty means tomorrow to SMILES_SCAN_DAYS days
 // ahead, never past the last day on sale. It exists because a whole year rarely
 // fits the IP budget: on routes without a calendar each day costs one query,
 // and the search would deliver a slice chosen by the bot instead of by whoever asked.
@@ -330,7 +330,7 @@ export class SmilesBudgetError extends SmilesBlockedError {
     super(
       "Smiles bloqueou temporariamente as consultas deste IP (406). Repetir agora não recupera o acesso: " +
         "o bloqueio expira sozinho, mas leva mais de 20 minutos. Aguarde e refaça a busca, de preferência " +
-        "com menos dias por busca (SMILES_MAX_DETALHES) ou uma perna de cada vez.",
+        "com menos dias por busca (SMILES_MAX_DETAILS) ou uma perna de cada vez.",
       "aguarde cerca de 30 min para completar",
     );
   }
@@ -348,7 +348,7 @@ export class SmilesAccessDeniedError extends SmilesBlockedError {
           ? "A raiz da API já respondia 403 quando a sessão abriu, então o bloqueio vale para este IP inteiro. "
           : "") +
         "Não há tempo medido de espera para esse caso. Aguarde antes de repetir e, se voltar logo, " +
-        "vale trocar de IP ou reduzir o ritmo (SMILES_MAX_DETALHES)." +
+        "vale trocar de IP ou reduzir o ritmo (SMILES_MAX_DETAILS)." +
         (reference ? ` Referência Akamai: ${reference}.` : ""),
       "a borda do Smiles passou a negar as chamadas (403); o resto do período não chegou a ser consultado",
     );
@@ -525,10 +525,10 @@ export type SmilesYearResult = {
   gaps: string[];
 };
 
-const DAYS_TO_SWEEP = Number(process.env.SMILES_DIAS_VARREDURA) || 365;
+const DAYS_TO_SWEEP = Number(process.env.SMILES_SCAN_DAYS) || 365;
 // Safety cap: even when asked for more, the sweep never goes past this. Without
 // it a mistyped range would become thousands of queries.
-const MAX_PERIOD_DAYS = Number(process.env.SMILES_MAX_DIAS_PERIODO) || 365;
+const MAX_PERIOD_DAYS = Number(process.env.SMILES_MAX_PERIOD_DAYS) || 365;
 // Smiles sells up to today + 329 days; from day 330 it answers 452 "data não
 // permitida" (measured on 2026-09-29). Asking beyond that only spends queries.
 const SALE_WINDOW_DAYS = 330;
@@ -566,7 +566,7 @@ const SAMPLING_STEP_DAYS = 7; // the calendar covers ±3 days
 // The per-IP budget is the scarce resource (~100–150 requests per window), so
 // what protects the search is asking for LESS, not asking slower. With 52
 // calendar probes + 25 details a leg stays at ~77, leaving room for the second leg.
-const MAX_DETAILED_DAYS = Number(process.env.SMILES_MAX_DETALHES) || 25;
+const MAX_DETAILED_DAYS = Number(process.env.SMILES_MAX_DETAILS) || 25;
 const MAX_CONSECUTIVE_FAILURES = 3;
 
 function addDays(date: string, days: number): string {

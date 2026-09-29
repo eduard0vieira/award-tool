@@ -6,8 +6,8 @@
 # profile, is left alone. The profile itself (cookies, AA and LATAM logins)
 # stays on disk and is still valid the next time it opens.
 
-PORT="${AA_CDP_PORTA:-9222}"
-BOT_PROFILE="${AA_CHROME_PERFIL:-$HOME/.chrome-bot-aa}"
+PORT="${AA_CDP_PORT:-9222}"
+BOT_PROFILE="${AA_CHROME_PROFILE:-$HOME/.chrome-bot-aa}"
 
 if ! pgrep -f "user-data-dir=$BOT_PROFILE" > /dev/null; then
   echo "✅ A janela do bot já está fechada."

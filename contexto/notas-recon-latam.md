@@ -139,7 +139,7 @@ Outro achado do caminho: a busca da volta reaparece como
 precificada em função da ida escolhida.
 
 **Custo:** cada par é um fluxo completo (deep link → escolhe ida → escolhe
-volta). `LATAM_PARES` controla quantos (padrão 3).
+volta). `LATAM_PAIRS` controla quantos (padrão 3).
 
 Fixture: `fixtures/latam-redemption-options-real.json`.
 Recon: `npm run recon:latam GRU JNB <ida> <volta>` (precisa de sessão logada).
@@ -155,11 +155,11 @@ muda ao longo do ano. Daí as regras:
    ele saía do calendário cru: apareceu um print de dezembro num resultado que
    só tinha setembro, porque dezembro passava na margem (`menor + R$ 100`) mas
    não passava no teto — ficava fora do cartão e dentro do teste.
-2. **Estada de 3 a 14 dias** (`LATAM_ESTADA_MINIMA` / `LATAM_ESTADA_MAXIMA`).
+2. **Estada de 3 a 14 dias** (`LATAM_MIN_STAY` / `LATAM_MAX_STAY`).
    Ida num dia e volta no seguinte é fácil de achar e não é viagem de ninguém;
    acima de duas semanas o preço já é de outra faixa.
 3. **Datas espalhadas.** Primeira passada exige 90 dias entre as idas
-   (`LATAM_DISTANCIA_PARES`). Quando o resultado não tem esse alcance, a
+   (`LATAM_PAIR_DISTANCE`). Quando o resultado não tem esse alcance, a
    segunda passada pega sempre a data mais longe das já escolhidas em vez das
    mais baratas — três dias seguidos devolveriam o mesmo número três vezes.
 

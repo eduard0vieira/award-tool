@@ -75,7 +75,7 @@ export type LatamCeilings = {
   lowestFareOnly?: boolean; // only the days the site flags as lowest fare
 };
 
-const LATAM_MIN_INTERVAL_MS = Number(process.env.LATAM_INTERVALO_BUSCAS_MS) || 8000;
+const LATAM_MIN_INTERVAL_MS = Number(process.env.LATAM_SEARCH_INTERVAL_MS) || 8000;
 const latamRateLimiter = new RateLimiter(LATAM_MIN_INTERVAL_MS);
 
 // Each response covers 2 months, so 6 calls give the 12 months.
@@ -335,11 +335,11 @@ export function readRedemptionOptions(body: unknown): { feeReais: number; option
 // When the session drops, the way back is logging in on the BOT'S WINDOW
 // (open and visible): the login stays in the profile for the next searches.
 //
-// With LATAM_EMAIL and LATAM_SENHA in .env the bot pre-fills both fields; the
+// With LATAM_EMAIL and LATAM_PASSWORD in .env the bot pre-fills both fields; the
 // verification code (and any captcha) is always yours. If the form changed and
 // pre-filling misses, that is NOT an error: the bot says so and waits for you.
 // No password ever shows up in a log.
-const LOGIN_WAIT_MS = Number(process.env.LATAM_ESPERA_LOGIN_MS) || 300_000;
+const LOGIN_WAIT_MS = Number(process.env.LATAM_LOGIN_WAIT_MS) || 300_000;
 
 export function isAskingForLogin(page: Page): boolean {
   return /login|iniciar-sesion|signin|sign-in/i.test(page.url());
@@ -347,9 +347,9 @@ export function isAskingForLogin(page: Page): boolean {
 
 async function fillCredentials(page: Page, onLog: OnLog): Promise<void> {
   const email = process.env.LATAM_EMAIL;
-  const password = process.env.LATAM_SENHA;
+  const password = process.env.LATAM_PASSWORD;
   if (!email || !password) {
-    onLog("Sem LATAM_EMAIL/LATAM_SENHA no .env. O login é todo manual na janela do bot.");
+    onLog("Sem LATAM_EMAIL/LATAM_PASSWORD no .env. O login é todo manual na janela do bot.");
     return;
   }
 
@@ -608,13 +608,13 @@ async function waitUntil(ready: () => boolean, timeoutMs: number, page: Page) {
 // Neighbor days usually cost the same points; three pairs in one week return
 // the same number three times and say nothing. Different months show whether
 // the price changes along the year.
-const MIN_PAIR_SPACING_DAYS = Number(process.env.LATAM_DISTANCIA_PARES) || 90;
+const MIN_PAIR_SPACING_DAYS = Number(process.env.LATAM_PAIR_DISTANCE) || 90;
 
 // The pair must also look like a real trip. Outbound one day and back the next
 // is cheap to find and useless as a sample, and a trip that is too long falls
 // into another price band, so a two-week cap keeps the comparison fair.
-const MIN_STAY_DAYS = Number(process.env.LATAM_ESTADA_MINIMA) || 3;
-const MAX_STAY_DAYS = Number(process.env.LATAM_ESTADA_MAXIMA) || 14;
+const MIN_STAY_DAYS = Number(process.env.LATAM_MIN_STAY) || 3;
+const MAX_STAY_DAYS = Number(process.env.LATAM_MAX_STAY) || 14;
 
 function daysBetween(a: string, b: string): number {
   return Math.abs((Date.parse(a) - Date.parse(b)) / 86_400_000);

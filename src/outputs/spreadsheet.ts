@@ -18,12 +18,12 @@ import { ROOT_DIR, SPREADSHEETS_DIR } from "../core/paths.ts";
 // Kept as "buscas.csv": renaming would split the accumulated history in two files.
 const SEARCHES_CSV = path.join(SPREADSHEETS_DIR, "buscas.csv");
 
-const CREDENTIALS_PATH = process.env.GOOGLE_CREDENCIAIS;
-const SPREADSHEET_ID = process.env.PLANILHA_ID;
-const SEARCHES_TAB = process.env.PLANILHA_ABA || "buscas";
+const CREDENTIALS_PATH = process.env.GOOGLE_CREDENTIALS;
+const SPREADSHEET_ID = process.env.SPREADSHEET_ID;
+const SEARCHES_TAB = process.env.SPREADSHEET_TAB || "buscas";
 // The accumulated tab is optional and OFF: the request was one new tab per
 // search. History is not lost, the local CSV always accumulates.
-const ACCUMULATE_IN_SHEETS = process.env.PLANILHA_ACUMULAR === "true";
+const ACCUMULATE_IN_SHEETS = process.env.SPREADSHEET_ACCUMULATE === "true";
 
 // Header names of an existing, appended-to sheet: changing them breaks it.
 export const SEARCH_COLUMNS = [
@@ -298,7 +298,7 @@ async function getAccessToken(account: ServiceAccount): Promise<string> {
 function readServiceAccount(): ServiceAccount | null {
   if (!CREDENTIALS_PATH || !SPREADSHEET_ID) return null;
   if (!fs.existsSync(CREDENTIALS_PATH)) {
-    throw new Error(`GOOGLE_CREDENCIAIS aponta para um arquivo que não existe: ${CREDENTIALS_PATH}`);
+    throw new Error(`GOOGLE_CREDENTIALS aponta para um arquivo que não existe: ${CREDENTIALS_PATH}`);
   }
   const raw = JSON.parse(fs.readFileSync(CREDENTIALS_PATH, "utf8")) as Partial<ServiceAccount>;
   if (!raw.client_email || !raw.private_key) {
@@ -317,7 +317,7 @@ async function isTabEmpty(token: string): Promise<boolean> {
   if (!response.ok) {
     if (response.status === 400) {
       throw new Error(
-        `A planilha não tem uma aba chamada "${SEARCHES_TAB}". Renomeie a aba ou ajuste PLANILHA_ABA no .env.`,
+        `A planilha não tem uma aba chamada "${SEARCHES_TAB}". Renomeie a aba ou ajuste SPREADSHEET_TAB no .env.`,
       );
     }
     return false; // a failed read does not block the write; the append reports its own failure
@@ -380,7 +380,7 @@ export async function saveSearch(search: SearchToSave, onLog: (message: string) 
     if (!warnedWithoutSheets) {
       warnedWithoutSheets = true;
       onLog(
-        "Planilha do Google não configurada (GOOGLE_CREDENCIAIS + PLANILHA_ID no .env). " +
+        "Planilha do Google não configurada (GOOGLE_CREDENTIALS + SPREADSHEET_ID no .env). " +
           `as buscas estão sendo gravadas só em ${path.relative(ROOT_DIR, SEARCHES_CSV)}.`,
       );
     }

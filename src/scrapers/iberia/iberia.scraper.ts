@@ -47,8 +47,8 @@ export type IberiaResult =
   | { kind: "partial"; days: IberiaDay[]; window: SweepWindow; reason: string }
   | { kind: "error"; reason: string; http?: number };
 
-const IBERIA_MIN_INTERVAL_MS = Number(process.env.IBERIA_INTERVALO_BUSCAS_MS) || 8000;
-const DETAIL_BATCH_SIZE = Number(process.env.IBERIA_LOTE_DETALHE) || 1;
+const IBERIA_MIN_INTERVAL_MS = Number(process.env.IBERIA_SEARCH_INTERVAL_MS) || 8000;
+const DETAIL_BATCH_SIZE = Number(process.env.IBERIA_DETAIL_BATCH) || 1;
 const PAUSE_AFTER_FAILURE_MS = 30_000;
 const iberiaRateLimiter = new RateLimiter(IBERIA_MIN_INTERVAL_MS);
 
@@ -59,7 +59,7 @@ const iberiaRateLimiter = new RateLimiter(IBERIA_MIN_INTERVAL_MS);
 // ignores the date.
 const MAX_GRID_CALLS = 4;
 const DAYS_TO_COVER = 359;
-const MARKET = process.env.IBERIA_MERCADO || "US";
+const MARKET = process.env.IBERIA_MARKET || "US";
 
 export async function startIberiaSession(headless = false): Promise<IberiaSession> {
   const session = await openChromeSession(headless, "Iberia");
@@ -193,10 +193,10 @@ async function waitForScreenToSettle(page: Page) {
 // stored, only typed into the site's own form.
 async function logIn(page: Page, onLog: OnLog) {
   const email = process.env.IBERIA_EMAIL;
-  const password = process.env.IBERIA_SENHA;
+  const password = process.env.IBERIA_PASSWORD;
   if (!email || !password) {
     throw new Error(
-      "A Iberia pediu login e não há IBERIA_EMAIL/IBERIA_SENHA no .env. " +
+      "A Iberia pediu login e não há IBERIA_EMAIL/IBERIA_PASSWORD no .env. " +
         "Preencha lá, ou rode `npx tsx scripts/recon-iberia.ts GRU MAD` e faça o login na janela.",
     );
   }
@@ -328,7 +328,7 @@ async function openResultsPage(page: Page, params: IberiaSearchParams, date: str
   if (/ibbkerror/.test(finalUrl)) {
     throw new Error(
       "A Iberia respondeu com a tela de erro ('não podemos mostrar os voos'). " +
-        "Costuma ser corte por frequência: espere alguns minutos ou aumente IBERIA_INTERVALO_BUSCAS_MS.",
+        "Costuma ser corte por frequência: espere alguns minutos ou aumente IBERIA_SEARCH_INTERVAL_MS.",
     );
   }
 }

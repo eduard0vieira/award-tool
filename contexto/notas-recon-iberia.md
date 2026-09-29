@@ -110,12 +110,12 @@ a janela do Chrome do bot pra frente, avisa no terminal, e fica checando a cada 
 segundos. Nos dois casos, assim que a sessão abrir o recon continua — se a Iberia
 não refizer a busca, ele repete o formulário com a sessão já válida.
 
-- espera padrão: 10 min (`IBERIA_ESPERA_LOGIN_MS` muda isso);
+- espera padrão: 10 min (`IBERIA_LOGIN_WAIT_MS` muda isso);
 - o login fica salvo no perfil do Chrome do bot (`~/.chrome-bot-aa`), então é
   **uma vez só**, não a cada busca;
 ### Preenchimento automático (opcional)
 
-Com `IBERIA_EMAIL` e `IBERIA_SENHA` no `.env`, o script preenche **e envia** o
+Com `IBERIA_EMAIL` e `IBERIA_PASSWORD` no `.env`, o script preenche **e envia** o
 formulário — inclusive o fluxo de duas etapas, em que a senha só aparece depois
 do e-mail. A busca roda sem ninguém na frente da máquina, que era o objetivo.
 
@@ -126,7 +126,7 @@ no código e nunca no log.
 ```
 # no .env do projeto (já está no .gitignore)
 IBERIA_EMAIL=...
-IBERIA_SENHA=...
+IBERIA_PASSWORD=...
 ```
 
 Sem essas variáveis, o login é todo na mão — o script só espera.
@@ -502,5 +502,5 @@ corte de ~40 pra ~60 consultas, não pra 247. Parece cota por janela de tempo
 cota, e quanto tempo de pausa a devolve.
 
 Consequência: "todas as datas detalhadas" do bot antigo não cabe numa rodada
-só. O detalhe ficou sequencial (`IBERIA_LOTE_DETALHE`, padrão 1), que é mais
+só. O detalhe ficou sequencial (`IBERIA_DETAIL_BATCH`, padrão 1), que é mais
 leve que o carregamento de página por dia que ele substituiu.

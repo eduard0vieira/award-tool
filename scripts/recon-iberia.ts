@@ -43,7 +43,7 @@ function brazilianToIso(br: string): string {
 
 // How long the script waits for you to log in on the bot's window. The login
 // stays in the profile, so this happens once, not on every search.
-const LOGIN_WAIT_MS = Number(process.env.IBERIA_ESPERA_LOGIN_MS) || 600_000;
+const LOGIN_WAIT_MS = Number(process.env.IBERIA_LOGIN_WAIT_MS) || 600_000;
 
 // Kept out of git (fixtures/*.png): logged-in screens show the holder's name and balance.
 const capturePath = (name: string) => path.join(FIXTURES_DIR, `iberia-${name}.png`);
@@ -524,7 +524,7 @@ async function diagnoseLogin(page: Page) {
 }
 
 // Same deal as the LATAM scraper (`fillCredentials` in latam.scraper.ts): with
-// IBERIA_EMAIL and IBERIA_SENHA in .env the script types ahead. It does not
+// IBERIA_EMAIL and IBERIA_PASSWORD in .env the script types ahead. It does not
 // **confirm** the login when a step is left: 2FA, captcha and anything else
 // Iberia decides to ask stay with you. Credentials live only in your .env
 // (gitignored); nothing is printed or stored elsewhere.
@@ -532,9 +532,9 @@ type LoginContext = Page | Frame;
 
 async function fillCredentials(page: Page): Promise<"sent" | "partial" | "missing"> {
   const email = process.env.IBERIA_EMAIL;
-  const password = process.env.IBERIA_SENHA;
+  const password = process.env.IBERIA_PASSWORD;
   if (!email || !password) {
-    console.log("   (sem IBERIA_EMAIL/IBERIA_SENHA no .env — o login é todo na mão, na janela do bot)");
+    console.log("   (sem IBERIA_EMAIL/IBERIA_PASSWORD no .env — o login é todo na mão, na janela do bot)");
     return "missing";
   }
 

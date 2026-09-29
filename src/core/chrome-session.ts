@@ -31,10 +31,10 @@ export type ChromeSession = {
   botBrowser: BotBrowser;
 };
 
-export const CDP_URL = process.env.AA_CDP_URL || `http://localhost:${process.env.AA_CDP_PORTA || 9222}`;
+export const CDP_URL = process.env.AA_CDP_URL || `http://localhost:${process.env.AA_CDP_PORT || 9222}`;
 // Outside the repository because it is browser data, not code. One profile
 // serves every bot, so the reputation and logins one builds help the others.
-export const PROFILE_DIR = process.env.AA_CHROME_PERFIL || path.join(os.homedir(), ".chrome-bot-aa");
+export const PROFILE_DIR = process.env.AA_CHROME_PROFILE || path.join(os.homedir(), ".chrome-bot-aa");
 
 let shared: Promise<BotBrowser> | null = null;
 
