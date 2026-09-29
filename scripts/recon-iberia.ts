@@ -537,7 +537,7 @@ async function diagnosticarLogin(page: import("playwright").Page) {
   console.log(`     HTML do modal salvo em fixtures/${path.basename(arquivo)}`);
 }
 
-// Mesmo acordo do módulo da LATAM (`preencherCredenciais` em bot-latam.ts): se
+// Mesmo acordo do módulo da LATAM (`fillCredentials` em latam.scraper.ts): se
 // IBERIA_EMAIL e IBERIA_SENHA estiverem no .env, o script adianta a digitação.
 // Ele **não confirma o login** — o clique em "Fazer login" fica com você, que é
 // onde entram 2FA, captcha e qualquer coisa que a Iberia resolva pedir.

@@ -3,16 +3,16 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Page } from "playwright";
 import {
-  confirmarParEmMilhas,
-  construirRelatorioLatam,
-  escolherMelhoresPares,
-  filtrarPorTetos,
-  pesquisarAnoLatam,
-  type ConfirmacaoPar,
-  type DiaLatam,
-  type SessaoLatam,
-  type TetosLatam,
-} from "../../../fontes/latam/bot-latam.ts";
+  buildLatamReport,
+  confirmPairInMiles,
+  filterByCeilings,
+  pickBestPairs,
+  searchLatamYear,
+  type LatamCeilings,
+  type LatamDay,
+  type LatamSession,
+  type PairConfirmation,
+} from "../../../scrapers/latam/latam.scraper.ts";
 import { formatDatesByMonth } from "../../../core/common.ts";
 import { ALERTS_DIR } from "../../../core/paths.ts";
 import { SessionPool } from "../../../core/session-pool.ts";
@@ -26,14 +26,14 @@ import { LatamSearchDto } from "./latam-search.dto.ts";
 
 export const LATAM_POOL = Symbol("LATAM_POOL");
 
-type Confirmation = { confirmation?: { pares: ConfirmacaoPar[] }; notice?: string };
+type Confirmation = { confirmation?: { pares: PairConfirmation[] }; notice?: string };
 
 type PairSearch = {
   origem: string;
   destino: string;
-  outbound: DiaLatam[];
-  inbound: DiaLatam[];
-  ceilings: TetosLatam;
+  outbound: LatamDay[];
+  inbound: LatamDay[];
+  ceilings: LatamCeilings;
   outboundMargin: number;
   inboundMargin: number;
 };
@@ -45,23 +45,23 @@ export class LatamSource implements SearchSource<LatamSearchDto> {
   readonly requestDto = LatamSearchDto;
 
   constructor(
-    @Inject(LATAM_POOL) private readonly pool: SessionPool<SessaoLatam>,
+    @Inject(LATAM_POOL) private readonly pool: SessionPool<LatamSession>,
     private readonly runner: JobRunner,
     private readonly jobs: JobStore,
   ) {}
 
   start(jobId: string, request: LatamSearchDto) {
     const { origem, destino } = request;
-    const ceilings: TetosLatam = {
-      tetoReais: request.tetos?.reais ?? null,
-      somenteMenorTarifa: request.tetos?.somenteMenorTarifa === true,
+    const ceilings: LatamCeilings = {
+      maxPriceReais: request.tetos?.reais ?? null,
+      lowestFareOnly: request.tetos?.somenteMenorTarifa === true,
     };
 
     return this.runner.run(this.pool, jobId, async ({ page }) => {
       const job = this.jobs.callbacks(jobId);
-      const { ida: outbound, volta: inbound, mesesComFalha } = await pesquisarAnoLatam(
+      const { outbound, inbound, failedMonths } = await searchLatamYear(
         page,
-        { origem, destino },
+        { origin: origem, destination: destino },
         job.log,
         job.progress,
         job.notice,
@@ -71,16 +71,16 @@ export class LatamSource implements SearchSource<LatamSearchDto> {
       const legs: Leg[] = [
         {
           rotulo: `Ida: ${origem} → ${destino}`,
-          secoes: [{ rotulo: "Econômica", corClasse: "cartao-economica", ...construirRelatorioLatam(outbound, ceilings) }],
+          secoes: [{ rotulo: "Econômica", corClasse: "cartao-economica", ...buildLatamReport(outbound, ceilings) }],
         },
         {
           rotulo: `Volta: ${destino} → ${origem}`,
-          secoes: [{ rotulo: "Econômica", corClasse: "cartao-economica", ...construirRelatorioLatam(inbound, ceilings) }],
+          secoes: [{ rotulo: "Econômica", corClasse: "cartao-economica", ...buildLatamReport(inbound, ceilings) }],
         },
       ];
       let partialNotice =
-        mesesComFalha.length > 0
-          ? `${mesesComFalha.length} período(s) não puderam ser buscados. O resultado abaixo é parcial.`
+        failedMonths.length > 0
+          ? `${failedMonths.length} período(s) não puderam ser buscados. O resultado abaixo é parcial.`
           : undefined;
 
       let confirmation: Confirmation["confirmation"];
@@ -103,7 +103,7 @@ export class LatamSource implements SearchSource<LatamSearchDto> {
         origin: origem,
         destination: destino,
         legs,
-        ceilings: { "Econômica": ceilings.tetoReais },
+        ceilings: { "Econômica": ceilings.maxPriceReais },
       });
       this.jobs.complete(jobId, { pernas: legs, avisoParcial: partialNotice, confirmacao: confirmation });
     });
@@ -115,9 +115,9 @@ export class LatamSource implements SearchSource<LatamSearchDto> {
     const result: Confirmation = {};
     try {
       // Only days within the ceilings: the confirmation simulates what the group sees on the card.
-      const pairs = escolherMelhoresPares(
-        filtrarPorTetos(search.outbound, search.ceilings),
-        filtrarPorTetos(search.inbound, search.ceilings),
+      const pairs = pickBestPairs(
+        filterByCeilings(search.outbound, search.ceilings),
+        filterByCeilings(search.inbound, search.ceilings),
         config.latamPairs,
         search.outboundMargin,
         search.inboundMargin,
@@ -130,20 +130,20 @@ export class LatamSource implements SearchSource<LatamSearchDto> {
         const folder = `latam-${search.origem}-${search.destino}-${Date.now()}`;
         fs.mkdirSync(path.join(ALERTS_DIR, folder), { recursive: true });
 
-        const confirmed: ConfirmacaoPar[] = [];
+        const confirmed: PairConfirmation[] = [];
         const failures: string[] = [];
         for (const [index, pair] of pairs.entries()) {
-          job.notice(`Confirmando par ${index + 1}/${pairs.length}. ${pair.ida.data} → ${pair.volta.data}...`);
+          job.notice(`Confirmando par ${index + 1}/${pairs.length}. ${pair.outbound.date} → ${pair.inbound.date}...`);
           const file = `par-${index + 1}.png`;
           try {
-            const offer = await confirmarParEmMilhas(
+            const offer = await confirmPairInMiles(
               page,
               {
-                origem: search.origem,
-                destino: search.destino,
-                dataIda: pair.ida.data,
-                dataVolta: pair.volta.data,
-                caminhoImagem: path.join(ALERTS_DIR, folder, file),
+                origin: search.origem,
+                destination: search.destino,
+                outboundDate: pair.outbound.date,
+                returnDate: pair.inbound.date,
+                screenshotPath: path.join(ALERTS_DIR, folder, file),
               },
               job.log,
               // A login prompt becomes a notice: it is the only way the user learns
@@ -158,13 +158,13 @@ export class LatamSource implements SearchSource<LatamSearchDto> {
                 textoVolta: formatDatesByMonth([offer.dataVolta]),
               });
             } else {
-              failures.push(`${pair.ida.data} → ${pair.volta.data}: sem oferta em milhas`);
+              failures.push(`${pair.outbound.date} → ${pair.inbound.date}: sem oferta em milhas`);
             }
           } catch (err) {
             // One failing pair never drops the others; the notice lists which ones were left out.
             const reason = err instanceof Error ? err.message : String(err);
-            console.error(`[${jobId}] par ${pair.ida.data}→${pair.volta.data} falhou: ${reason}`);
-            failures.push(`${pair.ida.data} → ${pair.volta.data}: ${reason}`);
+            console.error(`[${jobId}] par ${pair.outbound.date}→${pair.inbound.date} falhou: ${reason}`);
+            failures.push(`${pair.outbound.date} → ${pair.inbound.date}: ${reason}`);
           }
         }
         job.notice("");

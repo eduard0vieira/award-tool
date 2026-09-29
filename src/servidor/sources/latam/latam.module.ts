@@ -1,5 +1,5 @@
 import { Module } from "@nestjs/common";
-import { iniciarSessaoLatam, type SessaoLatam } from "../../../fontes/latam/bot-latam.ts";
+import { startLatamSession, type LatamSession } from "../../../scrapers/latam/latam.scraper.ts";
 import { closeChromeSession, isSessionAlive } from "../../../core/chrome-session.ts";
 import { config } from "../../config.ts";
 import { JobsModule } from "../../jobs/jobs.module.ts";
@@ -9,10 +9,10 @@ import { LATAM_POOL, LatamSource } from "./latam.source.ts";
 @Module({
   imports: [JobsModule],
   providers: [
-    sessionPoolProvider<SessaoLatam>(LATAM_POOL, {
+    sessionPoolProvider<LatamSession>(LATAM_POOL, {
       label: "latam",
       size: config.concurrency.latam,
-      createSession: (headless) => iniciarSessaoLatam(headless),
+      createSession: (headless) => startLatamSession(headless),
       isAlive: isSessionAlive,
       closeSession: closeChromeSession,
     }),

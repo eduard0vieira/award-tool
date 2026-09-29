@@ -2,7 +2,7 @@ import "dotenv/config";
 import fs from "node:fs";
 import path from "node:path";
 import { openChromeSession } from "../src/core/chrome-session.ts";
-import { esperarLoginManual, pedindoLogin } from "../src/fontes/latam/bot-latam.ts";
+import { isAskingForLogin, waitForManualLogin } from "../src/scrapers/latam/latam.scraper.ts";
 import { FIXTURES_DIR, ROOT_DIR } from "../src/core/paths.ts";
 
 // Descobrir DE ONDE sai o preço de ida e volta da LATAM.
@@ -85,10 +85,10 @@ async function main() {
   console.log("1. Abrindo o deep link de ida e volta...");
   await page.goto(urlIdaEVolta(), { waitUntil: "domcontentloaded", timeout: 90_000 });
 
-  if (pedindoLogin(page)) {
-    await esperarLoginManual(page, (m) => console.log(`   ${m}`), () => {});
+  if (isAskingForLogin(page)) {
+    await waitForManualLogin(page, (m) => console.log(`   ${m}`), () => {});
     await page.goto(urlIdaEVolta(), { waitUntil: "domcontentloaded", timeout: 90_000 });
-    if (pedindoLogin(page)) {
+    if (isAskingForLogin(page)) {
       console.log("❌ Continuou na tela de login. Faça o login na janela do bot e rode de novo.");
       await encerrar(page);
       return;
