@@ -1,13 +1,13 @@
 import type { Subject } from "rxjs";
 
-export type JobEvent = { tipo: string; [field: string]: unknown };
+export type JobEvent = { type: string; [field: string]: unknown };
 
-export type WindowInfo = { atual: number; total: number; inicio: string; fim: string };
+export type WindowInfo = { current: number; total: number; start: string; end: string };
 
-export type Question = { id: string; mensagem: string };
+export type Question = { id: string; message: string };
 
 export type Job = {
-  status: "fila" | "running" | "done" | "erro";
+  status: "queued" | "running" | "done" | "error";
   progress: number;
   window?: WindowInfo;
   notice?: string;

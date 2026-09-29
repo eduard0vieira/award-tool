@@ -514,21 +514,21 @@ export function buildIberiaReport(
   const accepted = days.filter((day) => ceilingAvios == null || day.avios <= ceilingAvios);
 
   if (accepted.length === 0) {
-    return { menor: null, maior: null, dias: [], texto: "Nenhuma disponibilidade encontrada nesse período." };
+    return { min: null, max: null, days: [], text: "Nenhuma disponibilidade encontrada nesse período." };
   }
 
   const formattedDays = accepted.map((day) => ({
-    data: day.date,
-    valorK: Math.round(day.avios / 10) / 100, // 28150 -> 28.15
+    date: day.date,
+    valueK: Math.round(day.avios / 10) / 100, // 28150 -> 28.15
     ...(linkParams ? { link: iberiaBookingLink(linkParams, day.date) } : {}),
   }));
-  const values = formattedDays.map((day) => day.valorK);
+  const values = formattedDays.map((day) => day.valueK);
 
   return {
-    menor: Math.min(...values),
-    maior: Math.max(...values),
-    dias: formattedDays,
-    texto: formatDatesByMonth(formattedDays.map((day) => day.data)),
+    min: Math.min(...values),
+    max: Math.max(...values),
+    days: formattedDays,
+    text: formatDatesByMonth(formattedDays.map((day) => day.date)),
   };
 }
 

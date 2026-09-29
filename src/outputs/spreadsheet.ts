@@ -59,14 +59,14 @@ export type SearchRow = {
 // The smallest shape every source fits: SeatSpy and Smiles have priceless days
 // and seats, LATAM works in reais, TAP and AA have neither.
 export type SheetSection = {
-  rotulo: string;
-  unidade?: "K" | "BRL";
-  dias: { data: string; valorK: number | null; assentos?: number }[];
+  label: string;
+  unit?: "K" | "BRL";
+  days: { date: string; valueK: number | null; seats?: number }[];
 };
 
 export type SheetLeg = {
-  rotulo: string; // only used to tell the direction
-  secoes: SheetSection[];
+  label: string; // only used to tell the direction
+  sections: SheetSection[];
 };
 
 export type SearchToSave = {
@@ -88,22 +88,22 @@ export function buildSearchRows(search: SearchToSave): SearchRow[] {
   const rows: SearchRow[] = [];
 
   for (const leg of search.legs) {
-    const direction = directionOf(leg.rotulo);
-    for (const section of leg.secoes) {
-      const ceiling = search.ceilings?.[section.rotulo] ?? null;
-      for (const day of section.dias) {
+    const direction = directionOf(leg.label);
+    for (const section of leg.sections) {
+      const ceiling = search.ceilings?.[section.label] ?? null;
+      for (const day of section.days) {
         rows.push({
           carimbo: stamp,
           fonte: search.source,
           origem: search.origin,
           destino: search.destination,
           direcao: direction,
-          cabine: section.rotulo,
-          data: day.data,
-          valor: day.valorK ?? null,
-          unidade: section.unidade ?? "K",
+          cabine: section.label,
+          data: day.date,
+          valor: day.valueK ?? null,
+          unidade: section.unit ?? "K",
           // Only some sources report seats: null means "not reported", not "zero seats".
-          assentos: day.assentos ?? null,
+          assentos: day.seats ?? null,
           teto: ceiling ?? null,
           busca: search.searchId,
         });

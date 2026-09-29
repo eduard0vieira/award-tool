@@ -9,67 +9,59 @@
 </head>
 <body>
   <main>
-    <h1>✈️ Bot de Emissões <span class="versao">v1</span></span></h1>
+    <h1>✈️ Bot de Emissões <span class="version">v1</span></h1>
 
-    <nav class="abas">
-      <button type="button" class="aba-btn ativo" data-aba="tap">AwardTool</button>
-      <button type="button" class="aba-btn" data-aba="seatspy">SeatSpy</button>
-      <button type="button" class="aba-btn" data-aba="aa">American</button>
-      <button type="button" class="aba-btn" data-aba="latam">LATAM</button>
-      <button type="button" class="aba-btn" data-aba="smiles">Smiles</button>
-      <button type="button" class="aba-btn" data-aba="iberia">Iberia</button>
-      <button type="button" class="aba-btn" data-aba="historico">Histórico</button>
+    <nav class="tabs">
+      <button type="button" class="tab-button active" data-tab="tap">AwardTool</button>
+      <button type="button" class="tab-button" data-tab="seatspy">SeatSpy</button>
+      <button type="button" class="tab-button" data-tab="aa">American</button>
+      <button type="button" class="tab-button" data-tab="latam">LATAM</button>
+      <button type="button" class="tab-button" data-tab="smiles">Smiles</button>
+      <button type="button" class="tab-button" data-tab="iberia">Iberia</button>
+      <button type="button" class="tab-button" data-tab="history">Histórico</button>
     </nav>
 
-    <!-- Aba própria pro AwardTool (TAP): forma e fila de buscas independentes
-         da aba SeatSpy, pra rodar buscas simultâneas nos dois sites sem que
-         trocar de aba derrube o progresso da outra (só troca hidden). -->
-    <section id="painel-tap" class="painel">
-      <form id="form-busca-tap">
-        <div class="campo">
-          <label for="tap-origem">Origem</label>
-          <input id="tap-origem" placeholder="GRU" maxlength="3" required autocomplete="off" />
+    <!-- Every source has its own form and queue; switching tabs only toggles
+         hidden, so a running search in one tab keeps its progress. -->
+    <section id="panel-tap" class="panel">
+      <form id="tap-search-form">
+        <div class="field">
+          <label for="tap-origin">Origem</label>
+          <input id="tap-origin" placeholder="GRU" maxlength="3" required autocomplete="off" />
         </div>
-        <div class="campo">
-          <label for="tap-destino">Destino</label>
-          <input id="tap-destino" placeholder="LIS" maxlength="3" required autocomplete="off" />
+        <div class="field">
+          <label for="tap-destination">Destino</label>
+          <input id="tap-destination" placeholder="LIS" maxlength="3" required autocomplete="off" />
         </div>
         <label class="checkbox">
-          <input type="checkbox" id="tap-ida-volta" checked />
+          <input type="checkbox" id="tap-round-trip" checked />
           Ida e volta
         </label>
         <button type="submit">Buscar</button>
 
-        <!-- Teto de milhas por cabine, em K. Vazio = tabela padrão da TAP
-             (181K executiva / 53K econômica); preencha pra explorar outras
-             faixas de valor. -->
-        <div class="linha-tetos">
-          <div class="campo">
-            <label for="tap-teto-executiva">Teto Executiva (K)</label>
-            <input id="tap-teto-executiva" type="number" min="1" step="0.5" placeholder="padrão: 181" autocomplete="off" />
+        <!-- Empty means TAP's standard table (181K business / 53K economy). -->
+        <div class="ceilings-row">
+          <div class="field">
+            <label for="tap-ceiling-business">Teto Executiva (K)</label>
+            <input id="tap-ceiling-business" type="number" min="1" step="0.5" placeholder="padrão: 181" autocomplete="off" />
           </div>
-          <div class="campo">
-            <label for="tap-teto-economica">Teto Econômica (K)</label>
-            <input id="tap-teto-economica" type="number" min="1" step="0.5" placeholder="padrão: 53" autocomplete="off" />
+          <div class="field">
+            <label for="tap-ceiling-economy">Teto Econômica (K)</label>
+            <input id="tap-ceiling-economy" type="number" min="1" step="0.5" placeholder="padrão: 53" autocomplete="off" />
           </div>
         </div>
       </form>
 
-      <p id="tap-aviso" class="aviso" hidden></p>
+      <p id="tap-notice" class="notice" hidden></p>
 
-      <!-- Cada busca vira um card independente aqui dentro (ver tpl-job), então
-           várias podem rodar em paralelo (modo agents) sem uma travar a outra. -->
-      <div id="tap-fila-buscas" class="fila-buscas"></div>
+      <div id="tap-queue" class="search-queue"></div>
     </section>
 
-    <!-- Aba própria pro SeatSpy: cobre todos os programas que ele rastreia
-         (Air France, JetBlue, British, Cathay, Etihad, Iberia, KLM, Qantas,
-         Virgin Atlantic), com teto de milhas por cabine. -->
-    <section id="painel-seatspy" class="painel" hidden>
-      <form id="form-busca-seatspy">
-        <div class="campo">
-          <label for="seatspy-programa">Programa</label>
-          <select id="seatspy-programa">
+    <section id="panel-seatspy" class="panel" hidden>
+      <form id="seatspy-search-form">
+        <div class="field">
+          <label for="seatspy-program">Programa</label>
+          <select id="seatspy-program">
             <option value="AF">Air France</option>
             <option value="B6">JetBlue</option>
             <option value="BA">British Airways</option>
@@ -81,89 +73,82 @@
             <option value="VIR">Virgin Atlantic</option>
           </select>
         </div>
-        <div class="campo">
-          <label for="seatspy-origem">Origem</label>
-          <input id="seatspy-origem" placeholder="GRU" maxlength="3" required autocomplete="off" />
+        <div class="field">
+          <label for="seatspy-origin">Origem</label>
+          <input id="seatspy-origin" placeholder="GRU" maxlength="3" required autocomplete="off" />
         </div>
-        <div class="campo">
-          <label for="seatspy-destino">Destino</label>
-          <input id="seatspy-destino" placeholder="MAD" maxlength="3" required autocomplete="off" />
+        <div class="field">
+          <label for="seatspy-destination">Destino</label>
+          <input id="seatspy-destination" placeholder="MAD" maxlength="3" required autocomplete="off" />
         </div>
         <label class="checkbox">
-          <input type="checkbox" id="seatspy-ida-volta" checked />
+          <input type="checkbox" id="seatspy-round-trip" checked />
           Ida e volta
         </label>
-        <!-- Desmarcado, o número de vagas some do card E do texto copiado —
-             ver construirRelatorioSeatspy. -->
+        <!-- Unchecked, seats leave the card AND the copied text (see buildSeatspyReport). -->
         <label class="checkbox">
-          <input type="checkbox" id="seatspy-mostrar-assentos" checked />
+          <input type="checkbox" id="seatspy-show-seats" checked />
           Mostrar assentos
         </label>
         <button type="submit">Buscar</button>
 
-        <!-- Teto de milhas por cabine, em K. Dias mais caros que o teto ficam
-             fora do relatório. Vazio = sem filtro. -->
-        <div class="linha-tetos">
-          <div class="campo">
-            <label for="seatspy-teto-economica">Teto Econômica (K)</label>
-            <input id="seatspy-teto-economica" type="number" min="1" step="0.25" placeholder="ex.: 25" autocomplete="off" />
+        <div class="ceilings-row">
+          <div class="field">
+            <label for="seatspy-ceiling-economy">Teto Econômica (K)</label>
+            <input id="seatspy-ceiling-economy" type="number" min="1" step="0.25" placeholder="ex.: 25" autocomplete="off" />
           </div>
-          <div class="campo">
-            <label for="seatspy-teto-premium">Teto Premium (K)</label>
-            <input id="seatspy-teto-premium" type="number" min="1" step="0.25" placeholder="ex.: 51" autocomplete="off" />
+          <div class="field">
+            <label for="seatspy-ceiling-premium">Teto Premium (K)</label>
+            <input id="seatspy-ceiling-premium" type="number" min="1" step="0.25" placeholder="ex.: 51" autocomplete="off" />
           </div>
-          <div class="campo">
-            <label for="seatspy-teto-executiva">Teto Executiva (K)</label>
-            <input id="seatspy-teto-executiva" type="number" min="1" step="0.25" placeholder="ex.: 74" autocomplete="off" />
+          <div class="field">
+            <label for="seatspy-ceiling-business">Teto Executiva (K)</label>
+            <input id="seatspy-ceiling-business" type="number" min="1" step="0.25" placeholder="ex.: 74" autocomplete="off" />
           </div>
-          <div class="campo">
-            <label for="seatspy-teto-primeira">Teto Primeira (K)</label>
-            <input id="seatspy-teto-primeira" type="number" min="1" step="0.25" placeholder="ex.: 120" autocomplete="off" />
+          <div class="field">
+            <label for="seatspy-ceiling-first">Teto Primeira (K)</label>
+            <input id="seatspy-ceiling-first" type="number" min="1" step="0.25" placeholder="ex.: 120" autocomplete="off" />
           </div>
         </div>
       </form>
 
-      <p id="seatspy-aviso" class="aviso" hidden></p>
+      <p id="seatspy-notice" class="notice" hidden></p>
 
-      <div id="seatspy-fila-buscas" class="fila-buscas"></div>
+      <div id="seatspy-queue" class="search-queue"></div>
     </section>
 
-    <!-- Aba da American Airlines (aa.com, busca de prêmios sem login).
-         Uma cabine por busca; filtro de conexões igual ao do site. -->
-    <section id="painel-aa" class="painel" hidden>
-      <form id="form-busca-aa">
-        <div class="campo">
-          <label for="aa-origem">Origem</label>
-          <input id="aa-origem" placeholder="GRU" maxlength="3" required autocomplete="off" />
+    <section id="panel-aa" class="panel" hidden>
+      <form id="aa-search-form">
+        <div class="field">
+          <label for="aa-origin">Origem</label>
+          <input id="aa-origin" placeholder="GRU" maxlength="3" required autocomplete="off" />
         </div>
-        <div class="campo">
-          <label for="aa-destino">Destino</label>
-          <input id="aa-destino" placeholder="MIA" maxlength="3" required autocomplete="off" />
+        <div class="field">
+          <label for="aa-destination">Destino</label>
+          <input id="aa-destination" placeholder="MIA" maxlength="3" required autocomplete="off" />
         </div>
-        <div class="campo">
-          <label for="aa-cabine">Cabine</label>
-          <select id="aa-cabine">
-            <option value="economica">Econômica</option>
+        <div class="field">
+          <label for="aa-cabin">Cabine</label>
+          <select id="aa-cabin">
+            <option value="economy">Econômica</option>
             <option value="premium">Premium Economy</option>
-            <option value="executiva">Executiva</option>
-            <option value="primeira">Primeira Classe</option>
+            <option value="business">Executiva</option>
+            <option value="first">Primeira Classe</option>
           </select>
         </div>
-        <div class="campo">
-          <label for="aa-conexoes">Conexões</label>
-          <select id="aa-conexoes">
+        <div class="field">
+          <label for="aa-stops">Conexões</label>
+          <select id="aa-stops">
             <option value="">Todos os voos</option>
             <option value="0">Só voo direto</option>
             <option value="1">Até 1 conexão</option>
           </select>
         </div>
-        <!-- Quantos adultos na mesma reserva (a AA aceita até 9). Com mais de
-             um, o dia só entra no resultado se o voo tiver assentos-prêmio pra
-             todo mundo junto — busca mais seletiva, e é o que o cliente
-             realmente precisa quando viaja em família. -->
-        <div class="campo">
-          <label for="aa-passageiros">Passageiros</label>
-          <select id="aa-passageiros">
+        <!-- With more than one adult, a day only shows up if the flight has award
+             seats for everyone together: pickier, and what a family actually needs. -->
+        <div class="field">
+          <label for="aa-passengers">Passageiros</label>
+          <select id="aa-passengers">
             <option value="1" selected>1</option>
             <option value="2">2</option>
             <option value="3">3</option>
@@ -175,47 +160,43 @@
             <option value="9">9</option>
           </select>
         </div>
-        <div class="campo">
-          <!-- Por passageiro: a AA cota o prêmio por pessoa, então o teto não
-               muda de significado quando a busca é pra mais de um. -->
-          <label for="aa-teto">Teto de milhas (K) por passageiro</label>
-          <input id="aa-teto" type="number" min="1" step="0.5" placeholder="ex.: 110" autocomplete="off" />
+        <div class="field">
+          <!-- AA prices awards per person, so the ceiling keeps its meaning with more passengers. -->
+          <label for="aa-ceiling">Teto de milhas (K) por passageiro</label>
+          <input id="aa-ceiling" type="number" min="1" step="0.5" placeholder="ex.: 110" autocomplete="off" />
         </div>
         <label class="checkbox">
-          <input type="checkbox" id="aa-ida-volta" checked />
+          <input type="checkbox" id="aa-round-trip" checked />
           Ida e volta
         </label>
         <button type="submit">Buscar</button>
       </form>
 
-      <p id="aa-aviso" class="aviso" hidden></p>
+      <p id="aa-notice" class="notice" hidden></p>
 
-      <div id="aa-fila-buscas" class="fila-buscas"></div>
+      <div id="aa-queue" class="search-queue"></div>
     </section>
 
-    <!-- Iberia (Avios). O calendário de resgate devolve UM valor por dia, o
-         mais barato, sem dizer de qual cabine ele é: cabine e conexões só agem
-         sobre as datas detalhadas. Ver contexto/notas-recon-iberia.md, seção 15. -->
-    <section id="painel-iberia" class="painel" hidden>
-      <form id="form-busca-iberia">
-        <div class="campo">
-          <label for="iberia-origem">Origem</label>
-          <input id="iberia-origem" placeholder="GRU" maxlength="3" required autocomplete="off" />
+    <!-- The Avios calendar returns ONE value per day, the cheapest, without saying
+         which cabin it is: cabin and stops only act on the detailed dates.
+         See docs/recon/iberia.md, section 15. -->
+    <section id="panel-iberia" class="panel" hidden>
+      <form id="iberia-search-form">
+        <div class="field">
+          <label for="iberia-origin">Origem</label>
+          <input id="iberia-origin" placeholder="GRU" maxlength="3" required autocomplete="off" />
         </div>
-        <div class="campo">
-          <label for="iberia-destino">Destino</label>
-          <input id="iberia-destino" placeholder="MAD" maxlength="3" required autocomplete="off" />
+        <div class="field">
+          <label for="iberia-destination">Destino</label>
+          <input id="iberia-destination" placeholder="MAD" maxlength="3" required autocomplete="off" />
         </div>
-        <div class="campo">
-          <label for="iberia-teto">Teto de Avios (K) por passageiro</label>
-          <input id="iberia-teto" type="number" min="1" step="0.5" placeholder="ex.: 40" autocomplete="off" />
+        <div class="field">
+          <label for="iberia-ceiling">Teto de Avios (K) por passageiro</label>
+          <input id="iberia-ceiling" type="number" min="1" step="0.5" placeholder="ex.: 40" autocomplete="off" />
         </div>
-        <!-- Os três campos abaixo só agem sobre a planilha de voos: o
-             calendário que gera as datas não tem cabine nem escalas. Com
-             "Não detalhar", a busca é só o calendário e leva ~40s. -->
-        <div class="campo">
-          <label for="iberia-detalhar">Quantas datas detalhar voo a voo</label>
-          <select id="iberia-detalhar">
+        <div class="field">
+          <label for="iberia-detail-days">Quantas datas detalhar voo a voo</label>
+          <select id="iberia-detail-days">
             <option value="0" selected>Nenhuma — só a lista de datas (~40s)</option>
             <option value="3">As 3 datas mais baratas (~1 min a mais)</option>
             <option value="5">As 5 mais baratas (~1min30 a mais)</option>
@@ -225,18 +206,18 @@
             <option value="-1">TODAS as datas — como o bot antigo (pode passar de 1 hora)</option>
           </select>
         </div>
-        <div class="campo">
-          <label for="iberia-conexoes">Conexões (só filtra as datas detalhadas)</label>
-          <select id="iberia-conexoes">
+        <div class="field">
+          <label for="iberia-stops">Conexões (só filtra as datas detalhadas)</label>
+          <select id="iberia-stops">
             <option value="">Todos os voos</option>
             <option value="0">Só voo direto</option>
             <option value="1">Até 1 conexão</option>
             <option value="2">Até 2 conexões</option>
           </select>
         </div>
-        <div class="campo">
-          <label for="iberia-cabine">Cabine (só filtra as datas detalhadas)</label>
-          <select id="iberia-cabine">
+        <div class="field">
+          <label for="iberia-cabin">Cabine (só filtra as datas detalhadas)</label>
+          <select id="iberia-cabin">
             <option value="">Todas</option>
             <option value="ECONOMY">Econômica</option>
             <option value="PREMIUMTOURIST">Premium Economy</option>
@@ -245,11 +226,11 @@
           </select>
         </div>
         <label class="checkbox">
-          <input type="checkbox" id="iberia-ida-volta" checked />
+          <input type="checkbox" id="iberia-round-trip" checked />
           Ida e volta
         </label>
         <button type="submit">Buscar</button>
-        <small class="dica">
+        <small class="hint">
           Só as datas detalhadas entram na planilha por voo, com companhia,
           escalas e vagas. <strong>O preço de cada data é sempre o mais barato do
           dia, em qualquer cabine</strong> — a Iberia não publica preço por
@@ -258,7 +239,7 @@
         </small>
       </form>
 
-      <p class="aviso" style="display:block">
+      <p class="notice" style="display:block">
         O valor de cada dia é o mais barato daquele dia, seja qual for a cabine
         ou o roteamento — inclusive itinerários longos com escala em parceiras.
         Para saber qual voo e qual companhia opera cada data, peça o detalhe
@@ -266,181 +247,178 @@
         custa cerca de 15 segundos por dia detalhado.
       </p>
 
-      <p id="iberia-aviso" class="aviso" hidden></p>
+      <p id="iberia-notice" class="notice" hidden></p>
 
-      <div id="iberia-fila-buscas" class="fila-buscas"></div>
+      <div id="iberia-queue" class="search-queue"></div>
     </section>
 
-    <!-- Aba LATAM (latamairlines.com, tarifas em dinheiro, Econômica, sem
-         login). O calendário devolve ida e volta juntas, então uma busca só
-         já traz as duas pernas. -->
-    <section id="painel-latam" class="painel" hidden>
-      <form id="form-busca-latam">
-        <div class="campo">
-          <label for="latam-origem">Origem</label>
-          <input id="latam-origem" placeholder="GRU" maxlength="3" required autocomplete="off" />
+    <!-- Cash fares in economy, no login. The calendar returns both directions,
+         so one search brings both legs. -->
+    <section id="panel-latam" class="panel" hidden>
+      <form id="latam-search-form">
+        <div class="field">
+          <label for="latam-origin">Origem</label>
+          <input id="latam-origin" placeholder="GRU" maxlength="3" required autocomplete="off" />
         </div>
-        <div class="campo">
-          <label for="latam-destino">Destino</label>
-          <input id="latam-destino" placeholder="SCL" maxlength="3" required autocomplete="off" />
+        <div class="field">
+          <label for="latam-destination">Destino</label>
+          <input id="latam-destination" placeholder="SCL" maxlength="3" required autocomplete="off" />
         </div>
-        <div class="campo">
-          <label for="latam-teto">Teto por trecho (R$)</label>
-          <input id="latam-teto" type="number" min="1" step="1" placeholder="ex.: 950" autocomplete="off" />
+        <div class="field">
+          <label for="latam-ceiling">Teto por trecho (R$)</label>
+          <input id="latam-ceiling" type="number" min="1" step="1" placeholder="ex.: 950" autocomplete="off" />
         </div>
         <label class="checkbox">
-          <input type="checkbox" id="latam-menor-tarifa" checked />
+          <input type="checkbox" id="latam-lowest-fare" checked />
           Só as datas de menor tarifa
         </label>
-        <!-- Fase 2: pega o dia mais barato de cada direção (dentro de
-             "menor + margem": R$ 100 na ida, R$ 300 na volta, que costuma ser
-             mais cara) e faz uma busca real em milhas, com print.
-             Precisa da sessão logada — ver scripts/importar-cookies.sh. -->
+        <!-- Confirms the best pairs with a real miles search and a capture; needs a
+             logged-in session (see scripts/import-cookies.sh). -->
         <label class="checkbox">
-          <input type="checkbox" id="latam-confirmar-milhas" checked />
+          <input type="checkbox" id="latam-confirm-miles" checked />
           Confirmar em milhas
         </label>
         <button type="submit">Buscar</button>
       </form>
 
-      <p id="latam-aviso" class="aviso" hidden></p>
+      <p id="latam-notice" class="notice" hidden></p>
 
-      <div id="latam-fila-buscas" class="fila-buscas"></div>
+      <div id="latam-queue" class="search-queue"></div>
     </section>
 
-    <!-- Aba Smiles (GOL). Sem login: a chamada sai de dentro do navegador do
-         bot (ver bot-smiles.ts). Uma direção por busca, três cabines juntas. -->
-    <section id="painel-smiles" class="painel" hidden>
-      <form id="form-busca-smiles">
-        <div class="campo">
-          <label for="smiles-origem">Origem</label>
-          <input id="smiles-origem" placeholder="GRU" maxlength="3" required autocomplete="off" />
+    <!-- No login: the call goes out from inside the bot's browser (see
+         smiles.scraper.ts). One direction per search, three cabins together. -->
+    <section id="panel-smiles" class="panel" hidden>
+      <form id="smiles-search-form">
+        <div class="field">
+          <label for="smiles-origin">Origem</label>
+          <input id="smiles-origin" placeholder="GRU" maxlength="3" required autocomplete="off" />
         </div>
-        <div class="campo">
-          <label for="smiles-destino">Destino</label>
-          <input id="smiles-destino" placeholder="MIA" maxlength="3" required autocomplete="off" />
+        <div class="field">
+          <label for="smiles-destination">Destino</label>
+          <input id="smiles-destination" placeholder="MIA" maxlength="3" required autocomplete="off" />
         </div>
         <label class="checkbox">
-          <input type="checkbox" id="smiles-ida-volta" checked />
+          <input type="checkbox" id="smiles-round-trip" checked />
           Ida e volta
         </label>
-                <div class="campo">
-          <label for="smiles-de">De</label>
-          <input id="smiles-de" type="month" autocomplete="off" />
+        <div class="field">
+          <label for="smiles-from">De</label>
+          <input id="smiles-from" type="month" autocomplete="off" />
         </div>
-        <div class="campo">
-          <label for="smiles-ate">Até</label>
-          <input id="smiles-ate" type="month" autocomplete="off" />
+        <div class="field">
+          <label for="smiles-until">Até</label>
+          <input id="smiles-until" type="month" autocomplete="off" />
         </div>
 
-<button type="submit">Buscar</button>
+        <button type="submit">Buscar</button>
 
-        <!-- Os valores são da tarifa Smiles Clube (assinante), que é a mesma
-             que o calendário do site reporta. Sem teto, a busca detalha os
-             dias mais baratos até o limite e avisa o que ficou de fora. -->
-        <div class="linha-tetos">
-          <div class="campo">
-            <label for="smiles-teto-economica">Teto Econômica (K)</label>
-            <input id="smiles-teto-economica" type="number" min="1" step="0.5" placeholder="ex.: 80" autocomplete="off" />
+        <!-- Values are the Smiles Club fare, the one the site's calendar reports.
+             Without a ceiling the search details the cheapest days up to the limit
+             and says what was left out. -->
+        <div class="ceilings-row">
+          <div class="field">
+            <label for="smiles-ceiling-economy">Teto Econômica (K)</label>
+            <input id="smiles-ceiling-economy" type="number" min="1" step="0.5" placeholder="ex.: 80" autocomplete="off" />
           </div>
-          <div class="campo">
-            <label for="smiles-teto-premium">Teto Conforto (K)</label>
-            <input id="smiles-teto-premium" type="number" min="1" step="0.5" placeholder="ex.: 190" autocomplete="off" />
+          <div class="field">
+            <label for="smiles-ceiling-premium">Teto Conforto (K)</label>
+            <input id="smiles-ceiling-premium" type="number" min="1" step="0.5" placeholder="ex.: 190" autocomplete="off" />
           </div>
-          <div class="campo">
-            <label for="smiles-teto-executiva">Teto Executiva (K)</label>
-            <input id="smiles-teto-executiva" type="number" min="1" step="0.5" placeholder="ex.: 250" autocomplete="off" />
+          <div class="field">
+            <label for="smiles-ceiling-business">Teto Executiva (K)</label>
+            <input id="smiles-ceiling-business" type="number" min="1" step="0.5" placeholder="ex.: 250" autocomplete="off" />
           </div>
         </div>
       </form>
 
-      <p id="smiles-aviso" class="aviso" hidden></p>
+      <p id="smiles-notice" class="notice" hidden></p>
 
-      <div id="smiles-fila-buscas" class="fila-buscas"></div>
+      <div id="smiles-queue" class="search-queue"></div>
     </section>
 
-    <section id="painel-historico" class="painel" hidden>
-      <div id="historico-topo" class="historico-topo" hidden>
-        <p id="historico-resumo" class="historico-resumo"></p>
-        <button type="button" id="btn-limpar-historico" class="btn-limpar">Limpar histórico</button>
+    <section id="panel-history" class="panel" hidden>
+      <div id="history-top" class="history-top" hidden>
+        <p id="history-summary" class="history-summary"></p>
+        <button type="button" id="clear-history-button" class="clear-button">Limpar histórico</button>
       </div>
-      <p id="historico-vazio" class="historico-vazio" hidden>Nenhum trecho pesquisado ainda. As buscas feitas na aba Buscar aparecem aqui.</p>
-      <div id="lista-historico" class="lista-historico"></div>
+      <p id="history-empty" class="history-empty" hidden>Nenhum trecho pesquisado ainda. As buscas feitas na aba Buscar aparecem aqui.</p>
+      <div id="history-list" class="history-list"></div>
     </section>
   </main>
 
-  <template id="tpl-job">
-    <section class="job-busca">
-      <div class="job-cabecalho">
+  <template id="job-template">
+    <section class="search-job">
+      <div class="job-header">
         <div class="job-info">
-          <span class="job-rota"></span>
-          <span class="job-status status-fila">Na fila</span>
-          <button type="button" class="btn-parar-busca" title="Parar esta busca" aria-label="Parar esta busca">■</button>
+          <span class="job-route"></span>
+          <span class="job-status status-queued">Na fila</span>
+          <button type="button" class="stop-search-button" title="Parar esta busca" aria-label="Parar esta busca">■</button>
         </div>
-        <div class="progresso">
-          <div class="progresso-linha">
-            <span class="progresso-label">Buscando...</span>
-            <span class="progresso-janela"></span>
+        <div class="progress">
+          <div class="progress-row">
+            <span class="progress-label">Buscando...</span>
+            <span class="progress-window"></span>
           </div>
-          <div class="barra">
-            <div class="barra-preenchida"></div>
+          <div class="bar">
+            <div class="bar-fill"></div>
           </div>
         </div>
 
-        <!-- Aparecem só quando a busca termina (ver atualizarAcoesCard). -->
-        <div class="job-acoes" hidden>
-          <button type="button" class="btn-acao btn-copiar-ida" hidden>Copiar ida</button>
-          <button type="button" class="btn-acao btn-copiar-volta" hidden>Copiar volta</button>
-          <button type="button" class="btn-acao btn-minimizar">Minimizar</button>
-          <button type="button" class="btn-acao btn-remover" title="Remove esta busca da tela e da memória">Remover</button>
+        <!-- Only shown once the search ends (see updateCardActions). -->
+        <div class="job-actions" hidden>
+          <button type="button" class="action-button copy-outbound-button" hidden>Copiar ida</button>
+          <button type="button" class="action-button copy-return-button" hidden>Copiar volta</button>
+          <button type="button" class="action-button minimize-button">Minimizar</button>
+          <button type="button" class="action-button remove-button" title="Remove esta busca da tela e da memória">Remover</button>
         </div>
       </div>
 
-      <p class="aviso" hidden></p>
-      <p class="job-tetos" hidden></p>
+      <p class="notice" hidden></p>
+      <p class="job-ceilings" hidden></p>
 
-      <nav class="sub-abas" hidden>
-        <button type="button" class="sub-aba-btn ativo" data-subaba="datas">Datas</button>
-        <button type="button" class="sub-aba-btn" data-subaba="upgrade">Upgrade</button>
+      <nav class="subtabs" hidden>
+        <button type="button" class="subtab-button active" data-subtab="dates">Datas</button>
+        <button type="button" class="subtab-button" data-subtab="upgrade">Upgrade</button>
       </nav>
 
-      <section class="resultado" hidden></section>
+      <section class="result" hidden></section>
 
-      <section class="subpainel-upgrade" hidden>
-        <p class="upgrade-explicacao">
+      <section class="upgrade-subpanel" hidden>
+        <p class="upgrade-explanation">
           Dias em que Econômica e Executiva têm disponibilidade juntas. Nesses dias dá pra
           emitir a passagem em Econômica e usar o upgrade da TAP pra ficar mais barato do que
           emitir direto em Executiva.
         </p>
-        <p class="upgrade-vazio historico-vazio" hidden>Nenhum dia com as duas cabines disponíveis nesse período.</p>
-        <div class="lista-upgrade"></div>
+        <p class="upgrade-empty history-empty" hidden>Nenhum dia com as duas cabines disponíveis nesse período.</p>
+        <div class="upgrade-list"></div>
       </section>
     </section>
   </template>
 
-  <!-- Cada perna fecha sozinha (details): com ida e volta na tela, chegar na
-       volta exigia rolar a ida inteira. -->
-  <template id="tpl-perna">
-    <details class="perna" open>
-      <summary class="perna-titulo"></summary>
-      <div class="colunas">
-        <details class="coluna coluna-executiva" open>
-          <summary class="coluna-cabecalho">
+  <!-- Each leg collapses on its own (details): with both legs on screen, reaching
+       the return used to mean scrolling the whole outbound. -->
+  <template id="leg-template">
+    <details class="leg" open>
+      <summary class="leg-title"></summary>
+      <div class="columns">
+        <details class="column column-business" open>
+          <summary class="column-header">
             <span class="chevron" aria-hidden="true">›</span>
             <h3>Executiva</h3>
-            <button type="button" class="btn-copiar">Copiar</button>
+            <button type="button" class="copy-button">Copiar</button>
           </summary>
-          <p class="coluna-resumo"></p>
-          <div class="cartoes"></div>
+          <p class="column-summary"></p>
+          <div class="date-chips"></div>
         </details>
-        <details class="coluna coluna-economica" open>
-          <summary class="coluna-cabecalho">
+        <details class="column column-economy" open>
+          <summary class="column-header">
             <span class="chevron" aria-hidden="true">›</span>
             <h3>Econômica</h3>
-            <button type="button" class="btn-copiar">Copiar</button>
+            <button type="button" class="copy-button">Copiar</button>
           </summary>
-          <p class="coluna-resumo"></p>
-          <div class="cartoes"></div>
+          <p class="column-summary"></p>
+          <div class="date-chips"></div>
         </details>
       </div>
     </details>

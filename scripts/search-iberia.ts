@@ -102,9 +102,9 @@ async function main() {
 
     const section = buildIberiaReport(result.days, ceiling, params);
     console.log(`Janela varrida: ${result.window.from} → ${result.window.until}`);
-    console.log(`Dias com prêmio: ${result.days.length}` + (ceiling ? ` (${section.dias.length} dentro do teto)` : ""));
-    if (section.menor != null) console.log(`Faixa: ${section.menor}K → ${section.maior}K Avios\n`);
-    console.log(section.texto);
+    console.log(`Dias com prêmio: ${result.days.length}` + (ceiling ? ` (${section.days.length} dentro do teto)` : ""));
+    if (section.min != null) console.log(`Faixa: ${section.min}K → ${section.max}K Avios\n`);
+    console.log(section.text);
 
     // The accumulated record, like every other source: one row per day.
     await saveSearch(
@@ -114,8 +114,8 @@ async function main() {
         destination: destination.toUpperCase(),
         legs: [
           {
-            rotulo: `Ida: ${origin.toUpperCase()} → ${destination.toUpperCase()}`,
-            secoes: [{ rotulo: "Avios", dias: section.dias.map((day) => ({ data: day.data, valorK: day.valorK })) }],
+            label: `Ida: ${origin.toUpperCase()} → ${destination.toUpperCase()}`,
+            sections: [{ label: "Avios", days: section.days.map((day) => ({ date: day.date, valueK: day.valueK })) }],
           },
         ],
         ceilings: ceiling != null ? { Avios: Math.round(ceiling / 10) / 100 } : {},
@@ -123,15 +123,15 @@ async function main() {
       },
       (message) => console.log(`  ${message}`),
     );
-    console.log(`\nRegistrado em planilhas/buscas.csv (${section.dias.length} linha(s)).`);
+    console.log(`\nRegistrado em spreadsheets/buscas.csv (${section.days.length} linha(s)).`);
 
-    if (MAX_DETAILED_DAYS <= 0 || section.dias.length === 0) return;
+    if (MAX_DETAILED_DAYS <= 0 || section.days.length === 0) return;
 
     // One request per date, so the cheapest go first and the count is capped.
     // What was left out is said out loud: a cut sweep that does not announce
     // itself becomes "not available" in the alert.
     const aviosByDate = new Map(result.days.map((day) => [day.date, day.avios]));
-    const candidates = [...section.dias].sort((a, b) => (aviosByDate.get(a.data) ?? 0) - (aviosByDate.get(b.data) ?? 0));
+    const candidates = [...section.days].sort((a, b) => (aviosByDate.get(a.date) ?? 0) - (aviosByDate.get(b.date) ?? 0));
     const chosen = candidates.slice(0, MAX_DETAILED_DAYS);
     if (candidates.length > chosen.length) {
       console.log(
@@ -145,7 +145,7 @@ async function main() {
     const { flights, failedDays } = await detailDays(
       session.page,
       params,
-      chosen.map((day) => day.data),
+      chosen.map((day) => day.date),
       (message) => console.log(`  ${message}`),
       (fraction) => process.stdout.write(`\r  detalhe: ${Math.round(fraction * 100)}%   `),
     );

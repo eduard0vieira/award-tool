@@ -48,13 +48,13 @@ export class IberiaSource implements SearchSource<IberiaSearchDto> {
   ) {}
 
   start(jobId: string, request: IberiaSearchDto) {
-    const { origem, destino } = request;
-    const route = { origin: origem, destination: destino, passengers: request.passageiros ?? 1 };
-    const ceiling = request.teto ?? null;
-    const daysToDetail = request.detalharDias ?? 0;
+    const { origin, destination } = request;
+    const route = { origin, destination, passengers: request.passengers ?? 1 };
+    const ceiling = request.ceiling ?? null;
+    const daysToDetail = request.detailDays ?? 0;
     const filters: FlightFilters = {
-      maxStops: request.maxConexoes ?? null,
-      cabins: request.cabines && request.cabines.length > 0 ? request.cabines : null,
+      maxStops: request.maxStops ?? null,
+      cabins: request.cabins && request.cabins.length > 0 ? request.cabins : null,
     };
 
     return this.runner.run(this.pool, jobId, async ({ page }) => {
@@ -65,7 +65,7 @@ export class IberiaSource implements SearchSource<IberiaSearchDto> {
       if (result.kind === "error") throw new Error(result.reason);
 
       const days = result.kind === "no_availability" ? [] : result.days;
-      let section = { rotulo: "Avios", ...buildIberiaReport(days, ceiling, route) };
+      let section = { label: "Avios", ...buildIberiaReport(days, ceiling, route) };
       const partialNotice = result.kind === "partial" ? `Cobertura parcial: ${result.reason}` : undefined;
 
       // The per-flight sheet says which flight and airline operate each day; the
@@ -75,16 +75,16 @@ export class IberiaSource implements SearchSource<IberiaSearchDto> {
       const spreadsheetNotices: string[] = [];
       const aviosByDate = new Map(days.map((day) => [day.date, day.avios]));
       const chosenDates = pickDatesToDetail(
-        section.dias.map((day) => day.data),
+        section.days.map((day) => day.date),
         aviosByDate,
         daysToDetail,
       );
       if (chosenDates.length > 0) {
         const detailAll = daysToDetail === -1;
-        if (section.dias.length > chosenDates.length) {
+        if (section.days.length > chosenDates.length) {
           spreadsheetNotices.push(
             `A planilha de voos traz os ${chosenDates.length} dia(s) mais baratos; ` +
-              `os outros ${section.dias.length - chosenDates.length} ficaram sem detalhe.`,
+              `os outros ${section.days.length - chosenDates.length} ficaram sem detalhe.`,
           );
         }
 
@@ -119,9 +119,9 @@ export class IberiaSource implements SearchSource<IberiaSearchDto> {
           );
         } else if (detailAll && hasFilter) {
           const datesWithFlight = new Set(filtered.map((flight) => flight.date));
-          const before = section.dias.length;
+          const before = section.days.length;
           section = {
-            rotulo: section.rotulo,
+            label: section.label,
             ...buildIberiaReport(
               days.filter((day) => datesWithFlight.has(day.date)),
               ceiling,
@@ -129,7 +129,7 @@ export class IberiaSource implements SearchSource<IberiaSearchDto> {
             ),
           };
           spreadsheetNotices.push(
-            `As datas foram filtradas pelo que o detalhe encontrou: ${section.dias.length} de ${before} têm voo ` +
+            `As datas foram filtradas pelo que o detalhe encontrou: ${section.days.length} de ${before} têm voo ` +
               `dentro do que você pediu.`,
           );
         }
@@ -158,18 +158,18 @@ export class IberiaSource implements SearchSource<IberiaSearchDto> {
 
         if (rows.length > 0) {
           const stamp = new Date().toISOString().slice(0, 16).replace("T", " ");
-          const fileName = `iberia-${origem}-${destino}-${stamp.replace(/[: ]/g, "-")}.csv`;
+          const fileName = `iberia-${origin}-${destination}-${stamp.replace(/[: ]/g, "-")}.csv`;
           try {
             writeFlightsCsv(rows, path.join(SPREADSHEETS_DIR, fileName));
             // The local file always exists while Google may be down or unconfigured;
             // without sending it to the screen a saved sheet looked like it was never made.
-            localFile = `planilhas/${fileName}`;
+            localFile = `spreadsheets/${fileName}`;
           } catch (err) {
             spreadsheetNotices.push(
               `Não consegui gravar o CSV de voos: ${err instanceof Error ? err.message : String(err)}`,
             );
           }
-          spreadsheetUrl = await createSearchSheet({ title: `Iberia ${origem}-${destino} ${stamp}`, rows }, job.log);
+          spreadsheetUrl = await createSearchSheet({ title: `Iberia ${origin}-${destination} ${stamp}`, rows }, job.log);
         } else {
           spreadsheetNotices.push("Nenhum voo sobrou depois dos filtros — a planilha de voos não foi gerada.");
         }
@@ -187,16 +187,16 @@ export class IberiaSource implements SearchSource<IberiaSearchDto> {
 
       recordSearch(jobId, {
         source: "IBERIA",
-        origin: origem,
-        destination: destino,
-        legs: [{ rotulo: `${origem} → ${destino}`, secoes: [section] }],
+        origin,
+        destination,
+        legs: [{ label: `${origin} → ${destination}`, sections: [section] }],
         ceilings: { Avios: ceiling == null ? null : Math.round(ceiling / 10) / 100 },
       });
       this.jobs.complete(jobId, {
-        secaoIberia: section,
-        avisoParcial: finalNotice,
-        planilhaUrl: spreadsheetUrl,
-        arquivoLocal: localFile,
+        section,
+        partialNotice: finalNotice,
+        spreadsheetUrl,
+        localFile,
       });
     });
   }

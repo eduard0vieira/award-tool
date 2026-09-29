@@ -1,4 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
+import { SessionPool } from "../../../core/session-pool.ts";
 import {
   buildTapReport,
   DEFAULT_BUSINESS_CEILING_K,
@@ -6,7 +7,6 @@ import {
   searchTapYear,
   type TapSession,
 } from "../../../scrapers/tap/tap.scraper.ts";
-import { SessionPool } from "../../../core/session-pool.ts";
 import { JobRunner } from "../../jobs/job-runner.service.ts";
 import { JobStore } from "../../jobs/job-store.service.ts";
 import type { SearchSource } from "../../search/search-source.ts";
@@ -31,15 +31,15 @@ export class TapSource implements SearchSource<TapSearchDto> {
   ) {}
 
   start(jobId: string, request: TapSearchDto) {
-    const { origem, destino } = request;
+    const { origin, destination } = request;
     // Ceilings are in K here: the TAP table is spoken in thousands, unlike SeatSpy and AA.
-    const ceilings = { businessK: request.tetos?.executiva ?? null, economyK: request.tetos?.economica ?? null };
+    const ceilings = { businessK: request.ceilings?.business ?? null, economyK: request.ceilings?.economy ?? null };
 
     return this.runner.run(this.pool, jobId, async ({ page, baseUrl }) => {
       const job = this.jobs.callbacks(jobId);
       const { days, failedWindows, stoppedByUser } = await searchTapYear(
         page,
-        { baseUrl, origin: origem, destination: destino, cabinParam: CABIN_PARAM },
+        { baseUrl, origin, destination, cabinParam: CABIN_PARAM },
         job.log,
         job.progress,
         job.window,
@@ -52,8 +52,8 @@ export class TapSource implements SearchSource<TapSearchDto> {
       // Sent to the front so the ceiling actually applied is explicit instead of
       // an outdated server silently applying the default.
       const appliedCeilings = {
-        executivaK: ceilings.businessK ?? DEFAULT_BUSINESS_CEILING_K,
-        economicaK: ceilings.economyK ?? DEFAULT_ECONOMY_CEILING_K,
+        businessK: ceilings.businessK ?? DEFAULT_BUSINESS_CEILING_K,
+        economyK: ceilings.economyK ?? DEFAULT_ECONOMY_CEILING_K,
       };
       const partialNotice = stoppedByUser
         ? "Você interrompeu a busca depois das janelas vazias. O resultado abaixo cobre só o período já consultado."
@@ -63,25 +63,20 @@ export class TapSource implements SearchSource<TapSearchDto> {
 
       recordSearch(jobId, {
         source: "tap",
-        origin: origem,
-        destination: destino,
+        origin,
+        destination,
         legs: [
           {
-            rotulo: `${origem} → ${destino}`,
-            secoes: [
-              { ...report.executivas, rotulo: "Executiva" },
-              { ...report.economicas, rotulo: "Econômica" },
+            label: `${origin} → ${destination}`,
+            sections: [
+              { ...report.business, label: "Executiva" },
+              { ...report.economy, label: "Econômica" },
             ],
           },
         ],
-        ceilings: { Executiva: appliedCeilings.executivaK, "Econômica": appliedCeilings.economicaK },
+        ceilings: { Executiva: appliedCeilings.businessK, "Econômica": appliedCeilings.economyK },
       });
-      this.jobs.complete(jobId, {
-        relatorio: report,
-        avisoParcial: partialNotice,
-        tetosAplicados: appliedCeilings,
-        interrompidaPorVoce: stoppedByUser,
-      });
+      this.jobs.complete(jobId, { report, partialNotice, appliedCeilings, stoppedByUser });
     });
   }
 }

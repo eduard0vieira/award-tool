@@ -2,34 +2,34 @@ import { IsNotEmpty, IsNumber, IsOptional, IsString } from "class-validator";
 
 export class CreateAlertDto {
   @IsOptional()
-  @IsString({ message: "O campo fonte deve ser texto." })
-  fonte?: string;
+  @IsString({ message: "O campo source deve ser texto." })
+  source?: string;
 
-  @IsString({ message: "O campo origem deve ser texto." })
-  @IsNotEmpty({ message: "O campo origem é obrigatório." })
-  origem!: string;
+  @IsString({ message: "O campo origin deve ser texto." })
+  @IsNotEmpty({ message: "O campo origin é obrigatório." })
+  origin!: string;
 
-  @IsString({ message: "O campo destino deve ser texto." })
-  @IsNotEmpty({ message: "O campo destino é obrigatório." })
-  destino!: string;
+  @IsString({ message: "O campo destination deve ser texto." })
+  @IsNotEmpty({ message: "O campo destination é obrigatório." })
+  destination!: string;
 
-  @IsString({ message: "O campo classe deve ser texto." })
-  @IsNotEmpty({ message: "O campo classe é obrigatório." })
-  classe!: string;
-
-  @IsOptional()
-  @IsNumber({}, { message: "O campo menorK deve ser um número." })
-  menorK?: number | null;
+  @IsString({ message: "O campo cabinClass deve ser texto." })
+  @IsNotEmpty({ message: "O campo cabinClass é obrigatório." })
+  cabinClass!: string;
 
   @IsOptional()
-  @IsNumber({}, { message: "O campo maiorK deve ser um número." })
-  maiorK?: number | null;
+  @IsNumber({}, { message: "O campo minK deve ser um número." })
+  minK?: number | null;
 
   @IsOptional()
-  @IsString({ message: "O campo textoIda deve ser texto." })
-  textoIda?: string;
+  @IsNumber({}, { message: "O campo maxK deve ser um número." })
+  maxK?: number | null;
 
   @IsOptional()
-  @IsString({ message: "O campo textoVolta deve ser texto." })
-  textoVolta?: string;
+  @IsString({ message: "O campo outboundText deve ser texto." })
+  outboundText?: string;
+
+  @IsOptional()
+  @IsString({ message: "O campo returnText deve ser texto." })
+  returnText?: string;
 }

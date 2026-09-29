@@ -5,16 +5,16 @@ import { OptionalCeilingField, OptionalIntField, RouteRequestDto } from "../../s
 const CABINS = Object.keys(AA_CABIN_LABELS);
 
 export class AaSearchDto extends RouteRequestDto {
-  @IsIn(CABINS, { message: `cabine deve ser uma destas para buscas na AA: ${CABINS.join(", ")}.` })
-  cabine!: AaCabin;
+  @IsIn(CABINS, { message: `cabin deve ser uma destas para buscas na AA: ${CABINS.join(", ")}.` })
+  cabin!: AaCabin;
 
   @IsOptional()
-  @IsIn([0, 1], { message: "O campo maxConexoes deve ser 0, 1 ou vazio." })
-  maxConexoes?: 0 | 1 | null;
+  @IsIn([0, 1], { message: "O campo maxStops deve ser 0, 1 ou vazio." })
+  maxStops?: 0 | 1 | null;
 
-  @OptionalCeilingField("teto")
-  teto?: number | null;
+  @OptionalCeilingField("ceiling")
+  ceiling?: number | null;
 
-  @OptionalIntField("passageiros", 1, AA_MAX_PASSENGERS)
-  passageiros?: number;
+  @OptionalIntField("passengers", 1, AA_MAX_PASSENGERS)
+  passengers?: number;
 }

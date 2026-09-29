@@ -6,23 +6,23 @@ import {
 } from "../../search/request-fields.ts";
 
 export class LatamCeilingsDto {
-  @OptionalCeilingField("tetos.reais")
-  reais?: number | null;
+  @OptionalCeilingField("ceilings.maxReais")
+  maxReais?: number | null;
 
-  @OptionalBooleanField("tetos.somenteMenorTarifa")
-  somenteMenorTarifa?: boolean;
+  @OptionalBooleanField("ceilings.lowestFareOnly")
+  lowestFareOnly?: boolean;
 }
 
 export class LatamSearchDto extends RouteRequestDto {
-  @OptionalNestedField("tetos", () => LatamCeilingsDto)
-  tetos?: LatamCeilingsDto;
+  @OptionalNestedField("ceilings", () => LatamCeilingsDto)
+  ceilings?: LatamCeilingsDto;
 
-  @OptionalBooleanField("confirmarMilhas")
-  confirmarMilhas?: boolean;
+  @OptionalBooleanField("confirmMiles")
+  confirmMiles?: boolean;
 
-  @OptionalCeilingField("margemIdaReais")
-  margemIdaReais?: number | null;
+  @OptionalCeilingField("outboundMarginReais")
+  outboundMarginReais?: number | null;
 
-  @OptionalCeilingField("margemVoltaReais")
-  margemVoltaReais?: number | null;
+  @OptionalCeilingField("returnMarginReais")
+  returnMarginReais?: number | null;
 }

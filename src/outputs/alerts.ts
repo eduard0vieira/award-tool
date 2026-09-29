@@ -11,7 +11,7 @@ import { ALERTS_DIR, PORTAL_DIST_DIR } from "../core/paths.ts";
 // ?render page (RenderAlerta.jsx) draws the card from the route serialized in
 // the URL hash, with no Supabase and no login. A headless Chromium opens that
 // page, screenshots the card(s) and reads the caption. The PNGs land in the
-// alerts folder, served under /alertas.
+// alerts folder, served under /alerts.
 
 // How the portal names the airline (AIRLINES) and program (KNOWN_PROGRAMS) for
 // each source or airline the bot searches.
@@ -39,16 +39,16 @@ export type AlertRequest = {
   minK: number | null; // lowest value seen, in K; becomes the program's "miles"
   maxK: number | null; // highest value; becomes "milesMax" when it differs
   outboundText: string; // "Mmm YYYY: DD, DD", the format the portal parses
-  inboundText: string;
+  returnText: string;
 };
 
 export type GeneratedAlert = {
-  imagens: string[]; // public paths (/alertas/...)
-  legenda: string;
+  images: string[]; // public paths (/alerts/...)
+  caption: string;
   // Extra alert of outbound+return combinations; only exists when the dates of
   // both directions cross (see RenderAlerta.jsx in the portal).
-  imagemCombo?: string;
-  legendaCombo?: string;
+  comboImage?: string;
+  comboCaption?: string;
 };
 
 // The portal's own route shape, read by its ?render page.
@@ -65,7 +65,7 @@ function portalRoute(request: AlertRequest) {
     classe: request.cabinClass,
     programas: [{ name: info.program, miles, milesMax, unit: info.unit, taxas: "" }],
     datasIdaText: request.outboundText || "",
-    datasVoltaText: request.inboundText || "",
+    datasVoltaText: request.returnText || "",
   };
 }
 
@@ -130,20 +130,20 @@ export async function generateAlert(
     for (let i = 0; i < cardCount; i++) {
       const name = `alerta-${request.origin}-${request.destination}${cardCount > 1 ? `-${i + 1}` : ""}.png`;
       await page.locator(`#render-card-${i}`).screenshot({ path: path.join(ALERTS_DIR, folder, name) });
-      images.push(`/alertas/${folder}/${name}`);
+      images.push(`/alerts/${folder}/${name}`);
     }
 
     const alert: GeneratedAlert = {
-      imagens: images,
-      legenda: (await page.locator("#render-legenda").textContent()) ?? "",
+      images,
+      caption: (await page.locator("#render-legenda").textContent()) ?? "",
     };
 
     const comboCard = page.locator("#render-combo");
     if (await comboCard.count()) {
       const comboName = `alerta-${request.origin}-${request.destination}-combos.png`;
       await comboCard.screenshot({ path: path.join(ALERTS_DIR, folder, comboName) });
-      alert.imagemCombo = `/alertas/${folder}/${comboName}`;
-      alert.legendaCombo = (await page.locator("#render-legenda-combo").textContent()) ?? "";
+      alert.comboImage = `/alerts/${folder}/${comboName}`;
+      alert.comboCaption = (await page.locator("#render-legenda-combo").textContent()) ?? "";
     }
 
     return alert;

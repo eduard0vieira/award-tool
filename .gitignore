@@ -14,17 +14,17 @@
 /old
 
 .env
-alertas/
-planilhas/
+alerts/
+spreadsheets/
 
 .perfil-aa/
 
-# Recon da LATAM: as fotos saem de uma sessão logada e podem mostrar nome,
-# número de conta e saldo. Ficam fora do git.
+# LATAM recon: the screenshots come from a logged-in session and may show the
+# holder's name, account number and balance.
 fixtures/latam-rt/
 
-# Capturas de diagnóstico do recon: mostram a tela logada (nome do titular,
-# saldo de milhas). Ficam em disco pra depurar, nunca no repositório.
+# Recon diagnostic captures show the logged-in screen (holder's name, miles
+# balance). They stay on disk for debugging, never in the repository.
 fixtures/*.png
 
 # Prisma: local SQLite database and the generated client.

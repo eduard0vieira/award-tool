@@ -9,7 +9,7 @@ function messageOf(exception: HttpException): string {
   return typeof message === "string" ? message : exception.message;
 }
 
-// The front reads `corpo.erro` from every failed response.
+// The front reads `error` from every failed response.
 @Catch()
 export class HttpErrorFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost) {
@@ -18,12 +18,12 @@ export class HttpErrorFilter implements ExceptionFilter {
     const res = http.getResponse<Response>();
 
     if (exception instanceof HttpException) {
-      if (!res.headersSent) res.status(exception.getStatus()).json({ erro: messageOf(exception) });
+      if (!res.headersSent) res.status(exception.getStatus()).json({ error: messageOf(exception) });
       return;
     }
 
     const message = exception instanceof Error ? exception.message : String(exception);
     console.error(`[${req.method} ${req.originalUrl}] falha: ${message}`);
-    if (!res.headersSent) res.status(500).json({ erro: message });
+    if (!res.headersSent) res.status(500).json({ error: message });
   }
 }

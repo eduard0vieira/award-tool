@@ -25,33 +25,33 @@ import {
 
 export type AaSession = ChromeSession;
 
-export type AaCabin = "economica" | "premium" | "executiva" | "primeira";
+export type AaCabin = "economy" | "premium" | "business" | "first";
 
 export const AA_CABIN_LABELS: Record<AaCabin, string> = {
-  economica: "Econômica",
+  economy: "Econômica",
   premium: "Premium Economy",
-  executiva: "Executiva",
-  primeira: "Primeira Classe",
+  business: "Executiva",
+  first: "Primeira Classe",
 };
 
 // Values of the request's slices[].cabin. "BUSINESS,FIRST" is what the site
 // sends when Business is picked; checked to return exactly what "BUSINESS"
 // does (first class is always pricier, so it never becomes the day's lowest).
 const AA_REQUEST_CABINS: Record<AaCabin, string> = {
-  economica: "COACH",
+  economy: "COACH",
   premium: "PREMIUM_ECONOMY",
-  executiva: "BUSINESS,FIRST",
-  primeira: "FIRST",
+  business: "BUSINESS,FIRST",
+  first: "FIRST",
 };
 
 // The search URL's `cabin` takes different values than the request: the URL
 // rejects "BUSINESS,FIRST". Checked in the browser on 2026-09-17: with
 // BUSINESS the results page opens already filtered to business, same for PREMIUM_ECONOMY.
 const AA_LINK_CABINS: Record<AaCabin, string> = {
-  economica: "COACH",
+  economy: "COACH",
   premium: "PREMIUM_ECONOMY",
-  executiva: "BUSINESS",
-  primeira: "FIRST",
+  business: "BUSINESS",
+  first: "FIRST",
 };
 
 type LinkParams = { origin: string; destination: string; passengers: number; cabin?: AaCabin };
@@ -389,20 +389,20 @@ export function buildAaReport(
   const accepted = days.filter((day) => ceilingMiles == null || day.miles <= ceilingMiles);
 
   if (accepted.length === 0) {
-    return { menor: null, maior: null, dias: [], texto: "Nenhuma disponibilidade encontrada nesse período." };
+    return { min: null, max: null, days: [], text: "Nenhuma disponibilidade encontrada nesse período." };
   }
 
   const formattedDays = accepted.map((day) => ({
-    data: day.date,
-    valorK: Math.round(day.miles / 10) / 100, // 171500 -> 171.5
+    date: day.date,
+    valueK: Math.round(day.miles / 10) / 100, // 171500 -> 171.5
     ...(linkParams ? { link: aaBookingLink(linkParams, day.date) } : {}),
   }));
-  const values = formattedDays.map((day) => day.valorK);
+  const values = formattedDays.map((day) => day.valueK);
 
   return {
-    menor: Math.min(...values),
-    maior: Math.max(...values),
-    dias: formattedDays,
-    texto: formatDatesByMonth(formattedDays.map((day) => day.data)),
+    min: Math.min(...values),
+    max: Math.max(...values),
+    days: formattedDays,
+    text: formatDatesByMonth(formattedDays.map((day) => day.date)),
   };
 }

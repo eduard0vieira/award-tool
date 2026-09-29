@@ -1,14 +1,14 @@
 import { OptionalCeilingField, OptionalNestedField, RouteRequestDto } from "../../search/request-fields.ts";
 
 export class TapCeilingsDto {
-  @OptionalCeilingField("tetos.executiva")
-  executiva?: number | null;
+  @OptionalCeilingField("ceilings.business")
+  business?: number | null;
 
-  @OptionalCeilingField("tetos.economica")
-  economica?: number | null;
+  @OptionalCeilingField("ceilings.economy")
+  economy?: number | null;
 }
 
 export class TapSearchDto extends RouteRequestDto {
-  @OptionalNestedField("tetos", () => TapCeilingsDto)
-  tetos?: TapCeilingsDto;
+  @OptionalNestedField("ceilings", () => TapCeilingsDto)
+  ceilings?: TapCeilingsDto;
 }

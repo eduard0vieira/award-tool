@@ -13,14 +13,14 @@ export class AlertsService {
     const { credentials, port } = config;
     return generateAlert(
       {
-        source: request.fonte ?? "",
-        origin: request.origem,
-        destination: request.destino,
-        cabinClass: request.classe,
-        minK: positiveOrNull(request.menorK),
-        maxK: positiveOrNull(request.maiorK),
-        outboundText: request.textoIda ?? "",
-        inboundText: request.textoVolta ?? "",
+        source: request.source ?? "",
+        origin: request.origin,
+        destination: request.destination,
+        cabinClass: request.cabinClass,
+        minK: positiveOrNull(request.minK),
+        maxK: positiveOrNull(request.maxK),
+        outboundText: request.outboundText ?? "",
+        returnText: request.returnText ?? "",
       },
       {
         // The alert is rendered by loading this same server's portal, behind the same Basic Auth.

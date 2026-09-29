@@ -11,7 +11,7 @@ describe("search spreadsheet", () => {
       destination: "MIA",
       searchId: "job-1",
       ceilings: { Executiva: 70 },
-      legs: [{ rotulo: "Volta: MIA → GRU", secoes: [{ rotulo: "Executiva", dias: [{ data: "2026-10-01", valorK: 60 }] }] }],
+      legs: [{ label: "Volta: MIA → GRU", sections: [{ label: "Executiva", days: [{ date: "2026-10-01", valueK: 60 }] }] }],
     });
     assert.equal(rest.length, 0);
     assert.deepEqual(

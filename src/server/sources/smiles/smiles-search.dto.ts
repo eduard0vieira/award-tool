@@ -4,30 +4,30 @@ import { OptionalCeilingField, OptionalNestedField, RouteRequestDto } from "../.
 const MONTH_OR_DATE = /^\d{4}-\d{2}(-\d{2})?$/;
 
 export class SmilesCeilingsDto {
-  @OptionalCeilingField("tetos.economica")
-  economica?: number | null;
+  @OptionalCeilingField("ceilings.economy")
+  economy?: number | null;
 
-  @OptionalCeilingField("tetos.premium")
+  @OptionalCeilingField("ceilings.premium")
   premium?: number | null;
 
-  @OptionalCeilingField("tetos.executiva")
-  executiva?: number | null;
+  @OptionalCeilingField("ceilings.business")
+  business?: number | null;
 }
 
 export class SmilesPeriodDto {
   @IsOptional()
-  @Matches(MONTH_OR_DATE, { message: "O campo periodo.de deve ser um mês (AAAA-MM) ou uma data (AAAA-MM-DD)." })
-  de?: string;
+  @Matches(MONTH_OR_DATE, { message: "O campo period.from deve ser um mês (AAAA-MM) ou uma data (AAAA-MM-DD)." })
+  from?: string;
 
   @IsOptional()
-  @Matches(MONTH_OR_DATE, { message: "O campo periodo.ate deve ser um mês (AAAA-MM) ou uma data (AAAA-MM-DD)." })
-  ate?: string;
+  @Matches(MONTH_OR_DATE, { message: "O campo period.until deve ser um mês (AAAA-MM) ou uma data (AAAA-MM-DD)." })
+  until?: string;
 }
 
 export class SmilesSearchDto extends RouteRequestDto {
-  @OptionalNestedField("tetos", () => SmilesCeilingsDto)
-  tetos?: SmilesCeilingsDto;
+  @OptionalNestedField("ceilings", () => SmilesCeilingsDto)
+  ceilings?: SmilesCeilingsDto;
 
-  @OptionalNestedField("periodo", () => SmilesPeriodDto)
-  periodo?: SmilesPeriodDto;
+  @OptionalNestedField("period", () => SmilesPeriodDto)
+  period?: SmilesPeriodDto;
 }

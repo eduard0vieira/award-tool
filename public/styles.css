@@ -1,48 +1,34 @@
-/* ============================================================================
-   Bot de Emissões — folha de estilo
-   ----------------------------------------------------------------------------
-   Organizada em camadas: tokens → base → layout → componentes → utilitários.
-   Os nomes de classe são os mesmos que o app.js e os templates usam; mexer
-   neles quebra a interface em silêncio, então mudanças aqui são de aparência,
-   não de contrato.
-   ========================================================================== */
-
-/* ── 1. Tokens ───────────────────────────────────────────────────────────── */
-
 :root {
-  /* superfícies, do fundo pro topo. Os degraus são curtos de propósito: o
-     contraste alto entre camadas era o que fazia a tela parecer um painel de
-     caixas empilhadas. */
-  --fundo: #000000;
-  --fundo-alto: #0c0c0e;
-  --superficie: #141416;
-  --superficie-alta: #1c1c1f;
-  --borda: rgba(255, 255, 255, 0.09);
-  --borda-forte: rgba(255, 255, 255, 0.16);
+  /* Surfaces, bottom to top. The steps are short on purpose: high contrast between
+     layers is what made the screen look like a panel of stacked boxes. */
+  --bg: #000000;
+  --bg-raised: #0c0c0e;
+  --surface: #141416;
+  --surface-raised: #1c1c1f;
+  --border: rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.16);
 
-  /* texto — a escada de cinzas do sistema da Apple */
-  --texto: #f5f5f7;
-  --texto-suave: #a1a1a6;
-  --texto-fraco: #6e6e73;
+  /* Apple's system gray ladder. */
+  --text: #f5f5f7;
+  --text-soft: #a1a1a6;
+  --text-faint: #6e6e73;
 
-  /* marca e estados — o vermelho é o mesmo do favicon */
-  --marca: #e11d2f;
-  --marca-forte: #ff6673;
-  --marca-fundo: rgba(225, 29, 47, 0.14);
+  /* The red is the favicon's. */
+  --brand: #e11d2f;
+  --brand-strong: #ff6673;
+  --brand-bg: rgba(225, 29, 47, 0.14);
   --ok: #34d399;
-  --ok-fundo: rgba(52, 211, 153, 0.12);
-  --atencao: #fbbf24;
-  --atencao-fundo: rgba(251, 191, 36, 0.12);
-  --erro: #f87171;
-  --erro-fundo: rgba(248, 113, 113, 0.12);
+  --ok-bg: rgba(52, 211, 153, 0.12);
+  --warning: #fbbf24;
+  --warning-bg: rgba(251, 191, 36, 0.12);
+  --error: #f87171;
+  --error-bg: rgba(248, 113, 113, 0.12);
 
-  /* cabines */
-  --executiva: #c084fc;
-  --economica: #38bdf8;
+  --business: #c084fc;
+  --economy: #38bdf8;
   --premium: #f472b6;
-  --primeira: #fbbf24;
+  --first: #fbbf24;
 
-  /* espaçamento (escala de 4) */
   --e1: 4px;
   --e2: 8px;
   --e3: 12px;
@@ -51,27 +37,25 @@
   --e6: 32px;
   --e7: 48px;
 
-  /* forma */
-  --raio-p: 8px;
-  --raio: 12px;
-  --raio-g: 18px;
-  --sombra: none;
-  --sombra-alta: 0 8px 30px -12px rgba(0, 0, 0, 0.8);
-  --anel: 0 0 0 3px rgba(225, 29, 47, 0.4);
+  --radius-sm: 8px;
+  --radius: 12px;
+  --radius-lg: 18px;
+  --shadow: none;
+  --shadow-raised: 0 8px 30px -12px rgba(0, 0, 0, 0.8);
+  --ring: 0 0 0 3px rgba(225, 29, 47, 0.4);
 
-  /* tipografia — San Francisco, a fonte de sistema da Apple. `-apple-system`
-     já resolve pra ela no macOS e no iOS; os nomes explícitos cobrem quem tem
-     o SF Pro instalado, e o resto da pilha é o fallback de outros sistemas.
-     Nada é baixado: fonte de sistema não custa requisição nem pisca no load. */
-  --fonte:
+  /* San Francisco, Apple's system font. `-apple-system` resolves to it on macOS and
+     iOS; the explicit names cover whoever has SF Pro installed, and the rest is the
+     fallback for other systems. Nothing is downloaded: no request, no flash on load. */
+  --font:
     "SF Pro Text", "SF Pro Display", -apple-system, BlinkMacSystemFont,
     "Segoe UI", system-ui, sans-serif;
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
 
-  --transicao: 140ms cubic-bezier(0.2, 0, 0.2, 1);
+  --transition: 140ms cubic-bezier(0.2, 0, 0.2, 1);
 }
 
-/* Quem prefere menos movimento não recebe nenhum. */
+/* Whoever prefers less motion gets none. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -82,15 +66,13 @@
   }
 }
 
-/* ── 2. Base ─────────────────────────────────────────────────────────────── */
-
 * {
   box-sizing: border-box;
 }
 
-/* Garante que o atributo hidden sempre esconda o elemento, mesmo quando ele
-   (ou uma classe nele) declara display:flex/grid pra quando está visível —
-   sem isso, seletores por id/classe (mais específicos que [hidden]) vencem. */
+/* Makes [hidden] always hide the element, even when it (or one of its classes)
+   declares display:flex/grid for when it is visible: id and class selectors are
+   more specific than [hidden] and would win. */
 [hidden] {
   display: none !important;
 }
@@ -101,12 +83,12 @@ html {
 
 body {
   margin: 0;
-  font-family: var(--fonte);
+  font-family: var(--font);
   font-size: 14px;
   line-height: 1.47;
   letter-spacing: -0.01em;
-  background: var(--fundo);
-  color: var(--texto);
+  background: var(--bg);
+  color: var(--text);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   font-feature-settings: "kern", "liga";
@@ -135,16 +117,14 @@ h3 {
 }
 
 a {
-  color: var(--marca-forte);
+  color: var(--brand-strong);
 }
 
 :focus-visible {
   outline: none;
-  box-shadow: var(--anel);
-  border-radius: var(--raio-p);
+  box-shadow: var(--ring);
+  border-radius: var(--radius-sm);
 }
-
-/* ── 3. Layout ───────────────────────────────────────────────────────────── */
 
 main {
   position: relative;
@@ -161,17 +141,17 @@ main > h1 {
   margin-bottom: var(--e5);
 }
 
-.versao {
+.version {
   padding-top: 4px;
   font-size: 16px;
   font-weight: 400;
   letter-spacing: -0.005em;
-  color: var(--texto-suave);
+  color: var(--text-soft);
 }
 
-/* A barra de fontes acompanha a rolagem: trocar de programa no meio de uma
-   lista longa de resultados era o clique mais caro da interface. */
-.abas {
+/* The source tabs follow the scroll: switching program in the middle of a long
+   result list used to be the most expensive click of the interface. */
+.tabs {
   position: sticky;
   top: 0;
   z-index: 20;
@@ -183,63 +163,61 @@ main > h1 {
   scrollbar-width: none;
   background: rgba(0, 0, 0, 0.72);
   backdrop-filter: saturate(180%) blur(20px);
-  border-bottom: 1px solid var(--borda);
+  border-bottom: 1px solid var(--border);
 }
 
-.abas::-webkit-scrollbar {
+.tabs::-webkit-scrollbar {
   display: none;
 }
 
-.aba-btn {
+.tab-button {
   flex: 0 0 auto;
   padding: var(--e2) var(--e3);
   border: 0;
-  border-radius: var(--raio-p);
+  border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--texto-suave);
+  color: var(--text-soft);
   font: inherit;
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
   transition:
-    background var(--transicao),
-    color var(--transicao);
+    background var(--transition),
+    color var(--transition);
 }
 
-.aba-btn:hover:not(:disabled) {
-  background: var(--superficie);
-  color: var(--texto);
+.tab-button:hover:not(:disabled) {
+  background: var(--surface);
+  color: var(--text);
 }
 
-.aba-btn.ativo {
-  background: var(--marca-fundo);
-  color: var(--marca-forte);
+.tab-button.active {
+  background: var(--brand-bg);
+  color: var(--brand-strong);
   box-shadow: inset 0 0 0 1px rgba(225, 29, 47, 0.4);
 }
 
-.painel {
+.panel {
   display: flex;
   flex-direction: column;
   gap: var(--e4);
 }
 
-/* ── 4. Formulário de busca ──────────────────────────────────────────────── */
-
-/* Flex em vez de grid: os campos têm larguras naturais bem diferentes (IATA de
-   3 letras, teto numérico, seletor de programa) e um grid uniforme deixava
-   caixas de 3 letras do tamanho de um campo de texto longo. */
-.painel > form {
+/* Flex instead of grid: fields have very different natural widths (3-letter IATA,
+   numeric ceiling, program selector), and a uniform grid made 3-letter boxes as
+   wide as a long text field. */
+.panel > form {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
   gap: var(--e3) var(--e4);
   padding: var(--e5);
-  border: 1px solid var(--borda);
-  border-radius: var(--raio-g);
-  background: var(--fundo-alto);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-raised);
 }
 
-.campo {
+.field {
   flex: 0 1 170px;
   display: flex;
   flex-direction: column;
@@ -247,34 +225,34 @@ main > h1 {
   min-width: 0;
 }
 
-/* Origem e destino são três letras: não precisam de campo largo. */
-.campo:has(input[maxlength="3"]) {
+/* Origin and destination are three letters: no wide field needed. */
+.field:has(input[maxlength="3"]) {
   flex-basis: 120px;
 }
 
-.campo:has(select) {
+.field:has(select) {
   flex-basis: 200px;
 }
 
-.campo label {
+.field label {
   font-size: 12px;
   font-weight: 500;
   letter-spacing: -0.005em;
-  color: var(--texto-suave);
+  color: var(--text-soft);
 }
 
-/* Texto de ajuda abaixo de um campo, quando o rótulo sozinho não explica o
-   que a opção custa ou sobre o que ela age. */
-.campo .dica,
-.painel > form > .dica {
+/* Help text under a field, when the label alone does not say what the option
+   costs or what it acts on. */
+.field .hint,
+.panel > form > .hint {
   font-size: 11px;
   line-height: 1.35;
-  color: var(--texto-suave);
+  color: var(--text-soft);
 }
 
-/* Dica do formulário inteiro fica numa linha própria: dentro de um campo ela
-   esticava a altura da linha e desalinhava os vizinhos. */
-.painel > form > .dica {
+/* A whole-form hint gets its own row: inside a field it stretched the row's
+   height and misaligned its neighbors. */
+.panel > form > .hint {
   flex-basis: 100%;
 }
 
@@ -282,33 +260,33 @@ input,
 select {
   width: 100%;
   padding: 10px var(--e3);
-  border: 1px solid var(--borda);
-  border-radius: var(--raio-p);
-  background: var(--superficie);
-  color: var(--texto);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
   font: inherit;
   transition:
-    border-color var(--transicao),
-    box-shadow var(--transicao);
+    border-color var(--transition),
+    box-shadow var(--transition);
 }
 
 input::placeholder {
-  color: var(--texto-fraco);
+  color: var(--text-faint);
 }
 
 input:hover,
 select:hover {
-  border-color: var(--borda-forte);
+  border-color: var(--border-strong);
 }
 
 input:focus,
 select:focus {
   outline: none;
-  border-color: var(--marca);
-  box-shadow: var(--anel);
+  border-color: var(--brand);
+  box-shadow: var(--ring);
 }
 
-/* Códigos IATA ficam mais legíveis em caixa alta e monoespaçado. */
+/* IATA codes read better in uppercase monospace. */
 input[maxlength="3"] {
   font-family: var(--mono);
   text-transform: uppercase;
@@ -331,7 +309,7 @@ select {
   gap: var(--e2);
   padding: 9px 0;
   font-size: 13px;
-  color: var(--texto-suave);
+  color: var(--text-soft);
   cursor: pointer;
   user-select: none;
   white-space: nowrap;
@@ -341,7 +319,7 @@ select {
   width: 16px;
   height: 16px;
   margin: 0;
-  accent-color: var(--marca);
+  accent-color: var(--brand);
   cursor: pointer;
 }
 
@@ -351,18 +329,18 @@ button[type="submit"] {
   padding: 10px var(--e5);
   border: 0;
   border-radius: 100px;
-  background: var(--marca);
+  background: var(--brand);
   color: #fff;
   font: inherit;
   font-weight: 600;
   cursor: pointer;
   transition:
-    background var(--transicao),
-    transform var(--transicao);
+    background var(--transition),
+    transform var(--transition);
 }
 
 button[type="submit"]:hover:not(:disabled) {
-  background: var(--marca-forte);
+  background: var(--brand-strong);
 }
 
 button[type="submit"]:active:not(:disabled) {
@@ -374,43 +352,41 @@ button:disabled {
   cursor: not-allowed;
 }
 
-/* Os tetos ocupam a linha inteira, abaixo dos campos principais. */
-.linha-tetos {
+/* Ceilings take the whole row, under the main fields. */
+.ceilings-row {
   flex: 1 0 100%;
   display: flex;
   flex-wrap: wrap;
   gap: var(--e3) var(--e4);
   padding-top: var(--e3);
-  border-top: 1px solid var(--borda);
+  border-top: 1px solid var(--border);
 }
 
-/* ── 5. Avisos ───────────────────────────────────────────────────────────── */
-
-.aviso {
+.notice {
   margin: 0;
   padding: var(--e3) var(--e4);
   border: 1px solid rgba(251, 191, 36, 0.3);
   border-left-width: 3px;
-  border-radius: var(--raio-p);
-  background: var(--atencao-fundo);
+  border-radius: var(--radius-sm);
+  background: var(--warning-bg);
   color: #fde68a;
   font-size: 13px;
 }
 
-/* Pergunta que trava a busca até alguém responder — precisa pesar mais que um
-   aviso comum, porque nada anda enquanto ela estiver ali. */
-.pergunta {
+/* A question that holds the search until someone answers must weigh more than a
+   regular notice: nothing moves while it is there. */
+.question {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--e3) var(--e4);
   padding: var(--e3) var(--e5);
-  background: var(--atencao-fundo);
+  background: var(--warning-bg);
   border-bottom: 1px solid rgba(251, 191, 36, 0.35);
-  border-left: 3px solid var(--atencao);
+  border-left: 3px solid var(--warning);
 }
 
-.pergunta-texto {
+.question-text {
   flex: 1 1 320px;
   margin: 0;
   font-size: 13px;
@@ -418,36 +394,34 @@ button:disabled {
   white-space: pre-wrap;
 }
 
-.pergunta-acoes {
+.question-actions {
   display: flex;
   gap: var(--e2);
   margin-left: auto;
 }
 
-.btn-continuar {
+.continue-button {
   border-color: rgba(52, 211, 153, 0.45);
-  background: var(--ok-fundo);
+  background: var(--ok-bg);
   color: var(--ok);
 }
 
-.btn-parar {
+.stop-button {
   border-color: rgba(248, 113, 113, 0.45);
-  background: var(--erro-fundo);
-  color: var(--erro);
+  background: var(--error-bg);
+  color: var(--error);
 }
 
-/* ── 6. Card de busca ────────────────────────────────────────────────────── */
-
-.fila-buscas {
+.search-queue {
   display: flex;
   flex-direction: column;
   gap: var(--e4);
 }
 
-.job-busca {
-  border: 1px solid var(--borda);
-  border-radius: var(--raio-g);
-  background: var(--fundo-alto);
+.search-job {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-raised);
   overflow: hidden;
   animation: surgir 200ms ease-out;
 }
@@ -459,13 +433,13 @@ button:disabled {
   }
 }
 
-.job-cabecalho {
+.job-header {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--e3) var(--e4);
   padding: var(--e4) var(--e5);
-  border-bottom: 1px solid var(--borda);
+  border-bottom: 1px solid var(--border);
 }
 
 .job-info {
@@ -475,16 +449,16 @@ button:disabled {
   min-width: 0;
 }
 
-.job-rota {
+.job-route {
   font-family: var(--mono);
   font-size: 15px;
   font-weight: 600;
   letter-spacing: 0.04em;
 }
 
-.rota-seta,
-.rota-seta-iv {
-  color: var(--texto-fraco);
+.route-arrow,
+.route-arrow-round-trip {
+  color: var(--text-faint);
   padding: 0 var(--e1);
 }
 
@@ -497,29 +471,29 @@ button:disabled {
   letter-spacing: 0.02em;
 }
 
-.status-fila {
-  background: var(--superficie-alta);
-  color: var(--texto-suave);
+.status-queued {
+  background: var(--surface-raised);
+  color: var(--text-soft);
 }
 
-.status-buscando {
-  background: var(--marca-fundo);
-  color: var(--marca-forte);
+.status-searching {
+  background: var(--brand-bg);
+  color: var(--brand-strong);
 }
 
-.status-pronto {
-  background: var(--ok-fundo);
+.status-done {
+  background: var(--ok-bg);
   color: var(--ok);
 }
 
-.status-erro {
-  background: var(--erro-fundo);
-  color: var(--erro);
+.status-error {
+  background: var(--error-bg);
+  color: var(--error);
 }
 
-/* Ícone de parar, ao lado do status. Discreto até o mouse chegar: é destrutivo,
-   mas é o clique que conserta o clique errado. */
-.btn-parar-busca {
+/* Stop icon next to the status. Quiet until hovered: it is destructive, but it is
+   the click that fixes the wrong click. */
+.stop-search-button {
   flex: 0 0 auto;
   width: 24px;
   height: 24px;
@@ -527,28 +501,28 @@ button:disabled {
   align-items: center;
   justify-content: center;
   padding: 0;
-  border: 1px solid var(--borda);
+  border: 1px solid var(--border);
   border-radius: 50%;
   background: transparent;
-  color: var(--texto-fraco);
+  color: var(--text-faint);
   font-size: 9px;
   line-height: 1;
   cursor: pointer;
-  transition: background var(--transicao), color var(--transicao), border-color var(--transicao);
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
 }
 
-.btn-parar-busca:hover:not(:disabled) {
+.stop-search-button:hover:not(:disabled) {
   border-color: rgba(248, 113, 113, 0.45);
-  background: var(--erro-fundo);
-  color: var(--erro);
+  background: var(--error-bg);
+  color: var(--error);
 }
 
-.btn-parar-busca:disabled {
+.stop-search-button:disabled {
   opacity: 0.4;
   cursor: default;
 }
 
-.progresso {
+.progress {
   flex: 1 1 220px;
   min-width: 180px;
   display: flex;
@@ -556,231 +530,225 @@ button:disabled {
   gap: var(--e1);
 }
 
-.progresso-linha {
+.progress-row {
   display: flex;
   justify-content: space-between;
   gap: var(--e2);
   font-size: 11px;
-  color: var(--texto-suave);
+  color: var(--text-soft);
 }
 
-.progresso-label {
+.progress-label {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.progresso-janela {
+.progress-window {
   flex: 0 0 auto;
   font-family: var(--mono);
-  color: var(--texto-fraco);
+  color: var(--text-faint);
 }
 
-.barra {
+.bar {
   height: 4px;
   border-radius: 100px;
-  background: var(--superficie-alta);
+  background: var(--surface-raised);
   overflow: hidden;
 }
 
-.barra-preenchida {
+.bar-fill {
   height: 100%;
   width: 0;
   border-radius: inherit;
-  background: linear-gradient(90deg, var(--marca), var(--marca-forte));
+  background: linear-gradient(90deg, var(--brand), var(--brand-strong));
   transition: width 300ms ease-out;
 }
 
-.job-acoes {
+.job-actions {
   display: flex;
   flex-wrap: wrap;
   gap: var(--e2);
   margin-left: auto;
 }
 
-.job-tetos {
+.job-ceilings {
   margin: 0;
   padding: var(--e2) var(--e5);
-  border-bottom: 1px solid var(--borda);
+  border-bottom: 1px solid var(--border);
   font-size: 12px;
-  color: var(--texto-fraco);
+  color: var(--text-faint);
 }
 
-.job-busca > .aviso {
+.search-job > .notice {
   margin: var(--e4) var(--e5) 0;
 }
 
-/* ── 7. Botões secundários ───────────────────────────────────────────────── */
-
-.btn-acao,
-.btn-copiar,
-.btn-alerta,
-.btn-limpar,
-.btn-rebuscar,
-.btn-apagar-item {
+.action-button,
+.copy-button,
+.alert-button,
+.clear-button,
+.repeat-search-button,
+.delete-item-button {
   padding: 6px var(--e3);
-  border: 1px solid var(--borda);
+  border: 1px solid var(--border);
   border-radius: 100px;
-  background: var(--superficie-alta);
-  color: var(--texto-suave);
+  background: var(--surface-raised);
+  color: var(--text-soft);
   font: inherit;
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
   transition:
-    background var(--transicao),
-    color var(--transicao),
-    border-color var(--transicao);
+    background var(--transition),
+    color var(--transition),
+    border-color var(--transition);
 }
 
-.btn-acao:hover:not(:disabled),
-.btn-copiar:hover:not(:disabled),
-.btn-alerta:hover:not(:disabled),
-.btn-limpar:hover:not(:disabled),
-.btn-rebuscar:hover:not(:disabled) {
-  background: var(--borda);
-  border-color: var(--texto-fraco);
-  color: var(--texto);
+.action-button:hover:not(:disabled),
+.copy-button:hover:not(:disabled),
+.alert-button:hover:not(:disabled),
+.clear-button:hover:not(:disabled),
+.repeat-search-button:hover:not(:disabled) {
+  background: var(--border);
+  border-color: var(--text-faint);
+  color: var(--text);
 }
 
-.btn-alerta {
+.alert-button {
   border-color: rgba(225, 29, 47, 0.45);
-  background: var(--marca-fundo);
-  color: var(--marca-forte);
+  background: var(--brand-bg);
+  color: var(--brand-strong);
 }
 
-.btn-limpar {
+.clear-button {
   border-color: rgba(248, 113, 113, 0.35);
-  background: var(--erro-fundo);
-  color: var(--erro);
+  background: var(--error-bg);
+  color: var(--error);
 }
 
-/* Apagar é destrutivo: fica discreto até o mouse chegar nele. */
-.btn-apagar-item {
+/* Deleting is destructive: quiet until hovered. */
+.delete-item-button {
   padding: 4px 8px;
   border-color: transparent;
   background: transparent;
-  color: var(--texto-fraco);
+  color: var(--text-faint);
 }
 
-.btn-apagar-item:hover:not(:disabled) {
+.delete-item-button:hover:not(:disabled) {
   border-color: rgba(248, 113, 113, 0.4);
-  background: var(--erro-fundo);
-  color: var(--erro);
+  background: var(--error-bg);
+  color: var(--error);
 }
 
-.job-busca .btn-remover:hover:not(:disabled) {
+.search-job .remove-button:hover:not(:disabled) {
   border-color: rgba(248, 113, 113, 0.45);
-  background: var(--erro-fundo);
-  color: var(--erro);
+  background: var(--error-bg);
+  color: var(--error);
 }
 
-/* ── 8. Sub-abas do card ─────────────────────────────────────────────────── */
-
-.sub-abas,
-.job-busca .sub-abas {
+.subtabs,
+.search-job .subtabs {
   display: flex;
   gap: var(--e1);
   padding: var(--e3) var(--e5) 0;
 }
 
-.sub-aba-btn {
+.subtab-button {
   padding: var(--e2) var(--e3);
   border: 0;
   border-bottom: 2px solid transparent;
-  border-radius: var(--raio-p) var(--raio-p) 0 0;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
   background: transparent;
-  color: var(--texto-fraco);
+  color: var(--text-faint);
   font: inherit;
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   transition:
-    color var(--transicao),
-    border-color var(--transicao);
+    color var(--transition),
+    border-color var(--transition);
 }
 
-.sub-aba-btn:hover:not(:disabled) {
-  color: var(--texto);
+.subtab-button:hover:not(:disabled) {
+  color: var(--text);
 }
 
-.sub-aba-btn.ativo {
-  color: var(--marca-forte);
-  border-bottom-color: var(--marca);
+.subtab-button.active {
+  color: var(--brand-strong);
+  border-bottom-color: var(--brand);
 }
 
-/* ── 9. Resultado ────────────────────────────────────────────────────────── */
-
-.resultado,
-.subpainel-upgrade {
+.result,
+.upgrade-subpanel {
   padding: var(--e5);
 }
 
-.perna + .perna {
+.leg + .leg {
   margin-top: var(--e5);
   padding-top: var(--e4);
-  border-top: 1px solid var(--borda);
+  border-top: 1px solid var(--border);
 }
 
-/* O título da perna é o botão que abre e fecha ela. */
-.perna-titulo {
+/* The leg title is the button that opens and closes it. */
+.leg-title {
   display: flex;
   align-items: center;
   gap: var(--e2);
   margin-bottom: var(--e3);
   padding: var(--e2) 0;
-  border-radius: var(--raio-p);
+  border-radius: var(--radius-sm);
   background: transparent;
   font-family: var(--mono);
   font-size: 13px;
   letter-spacing: 0.04em;
-  color: var(--texto-suave);
+  color: var(--text-soft);
   cursor: pointer;
   list-style: none;
   user-select: none;
 }
 
-.perna-titulo::-webkit-details-marker {
+.leg-title::-webkit-details-marker {
   display: none;
 }
 
-.perna-titulo::before {
+.leg-title::before {
   content: "›";
-  color: var(--texto-fraco);
-  transition: transform var(--transicao);
+  color: var(--text-faint);
+  transition: transform var(--transition);
 }
 
-.perna[open] > .perna-titulo::before {
+.leg[open] > .leg-title::before {
   transform: rotate(90deg);
 }
 
-.perna-titulo:hover {
-  background: var(--superficie-alta);
-  color: var(--texto);
+.leg-title:hover {
+  background: var(--surface-raised);
+  color: var(--text);
 }
 
-/* `start` é o que impede uma cabine vazia (ou fechada) de esticar até a altura
-   da coluna mais cheia — era o buraco que sobrava ao minimizar a Executiva. */
-.colunas {
+/* `start` keeps an empty (or closed) cabin from stretching to the fullest column's
+   height: it was the gap left after minimizing Executiva. */
+.columns {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   align-items: start;
   gap: var(--e3);
 }
 
-.colunas-3 {
+.columns-3 {
   grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
 }
 
-.coluna {
-  border: 1px solid var(--borda);
-  border-radius: var(--raio);
-  background: var(--fundo-alto);
+.column {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
   overflow: hidden;
 }
 
-.coluna-cabecalho {
+.column-header {
   display: flex;
   align-items: center;
   gap: var(--e2);
@@ -791,229 +759,224 @@ button:disabled {
   user-select: none;
 }
 
-.coluna-cabecalho::-webkit-details-marker {
+.column-header::-webkit-details-marker {
   display: none;
 }
 
-.coluna-cabecalho .chevron {
-  color: var(--texto-fraco);
-  transition: transform var(--transicao);
+.column-header .chevron {
+  color: var(--text-faint);
+  transition: transform var(--transition);
 }
 
-.coluna[open] .coluna-cabecalho .chevron {
+.column[open] .column-header .chevron {
   transform: rotate(90deg);
 }
 
-.coluna-cabecalho .btn-copiar,
-.coluna-cabecalho .upgrade-titulo {
+.column-header .copy-button,
+.column-header .upgrade-title {
   margin-left: auto;
 }
 
-/* Uma faixa de cor por cabine, pra distinguir de relance. */
-.coluna-executiva {
-  border-top: 2px solid var(--executiva);
+.column-business {
+  border-top: 2px solid var(--business);
 }
 
-.coluna-economica {
-  border-top: 2px solid var(--economica);
+.column-economy {
+  border-top: 2px solid var(--economy);
 }
 
-.coluna-resumo {
+.column-summary {
   margin: 0;
   padding: var(--e1) var(--e3);
-  border-bottom: 1px solid var(--borda);
+  border-bottom: 1px solid var(--border);
   font-size: 12px;
-  color: var(--texto-suave);
+  color: var(--text-soft);
 }
 
-.cartoes {
+.date-chips {
   display: flex;
   flex-direction: column;
   gap: var(--e2);
   padding: var(--e3);
 }
 
-.mes-titulo {
+.month-title {
   margin: var(--e3) 0 2px;
   font-size: 12px;
   font-weight: 600;
   letter-spacing: -0.005em;
-  color: var(--texto-fraco);
+  color: var(--text-faint);
 }
 
-.mes-titulo:first-child {
+.month-title:first-child {
   margin-top: 0;
 }
 
-.linha-cartoes {
+.date-chip-row {
   display: flex;
   flex-wrap: wrap;
   gap: 5px;
 }
 
-.cartao {
+.date-chip {
   display: inline-flex;
   align-items: baseline;
   gap: 3px;
   padding: 3px 8px;
-  border: 1px solid var(--borda);
-  border-radius: var(--raio-p);
-  background: var(--superficie);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
   font-family: var(--mono);
   font-size: 12px;
   line-height: 1.5;
   transition:
-    border-color var(--transicao),
-    transform var(--transicao);
+    border-color var(--transition),
+    transform var(--transition);
 }
 
-.cartao:hover {
-  border-color: var(--borda-forte);
+.date-chip:hover {
+  border-color: var(--border-strong);
   transform: translateY(-1px);
 }
 
-/* Dia com link de emissão (hoje só a AA). Herda a cor do texto pra não virar
-   azul de link no meio dos outros cartões; o que sinaliza que clica é o cursor
-   e a borda na cor da marca no hover. */
-.cartao-link {
+/* A day with a booking link. It inherits the text color so it never turns link
+   blue among the other chips; the cursor and the brand-colored border on hover
+   signal that it clicks. */
+.date-chip-link {
   color: inherit;
   text-decoration: none;
   cursor: pointer;
 }
 
-.cartao-link:hover,
-.cartao-link:focus-visible {
-  border-color: var(--marca);
-  color: var(--marca);
+.date-chip-link:hover,
+.date-chip-link:focus-visible {
+  border-color: var(--brand);
+  color: var(--brand);
 }
 
-.cartao-executiva {
-  border-left: 2px solid var(--executiva);
+.cabin-business {
+  border-left: 2px solid var(--business);
 }
 
-.cartao-economica {
-  border-left: 2px solid var(--economica);
+.cabin-economy {
+  border-left: 2px solid var(--economy);
 }
 
-.cartao-premium {
+.cabin-premium {
   border-left: 2px solid var(--premium);
 }
 
-.cartao-primeira {
-  border-left: 2px solid var(--primeira);
+.cabin-first {
+  border-left: 2px solid var(--first);
 }
 
-.cartao-vagas {
-  color: var(--texto-fraco);
+.date-chip-seats {
+  color: var(--text-faint);
   font-size: 10px;
 }
 
-.cartao-vagas::before {
+.date-chip-seats::before {
   content: "(";
 }
 
-.cartao-vagas::after {
+.date-chip-seats::after {
   content: ")";
 }
 
-.dia-grupo {
+.day-group {
   display: flex;
   flex-direction: column;
   gap: var(--e1);
 }
 
-.dia-cabecalho {
+.day-header {
   display: flex;
   align-items: baseline;
   gap: var(--e2);
   font-size: 12px;
   font-weight: 600;
-  color: var(--texto-suave);
+  color: var(--text-soft);
 }
 
-.dia-rotulo {
+.day-label {
   font-family: var(--mono);
 }
 
-.dia-sub {
+.day-subtitle {
   font-size: 11px;
-  color: var(--texto-fraco);
+  color: var(--text-faint);
 }
 
-/* ── 10. Upgrade ─────────────────────────────────────────────────────────── */
-
-.upgrade-explicacao {
+.upgrade-explanation {
   margin: 0 0 var(--e4);
   padding: var(--e3) var(--e4);
-  border-left: 3px solid var(--marca);
-  border-radius: 0 var(--raio-p) var(--raio-p) 0;
-  background: var(--marca-fundo);
+  border-left: 3px solid var(--brand);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--brand-bg);
   font-size: 12px;
-  color: var(--texto-suave);
+  color: var(--text-soft);
 }
 
-.lista-upgrade,
-.upgrade-lista,
-.upgrade-linhas {
+.upgrade-list,
+.upgrade-dates,
+.upgrade-rows {
   display: flex;
   flex-direction: column;
   gap: var(--e2);
 }
 
-.upgrade-dia,
-.upgrade-linha {
+.upgrade-day,
+.upgrade-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--e2);
   padding: var(--e2) var(--e3);
-  border: 1px solid var(--borda);
-  border-radius: var(--raio-p);
-  background: var(--superficie);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
   font-size: 13px;
 }
 
-.perna-upgrade {
+.upgrade-leg {
   margin-bottom: var(--e3);
   font-size: 12px;
-  color: var(--texto-suave);
+  color: var(--text-soft);
 }
 
-.upgrade-titulo {
+.upgrade-title {
   font-size: 12px;
-  color: var(--texto-fraco);
+  color: var(--text-faint);
 }
 
-/* ── 11. Alertas ─────────────────────────────────────────────────────────── */
-
-.alerta-resultado {
+.alert-result {
   margin-top: var(--e4);
   padding: var(--e4);
-  border: 1px solid var(--borda);
-  border-radius: var(--raio);
-  background: var(--fundo);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
 }
 
-.alerta-titulo {
+.alert-title {
   margin-bottom: var(--e2);
   font-size: 13px;
   font-weight: 600;
 }
 
-.alerta-rotulo {
+.alert-label {
   font-size: 12px;
   font-weight: 500;
-  color: var(--texto-suave);
+  color: var(--text-soft);
 }
 
-.alerta-legenda {
+.alert-caption {
   margin: var(--e2) 0;
   font-size: 12px;
-  color: var(--texto-suave);
+  color: var(--text-soft);
   white-space: pre-wrap;
 }
 
-.alerta-acoes {
+.alert-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -1021,57 +984,57 @@ button:disabled {
   margin-top: var(--e3);
 }
 
-/* Como faixa no topo do card, a barra de alerta se apoia no cabeçalho em vez
-   de flutuar solta no meio do conteúdo. */
-.job-busca > .alerta-acoes {
+/* As a strip at the top of the card, the alert bar rests on the header instead of
+   floating loose in the content. */
+.search-job > .alert-actions {
   margin: 0;
   padding: var(--e3) var(--e5);
-  border-bottom: 1px solid var(--borda);
+  border-bottom: 1px solid var(--border);
 }
 
-.job-busca > .alerta-acoes .alerta-rotulo {
+.search-job > .alert-actions .alert-label {
   margin-right: var(--e1);
 }
 
-.job-busca > .alerta-resultado {
+.search-job > .alert-result {
   margin: var(--e4) var(--e5) 0;
 }
 
-.alerta-galeria {
+.alert-gallery {
   display: flex;
   flex-wrap: wrap;
   gap: var(--e3);
   margin-top: var(--e3);
 }
 
-.alerta-galeria img,
-.confirmacao-galeria img {
+.alert-gallery img,
+.confirmation-gallery img {
   max-width: 220px;
-  border: 1px solid var(--borda);
-  border-radius: var(--raio-p);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   transition:
-    border-color var(--transicao),
-    transform var(--transicao);
+    border-color var(--transition),
+    transform var(--transition);
 }
 
-.alerta-galeria a:hover img {
-  border-color: var(--marca);
+.alert-gallery a:hover img {
+  border-color: var(--brand);
   transform: scale(1.02);
 }
 
-.job-busca > .confirmacao-latam,
-.job-busca > .exemplo-aa {
+.search-job > .latam-confirmation,
+.search-job > .aa-booking-shortcut {
   margin: var(--e4) var(--e5) 0;
   padding: var(--e3) var(--e4) var(--e4);
-  border: 1px solid var(--borda);
-  border-radius: var(--raio);
-  background: var(--fundo);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
 }
 
-/* Um par conferido: uma linha, três informações. O resto (voos, escada de
-   combinações, print grande) tirava a atenção do único número que se procura
-   aqui — quanto custa o ida e volta. */
-.par-latam {
+/* A confirmed pair: one row, three facts. The rest (flights, combination ladder,
+   large capture) distracted from the only number sought here: what the round
+   trip costs. */
+.pair-row {
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
@@ -1079,76 +1042,73 @@ button:disabled {
   padding: var(--e2) 0;
 }
 
-.par-latam + .par-latam {
-  border-top: 1px solid var(--borda);
+.pair-row + .pair-row {
+  border-top: 1px solid var(--border);
 }
 
-.par-valor {
+.pair-value {
   font-size: 14px;
   font-weight: 600;
   letter-spacing: -0.01em;
 }
 
-.par-datas {
+.pair-dates {
   font-family: var(--mono);
   font-size: 12px;
-  color: var(--texto-fraco);
+  color: var(--text-faint);
 }
 
-.par-print,
-.par-abrir {
+.pair-capture,
+.pair-open {
   margin-left: auto;
   font-size: 12px;
-  color: var(--texto-fraco);
+  color: var(--text-faint);
   text-decoration: none;
 }
 
-.par-print:hover,
-.par-abrir:hover,
-.par-abrir:focus-visible {
-  color: var(--marca-forte);
+.pair-capture:hover,
+.pair-open:hover,
+.pair-open:focus-visible {
+  color: var(--brand-strong);
   text-decoration: underline;
 }
 
-.confirmacao-latam .btn-copiar {
+.latam-confirmation .copy-button {
   margin-top: var(--e3);
 }
 
-.confirmacao-resumo,
-.confirmacao-detalhe {
+.confirmation-summary,
+.confirmation-detail {
   margin: var(--e2) 0;
   font-size: 13px;
-  color: var(--texto-suave);
+  color: var(--text-soft);
 }
 
-/* Ida e volta em linhas separadas — o texto vem com quebra. */
-.confirmacao-detalhe {
+/* Outbound and return on separate lines: the text comes with a line break. */
+.confirmation-detail {
   white-space: pre-line;
 }
 
-/* Link da planilha da busca. */
-.link-planilha {
+.spreadsheet-link {
   margin: var(--e3) var(--e5) 0;
   padding: var(--e2) var(--e3);
   border: 1px solid rgba(52, 211, 153, 0.3);
-  border-radius: var(--raio-p);
-  background: var(--ok-fundo);
+  border-radius: var(--radius-sm);
+  background: var(--ok-bg);
   font-size: 12px;
 }
 
-.link-planilha a {
+.spreadsheet-link a {
   color: var(--ok);
   font-weight: 600;
   text-decoration: none;
 }
 
-.link-planilha a:hover {
+.spreadsheet-link a:hover {
   text-decoration: underline;
 }
 
-/* ── 12. Histórico ───────────────────────────────────────────────────────── */
-
-.historico-topo {
+.history-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1156,209 +1116,204 @@ button:disabled {
   flex-wrap: wrap;
 }
 
-.historico-resumo {
+.history-summary {
   margin: 0;
   font-size: 13px;
-  color: var(--texto-suave);
+  color: var(--text-soft);
 }
 
-.historico-vazio {
+.history-empty {
   margin: 0;
   padding: var(--e6);
-  border: 1px dashed var(--borda-forte);
-  border-radius: var(--raio);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
   text-align: center;
   font-size: 13px;
-  color: var(--texto-fraco);
+  color: var(--text-faint);
 }
 
-.lista-historico {
+.history-list {
   display: flex;
   flex-direction: column;
   gap: var(--e2);
 }
 
-.item-historico {
+.history-item {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: var(--e3);
   padding: var(--e3) var(--e4);
-  border: 1px solid var(--borda);
-  border-radius: var(--raio);
-  background: var(--fundo-alto);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
   transition:
-    border-color var(--transicao),
-    background var(--transicao);
+    border-color var(--transition),
+    background var(--transition);
 }
 
-.item-historico:hover {
-  border-color: var(--borda-forte);
-  background: var(--superficie);
+.history-item:hover {
+  border-color: var(--border-strong);
+  background: var(--surface);
 }
 
-.item-historico-principal {
+.history-item-main {
   display: flex;
   align-items: center;
   gap: var(--e3);
   min-width: 0;
 }
 
-.item-historico-rota {
+.history-item-route {
   font-family: var(--mono);
   font-weight: 600;
   letter-spacing: 0.04em;
 }
 
-.item-historico-direita {
+.history-item-right {
   display: flex;
   align-items: center;
   gap: var(--e3);
   margin-left: auto;
 }
 
-.item-historico-cabines {
+.history-item-cabins {
   display: flex;
   flex-wrap: wrap;
   gap: var(--e1);
 }
 
-/* Os chips de cabine herdavam as classes `cartao-*`, e com elas a barra
-   colorida de cada cabine. Quatro cores por linha, em dezenas de linhas, viram
-   ruído: aqui a cabine é só um rótulo. */
-.item-historico-cabine,
-.item-historico-cabine[class*="cartao-"] {
+/* Cabin chips used to inherit the `cabin-*` classes and, with them, each cabin's
+   color bar. Four colors per row over dozens of rows is noise: here the cabin is
+   only a label. */
+.history-item-cabin,
+.history-item-cabin[class*="cartao-"] {
   padding: 2px var(--e2);
   border: 0;
   border-radius: 100px;
-  background: var(--superficie-alta);
+  background: var(--surface-raised);
   font-size: 11px;
-  color: var(--texto-fraco);
+  color: var(--text-faint);
 }
 
-.item-historico-hora,
-.item-historico-relativo {
+.history-item-time,
+.history-item-relative {
   font-size: 11px;
-  color: var(--texto-fraco);
+  color: var(--text-faint);
   white-space: nowrap;
 }
 
-.ponto-recente {
+.recent-dot {
   display: inline-block;
   width: 6px;
   height: 6px;
   border-radius: 50%;
   background: var(--ok);
-  box-shadow: 0 0 0 3px var(--ok-fundo);
+  box-shadow: 0 0 0 3px var(--ok-bg);
 }
 
-/* ── 13. Etiquetas de programa ───────────────────────────────────────────── */
-
-/* Cada programa define só uma variável. A etiqueta usa como texto e o card usa
-   como faixa no topo — sem `currentColor`, que vazava a cor do programa pra
-   dentro do card e apagava o amarelo dos avisos. */
+/* Each program defines a single variable: the tag uses it as text and the card as
+   its top strip. Not `currentColor`, which leaked the program color into the card
+   and washed out the yellow of notices. */
 .tag-tap,
 .accent-tap {
-  --cor: #4ade80;
+  --color: #4ade80;
 }
 
 .tag-AA,
 .accent-AA {
-  --cor: #f87171;
+  --color: #f87171;
 }
 
 .tag-LATAM,
 .accent-LATAM {
-  --cor: #e879f9;
+  --color: #e879f9;
 }
 
 .tag-SMILES,
 .accent-SMILES {
-  --cor: #ff9a3c;
+  --color: #ff9a3c;
 }
 
 .tag-AF,
 .accent-AF {
-  --cor: #60a5fa;
+  --color: #60a5fa;
 }
 
 .tag-B6,
 .accent-B6 {
-  --cor: #38bdf8;
+  --color: #38bdf8;
 }
 
 .tag-BA,
 .accent-BA {
-  --cor: #a5b4fc;
+  --color: #a5b4fc;
 }
 
 .tag-CX,
 .accent-CX {
-  --cor: #2dd4bf;
+  --color: #2dd4bf;
 }
 
 .tag-EY,
 .accent-EY {
-  --cor: #fbbf24;
+  --color: #fbbf24;
 }
 
 .tag-IB,
 .accent-IB {
-  --cor: #fb7185;
+  --color: #fb7185;
 }
 
 .tag-KLM,
 .accent-KLM {
-  --cor: #7dd3fc;
+  --color: #7dd3fc;
 }
 
 .tag-QF,
 .accent-QF {
-  --cor: #f472b6;
+  --color: #f472b6;
 }
 
 .tag-VIR,
 .accent-VIR {
-  --cor: #c084fc;
+  --color: #c084fc;
 }
 
-.tag-programa {
+.program-tag {
   flex: 0 0 auto;
   padding: 2px var(--e2);
-  border: 1px solid var(--borda);
+  border: 1px solid var(--border);
   border-radius: 100px;
-  color: var(--cor, var(--texto-suave));
+  color: var(--color, var(--text-soft));
   font-size: 11px;
   font-weight: 500;
   letter-spacing: -0.005em;
 }
 
-/* A faixa colorida identifica o card de busca de longe. No histórico ela virava
-   uma linha berrante atravessando cada linha da lista — ali a etiqueta do
-   programa já diz de quem é. */
-.job-busca[class*="accent-"] {
-  border-top: 2px solid var(--cor, var(--borda));
+/* The colored strip identifies a search card from afar. In the history it became a
+   loud line across every row, where the program tag already says whose it is. */
+.search-job[class*="accent-"] {
+  border-top: 2px solid var(--color, var(--border));
 }
-
-/* ── 14. Telas estreitas ─────────────────────────────────────────────────── */
 
 @media (max-width: 720px) {
   main {
     padding: var(--e4) var(--e4) var(--e6);
   }
 
-  .abas {
+  .tabs {
     margin: 0 calc(var(--e4) * -1) var(--e4);
     padding: var(--e2) var(--e4);
   }
 
-  .painel > form {
+  .panel > form {
     padding: var(--e4);
   }
 
-  .campo,
-  .campo:has(select) {
+  .field,
+  .field:has(select) {
     flex-basis: 100%;
   }
 
@@ -1367,13 +1322,13 @@ button:disabled {
     margin-left: 0;
   }
 
-  .job-cabecalho,
-  .resultado,
-  .subpainel-upgrade {
+  .job-header,
+  .result,
+  .upgrade-subpanel {
     padding: var(--e4);
   }
 
-  .job-acoes {
+  .job-actions {
     margin-left: 0;
     width: 100%;
   }

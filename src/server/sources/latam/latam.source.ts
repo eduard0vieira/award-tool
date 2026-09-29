@@ -26,11 +26,11 @@ import { LatamSearchDto } from "./latam-search.dto.ts";
 
 export const LATAM_POOL = Symbol("LATAM_POOL");
 
-type Confirmation = { confirmation?: { pares: PairConfirmation[] }; notice?: string };
+type Confirmation = { confirmation?: { pairs: PairConfirmation[] }; notice?: string };
 
 type PairSearch = {
-  origem: string;
-  destino: string;
+  origin: string;
+  destination: string;
   outbound: LatamDay[];
   inbound: LatamDay[];
   ceilings: LatamCeilings;
@@ -51,17 +51,17 @@ export class LatamSource implements SearchSource<LatamSearchDto> {
   ) {}
 
   start(jobId: string, request: LatamSearchDto) {
-    const { origem, destino } = request;
+    const { origin, destination } = request;
     const ceilings: LatamCeilings = {
-      maxPriceReais: request.tetos?.reais ?? null,
-      lowestFareOnly: request.tetos?.somenteMenorTarifa === true,
+      maxPriceReais: request.ceilings?.maxReais ?? null,
+      lowestFareOnly: request.ceilings?.lowestFareOnly === true,
     };
 
     return this.runner.run(this.pool, jobId, async ({ page }) => {
       const job = this.jobs.callbacks(jobId);
       const { outbound, inbound, failedMonths } = await searchLatamYear(
         page,
-        { origin: origem, destination: destino },
+        { origin, destination },
         job.log,
         job.progress,
         job.notice,
@@ -70,12 +70,12 @@ export class LatamSource implements SearchSource<LatamSearchDto> {
 
       const legs: Leg[] = [
         {
-          rotulo: `Ida: ${origem} → ${destino}`,
-          secoes: [{ rotulo: "Econômica", corClasse: "cartao-economica", ...buildLatamReport(outbound, ceilings) }],
+          label: `Ida: ${origin} → ${destination}`,
+          sections: [{ label: "Econômica", colorClass: "cabin-economy", ...buildLatamReport(outbound, ceilings) }],
         },
         {
-          rotulo: `Volta: ${destino} → ${origem}`,
-          secoes: [{ rotulo: "Econômica", corClasse: "cartao-economica", ...buildLatamReport(inbound, ceilings) }],
+          label: `Volta: ${destination} → ${origin}`,
+          sections: [{ label: "Econômica", colorClass: "cabin-economy", ...buildLatamReport(inbound, ceilings) }],
         },
       ];
       let partialNotice =
@@ -84,15 +84,15 @@ export class LatamSource implements SearchSource<LatamSearchDto> {
           : undefined;
 
       let confirmation: Confirmation["confirmation"];
-      if (request.confirmarMilhas === true) {
+      if (request.confirmMiles === true) {
         const confirmed = await this.confirmBestPairs(jobId, page, job, {
-          origem,
-          destino,
+          origin,
+          destination,
           outbound,
           inbound,
           ceilings,
-          outboundMargin: request.margemIdaReais ?? 100,
-          inboundMargin: request.margemVoltaReais ?? 300,
+          outboundMargin: request.outboundMarginReais ?? 100,
+          inboundMargin: request.returnMarginReais ?? 300,
         });
         confirmation = confirmed.confirmation;
         if (confirmed.notice) partialNotice = [partialNotice, confirmed.notice].filter(Boolean).join(" ");
@@ -100,12 +100,12 @@ export class LatamSource implements SearchSource<LatamSearchDto> {
 
       recordSearch(jobId, {
         source: "LATAM",
-        origin: origem,
-        destination: destino,
+        origin,
+        destination,
         legs,
         ceilings: { "Econômica": ceilings.maxPriceReais },
       });
-      this.jobs.complete(jobId, { pernas: legs, avisoParcial: partialNotice, confirmacao: confirmation });
+      this.jobs.complete(jobId, { legs, partialNotice, confirmation });
     });
   }
 
@@ -127,7 +127,7 @@ export class LatamSource implements SearchSource<LatamSearchDto> {
           "Nenhum par de ida e volta no resultado com 3 a 14 dias de viagem dentro da faixa de preço. " +
           "Confirmação em milhas não executada.";
       } else {
-        const folder = `latam-${search.origem}-${search.destino}-${Date.now()}`;
+        const folder = `latam-${search.origin}-${search.destination}-${Date.now()}`;
         fs.mkdirSync(path.join(ALERTS_DIR, folder), { recursive: true });
 
         const confirmed: PairConfirmation[] = [];
@@ -139,8 +139,8 @@ export class LatamSource implements SearchSource<LatamSearchDto> {
             const offer = await confirmPairInMiles(
               page,
               {
-                origin: search.origem,
-                destination: search.destino,
+                origin: search.origin,
+                destination: search.destination,
                 outboundDate: pair.outbound.date,
                 returnDate: pair.inbound.date,
                 screenshotPath: path.join(ALERTS_DIR, folder, file),
@@ -153,9 +153,9 @@ export class LatamSource implements SearchSource<LatamSearchDto> {
             if (offer) {
               confirmed.push({
                 ...offer,
-                imagem: offer.imagem ? `/alertas/${folder}/${file}` : "",
-                textoIda: formatDatesByMonth([offer.dataIda]),
-                textoVolta: formatDatesByMonth([offer.dataVolta]),
+                image: offer.image ? `/alerts/${folder}/${file}` : "",
+                outboundText: formatDatesByMonth([offer.outboundDate]),
+                returnText: formatDatesByMonth([offer.returnDate]),
               });
             } else {
               failures.push(`${pair.outbound.date} → ${pair.inbound.date}: sem oferta em milhas`);
@@ -170,7 +170,7 @@ export class LatamSource implements SearchSource<LatamSearchDto> {
         job.notice("");
 
         if (confirmed.length > 0) {
-          result.confirmation = { pares: confirmed };
+          result.confirmation = { pairs: confirmed };
           if (failures.length > 0) {
             result.notice = `Confirmação parcial: ${failures.length} de ${pairs.length} pares sem resultado. ${failures.join(" · ")}`;
           }

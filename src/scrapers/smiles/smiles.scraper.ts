@@ -2,7 +2,7 @@ import "dotenv/config";
 import type { Page } from "playwright";
 import { ExpiringCache } from "../../core/cache.ts";
 import { openChromeSession, type ChromeSession } from "../../core/chrome-session.ts";
-import { formatDatesByMonth, RateLimiter, type OnLog, type ReportSection, type ShouldStop } from "../../core/common.ts";
+import { formatDatesByMonth, RateLimiter, type LabeledSection, type OnLog, type ShouldStop } from "../../core/common.ts";
 
 // Smiles (GOL) award availability in miles, no login. How access works (from
 // the recon, scripts/recon-smiles.ts):
@@ -758,12 +758,12 @@ export async function searchSmilesYear(
 }
 
 const SMILES_CABINS = [
-  { field: "economy", label: "Econômica", colorClass: "cartao-economica" },
-  { field: "premium", label: "Conforto", colorClass: "cartao-premium" },
-  { field: "business", label: "Executiva", colorClass: "cartao-executiva" },
+  { field: "economy", label: "Econômica", colorClass: "cabin-economy" },
+  { field: "premium", label: "Conforto", colorClass: "cabin-premium" },
+  { field: "business", label: "Executiva", colorClass: "cabin-business" },
 ] as const;
 
-export type SmilesSection = ReportSection & { rotulo: string; corClasse: string };
+export type SmilesSection = LabeledSection<{ date: string; valueK: number; seats: number }>;
 
 export function buildSmilesReport(days: SmilesDayResponse[], ceilings: SmilesCeilings = {}): SmilesSection[] {
   return SMILES_CABINS.map(({ field, label, colorClass }) => {
@@ -777,32 +777,32 @@ export function buildSmilesReport(days: SmilesDayResponse[], ceilings: SmilesCei
         const flights = day.flights.filter((flight) => flight.cabin === field && (ceiling == null || flight.miles <= ceiling));
         if (flights.length === 0) return null;
         const cheapest = flights.reduce((a, b) => (a.miles <= b.miles ? a : b));
-        return { data: day.date, valorK: Math.round(cheapest.miles / 10) / 100, assentos: cheapest.seats };
+        return { date: day.date, valueK: Math.round(cheapest.miles / 10) / 100, seats: cheapest.seats };
       })
-      .filter((day): day is { data: string; valorK: number; assentos: number } => day !== null);
+      .filter((day): day is { date: string; valueK: number; seats: number } => day !== null);
 
     if (perDay.length === 0) {
       return {
-        rotulo: label,
-        corClasse: colorClass,
-        menor: null,
-        maior: null,
-        dias: [],
-        texto: "Nenhuma disponibilidade encontrada nesse período.",
+        label,
+        colorClass,
+        min: null,
+        max: null,
+        days: [],
+        text: "Nenhuma disponibilidade encontrada nesse período.",
       };
     }
 
-    const values = perDay.map((day) => day.valorK);
-    const seatsByDate = new Map(perDay.map((day) => [day.data, day.assentos]));
+    const values = perDay.map((day) => day.valueK);
+    const seatsByDate = new Map(perDay.map((day) => [day.date, day.seats]));
 
     return {
-      rotulo: label,
-      corClasse: colorClass,
-      menor: Math.min(...values),
-      maior: Math.max(...values),
-      dias: perDay,
-      texto: formatDatesByMonth(
-        perDay.map((day) => day.data),
+      label,
+      colorClass,
+      min: Math.min(...values),
+      max: Math.max(...values),
+      days: perDay,
+      text: formatDatesByMonth(
+        perDay.map((day) => day.date),
         (date) => {
           const seats = seatsByDate.get(date) ?? 0;
           return seats > 0 ? ` (${seats})` : "";

@@ -10,29 +10,29 @@ import {
 const AIRLINES = Object.keys(AIRLINE_NAMES);
 
 export class SeatspyCeilingsDto {
-  @OptionalCeilingField("tetos.economica")
-  economica?: number | null;
+  @OptionalCeilingField("ceilings.economy")
+  economy?: number | null;
 
-  @OptionalCeilingField("tetos.premium")
+  @OptionalCeilingField("ceilings.premium")
   premium?: number | null;
 
-  @OptionalCeilingField("tetos.executiva")
-  executiva?: number | null;
+  @OptionalCeilingField("ceilings.business")
+  business?: number | null;
 
-  @OptionalCeilingField("tetos.primeira")
-  primeira?: number | null;
+  @OptionalCeilingField("ceilings.first")
+  first?: number | null;
 }
 
 export class SeatspySearchDto extends RouteRequestDto {
-  @IsIn(AIRLINES, { message: `companhia deve ser uma destas para buscas no SeatSpy: ${AIRLINES.join(", ")}.` })
-  companhia!: SeatspyAirline;
+  @IsIn(AIRLINES, { message: `airline deve ser uma destas para buscas no SeatSpy: ${AIRLINES.join(", ")}.` })
+  airline!: SeatspyAirline;
 
-  @OptionalBooleanField("idaEVolta")
-  idaEVolta?: boolean;
+  @OptionalBooleanField("roundTrip")
+  roundTrip?: boolean;
 
-  @OptionalBooleanField("mostrarAssentos")
-  mostrarAssentos?: boolean;
+  @OptionalBooleanField("showSeats")
+  showSeats?: boolean;
 
-  @OptionalNestedField("tetos", () => SeatspyCeilingsDto)
-  tetos?: SeatspyCeilingsDto;
+  @OptionalNestedField("ceilings", () => SeatspyCeilingsDto)
+  ceilings?: SeatspyCeilingsDto;
 }

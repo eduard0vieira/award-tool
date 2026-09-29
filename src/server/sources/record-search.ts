@@ -1,7 +1,7 @@
 import type { SeatspySection } from "../../scrapers/seatspy/seatspy.scraper.ts";
 import { saveSearch, type SearchToSave } from "../../outputs/spreadsheet.ts";
 
-export type Leg = { rotulo: string; secoes: SeatspySection[] };
+export type Leg = { label: string; sections: SeatspySection[] };
 
 // Recorded here rather than in each bot because this is where every source
 // already converges on the same report shape. A recording failure never fails the search.

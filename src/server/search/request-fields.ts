@@ -37,9 +37,9 @@ export function OptionalNestedField(name: string, type: () => new () => object) 
 }
 
 export class RouteRequestDto {
-  @AirportField("origem")
-  origem!: string;
+  @AirportField("origin")
+  origin!: string;
 
-  @AirportField("destino")
-  destino!: string;
+  @AirportField("destination")
+  destination!: string;
 }

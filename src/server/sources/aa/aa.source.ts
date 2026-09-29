@@ -1,6 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { AA_CABIN_LABELS, buildAaReport, searchAaYear, type AaSession } from "../../../scrapers/aa/aa.scraper.ts";
 import { SessionPool } from "../../../core/session-pool.ts";
+import { AA_CABIN_LABELS, buildAaReport, searchAaYear, type AaSession } from "../../../scrapers/aa/aa.scraper.ts";
 import { JobRunner } from "../../jobs/job-runner.service.ts";
 import { JobStore } from "../../jobs/job-store.service.ts";
 import type { SearchSource } from "../../search/search-source.ts";
@@ -22,15 +22,15 @@ export class AaSource implements SearchSource<AaSearchDto> {
   ) {}
 
   start(jobId: string, request: AaSearchDto) {
-    const { origem, destino, cabine } = request;
-    const ceiling = request.teto ?? null;
-    const passengers = request.passageiros ?? 1;
+    const { origin, destination, cabin } = request;
+    const ceiling = request.ceiling ?? null;
+    const passengers = request.passengers ?? 1;
 
     return this.runner.run(this.pool, jobId, async ({ page }) => {
       const job = this.jobs.callbacks(jobId);
       const { days, failedMonths } = await searchAaYear(
         page,
-        { origin: origem, destination: destino, cabin: cabine, maxStops: request.maxConexoes ?? null, passengers },
+        { origin, destination, cabin, maxStops: request.maxStops ?? null, passengers },
         job.log,
         job.progress,
         job.notice,
@@ -38,8 +38,8 @@ export class AaSource implements SearchSource<AaSearchDto> {
       );
 
       const section = {
-        rotulo: AA_CABIN_LABELS[cabine],
-        ...buildAaReport(days, ceiling, { origin: origem, destination: destino, passengers, cabin: cabine }),
+        label: AA_CABIN_LABELS[cabin],
+        ...buildAaReport(days, ceiling, { origin, destination, passengers, cabin }),
       };
       // Without the first failure's reason the user would only see "partial" and
       // have to open the server terminal to tell a block from a bad route.
@@ -51,12 +51,12 @@ export class AaSource implements SearchSource<AaSearchDto> {
 
       recordSearch(jobId, {
         source: "AA",
-        origin: origem,
-        destination: destino,
-        legs: [{ rotulo: `${origem} → ${destino}`, secoes: [section] }],
-        ceilings: { [section.rotulo]: ceiling },
+        origin,
+        destination,
+        legs: [{ label: `${origin} → ${destination}`, sections: [section] }],
+        ceilings: { [section.label]: ceiling },
       });
-      this.jobs.complete(jobId, { secaoAA: section, avisoParcial: partialNotice });
+      this.jobs.complete(jobId, { section, partialNotice });
     });
   }
 }

@@ -24,8 +24,8 @@ export type AvailabilityDay = {
 };
 
 export type TapReport = {
-  executivas: ReportSection;
-  economicas: ReportSection;
+  business: ReportSection;
+  economy: ReportSection;
 };
 
 const TAP_MIN_INTERVAL_MS = Number(process.env.AWARDTOOL_INTERVALO_BUSCAS_MS) || 15000;
@@ -247,19 +247,19 @@ function buildSection(
   });
 
   if (available.length === 0) {
-    return { menor: null, maior: null, dias: [], texto: "Nenhuma disponibilidade encontrada nesse período." };
+    return { min: null, max: null, days: [], text: "Nenhuma disponibilidade encontrada nesse período." };
   }
 
   const formattedDays: FormattedDay[] = available
-    .map((day) => ({ data: day.date, valorK: parseValueK(day[field])! }))
-    .sort((a, b) => a.data.localeCompare(b.data));
-  const values = formattedDays.map((day) => day.valorK);
+    .map((day) => ({ date: day.date, valueK: parseValueK(day[field])! }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const values = formattedDays.map((day) => day.valueK);
 
   return {
-    menor: Math.min(...values),
-    maior: Math.max(...values),
-    dias: formattedDays,
-    texto: formatDatesByMonth(formattedDays.map((day) => day.data)),
+    min: Math.min(...values),
+    max: Math.max(...values),
+    days: formattedDays,
+    text: formatDatesByMonth(formattedDays.map((day) => day.date)),
   };
 }
 
@@ -267,8 +267,8 @@ export function buildTapReport(days: AvailabilityDay[], ceilings: TapCeilings = 
   const businessCeiling = ceilings.businessK ?? DEFAULT_BUSINESS_CEILING_K;
   const economyCeiling = ceilings.economyK ?? DEFAULT_ECONOMY_CEILING_K;
   return {
-    executivas: buildSection(days, "business", (value) => value <= businessCeiling),
-    economicas: buildSection(days, "economy", (value) => value <= economyCeiling),
+    business: buildSection(days, "business", (value) => value <= businessCeiling),
+    economy: buildSection(days, "economy", (value) => value <= economyCeiling),
   };
 }
 
@@ -346,10 +346,10 @@ export async function searchTapYear(
     }
 
     onWindow({
-      atual: windowNumber,
+      current: windowNumber,
       total: windowCount,
-      inicio: windowStart.toLocaleDateString("pt-BR"),
-      fim: windowEnd.toLocaleDateString("pt-BR"),
+      start: windowStart.toLocaleDateString("pt-BR"),
+      end: windowEnd.toLocaleDateString("pt-BR"),
     });
 
     try {

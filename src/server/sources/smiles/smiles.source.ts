@@ -27,8 +27,8 @@ function asDate(value: string | undefined, endOfMonth: boolean): string | undefi
 // themselves are enforced by the scraper, which knows them.
 function toPeriod(period: SmilesPeriodDto | undefined): SmilesPeriod {
   const result: SmilesPeriod = {};
-  const from = asDate(period?.de, false);
-  const until = asDate(period?.ate, true);
+  const from = asDate(period?.from, false);
+  const until = asDate(period?.until, true);
   if (from) result.from = from;
   if (until) result.until = until;
   return result;
@@ -61,19 +61,19 @@ export class SmilesSource implements SearchSource<SmilesSearchDto> {
   ) {}
 
   start(jobId: string, request: SmilesSearchDto) {
-    const { origem, destino } = request;
+    const { origin, destination } = request;
     const ceilings = {
-      economy: request.tetos?.economica ?? null,
-      premium: request.tetos?.premium ?? null,
-      business: request.tetos?.executiva ?? null,
+      economy: request.ceilings?.economy ?? null,
+      premium: request.ceilings?.premium ?? null,
+      business: request.ceilings?.business ?? null,
     };
-    const period = toPeriod(request.periodo);
+    const period = toPeriod(request.period);
 
     return this.runner.run(this.pool, jobId, async ({ page }) => {
       const job = this.jobs.callbacks(jobId);
       const { days, failedDays, gaps, fromCache } = await searchSmilesYear(
         page,
-        { origin: origem, destination: destino },
+        { origin, destination },
         ceilings,
         job.log,
         job.progress,
@@ -81,7 +81,7 @@ export class SmilesSource implements SearchSource<SmilesSearchDto> {
         period,
       );
 
-      const legs: Leg[] = [{ rotulo: `${origem} → ${destino}`, secoes: buildSmilesReport(days, ceilings) }];
+      const legs: Leg[] = [{ label: `${origin} → ${destination}`, sections: buildSmilesReport(days, ceilings) }];
 
       // The gaps come already worded by the scraper, which knows what it left uncovered.
       const notices = [...gaps];
@@ -115,20 +115,20 @@ export class SmilesSource implements SearchSource<SmilesSearchDto> {
           aircraft: flight.detail.aircraft,
           tax: flight.feeReais ?? "",
           class_of_service: flight.detail.serviceClasses,
-          url: smilesSearchUrl(origem, destino, flight.detail.departureDate),
+          url: smilesSearchUrl(origin, destination, flight.detail.departureDate),
         })),
       );
       const stamp = new Date().toISOString().slice(0, 16).replace("T", " ");
-      const spreadsheetUrl = await createSearchSheet({ title: `Smiles ${origem}-${destino} ${stamp}`, rows }, job.log);
+      const spreadsheetUrl = await createSearchSheet({ title: `Smiles ${origin}-${destination} ${stamp}`, rows }, job.log);
 
       recordSearch(jobId, {
         source: "SMILES",
-        origin: origem,
-        destination: destino,
+        origin,
+        destination,
         legs,
         ceilings: { "Econômica": ceilings.economy, Conforto: ceilings.premium, Executiva: ceilings.business },
       });
-      this.jobs.complete(jobId, { pernas: legs, avisoParcial: partialNotice, planilhaUrl: spreadsheetUrl });
+      this.jobs.complete(jobId, { legs, partialNotice, spreadsheetUrl });
     });
   }
 }

@@ -48,10 +48,10 @@ describe("Iberia availability parser", () => {
       null,
       route,
     );
-    assert.equal(report.menor, 34);
-    assert.equal(report.maior, 51);
-    assert.equal(report.texto, "Dez 2026: 15\nJan 2027: 14");
-    assert.equal(report.dias[0]!.link, iberiaBookingLink(route, "2026-12-15"));
+    assert.equal(report.min, 34);
+    assert.equal(report.max, 51);
+    assert.equal(report.text, "Dez 2026: 15\nJan 2027: 14");
+    assert.equal(report.days[0]!.link, iberiaBookingLink(route, "2026-12-15"));
     assert.match(iberiaBookingLink(route, "2026-12-15"), /BEGIN_CITY_01=GRU&END_CITY_01=MAD&BEGIN_DAY_01=15&BEGIN_MONTH_01=202612/);
   });
 });

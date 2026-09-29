@@ -1,101 +1,98 @@
-// Aba TAP (AwardTool).
-const formTap = document.getElementById("form-busca-tap");
-const inputTapOrigem = document.getElementById("tap-origem");
-const inputTapDestino = document.getElementById("tap-destino");
-const checkboxTapIdaVolta = document.getElementById("tap-ida-volta");
-const avisoTap = document.getElementById("tap-aviso");
-const inputTapTetoExecutiva = document.getElementById("tap-teto-executiva");
-const inputTapTetoEconomica = document.getElementById("tap-teto-economica");
-const filaTap = document.getElementById("tap-fila-buscas");
+const tapForm = document.getElementById("tap-search-form");
+const tapOriginInput = document.getElementById("tap-origin");
+const tapDestinationInput = document.getElementById("tap-destination");
+const tapRoundTripCheckbox = document.getElementById("tap-round-trip");
+const tapNotice = document.getElementById("tap-notice");
+const tapBusinessCeilingInput = document.getElementById("tap-ceiling-business");
+const tapEconomyCeilingInput = document.getElementById("tap-ceiling-economy");
+const tapQueue = document.getElementById("tap-queue");
 
-// Aba SeatSpy (Iberia, British, Air France, JetBlue, Cathay, Etihad, KLM,
-// Qantas, Virgin Atlantic).
-const formSeatspy = document.getElementById("form-busca-seatspy");
-const selectSeatspyPrograma = document.getElementById("seatspy-programa");
-const inputSeatspyOrigem = document.getElementById("seatspy-origem");
-const inputSeatspyDestino = document.getElementById("seatspy-destino");
-const checkboxSeatspyMostrarAssentos = document.getElementById("seatspy-mostrar-assentos");
-const checkboxSeatspyIdaVolta = document.getElementById("seatspy-ida-volta");
-const inputSeatspyTetoEconomica = document.getElementById("seatspy-teto-economica");
-const inputSeatspyTetoPremium = document.getElementById("seatspy-teto-premium");
-const inputSeatspyTetoExecutiva = document.getElementById("seatspy-teto-executiva");
-const inputSeatspyTetoPrimeira = document.getElementById("seatspy-teto-primeira");
-const avisoSeatspy = document.getElementById("seatspy-aviso");
-const filaSeatspy = document.getElementById("seatspy-fila-buscas");
+const seatspyForm = document.getElementById("seatspy-search-form");
+const seatspyProgramSelect = document.getElementById("seatspy-program");
+const seatspyOriginInput = document.getElementById("seatspy-origin");
+const seatspyDestinationInput = document.getElementById("seatspy-destination");
+const seatspyShowSeatsCheckbox = document.getElementById("seatspy-show-seats");
+const seatspyRoundTripCheckbox = document.getElementById("seatspy-round-trip");
+const seatspyEconomyCeilingInput = document.getElementById("seatspy-ceiling-economy");
+const seatspyPremiumCeilingInput = document.getElementById("seatspy-ceiling-premium");
+const seatspyBusinessCeilingInput = document.getElementById("seatspy-ceiling-business");
+const seatspyNotice = document.getElementById("seatspy-notice");
+const seatspyQueue = document.getElementById("seatspy-queue");
 
-// Aba American Airlines (uma cabine por busca).
-const formAa = document.getElementById("form-busca-aa");
-const inputAaOrigem = document.getElementById("aa-origem");
-const inputAaDestino = document.getElementById("aa-destino");
-const selectAaCabine = document.getElementById("aa-cabine");
-const selectAaConexoes = document.getElementById("aa-conexoes");
-const selectAaPassageiros = document.getElementById("aa-passageiros");
-const inputAaTeto = document.getElementById("aa-teto");
-const checkboxAaIdaVolta = document.getElementById("aa-ida-volta");
-const avisoAa = document.getElementById("aa-aviso");
-const filaAa = document.getElementById("aa-fila-buscas");
+const aaForm = document.getElementById("aa-search-form");
+const aaOriginInput = document.getElementById("aa-origin");
+const aaDestinationInput = document.getElementById("aa-destination");
+const aaCabinSelect = document.getElementById("aa-cabin");
+const aaStopsSelect = document.getElementById("aa-stops");
+const aaPassengersSelect = document.getElementById("aa-passengers");
+const aaCeilingInput = document.getElementById("aa-ceiling");
+const aaRoundTripCheckbox = document.getElementById("aa-round-trip");
+const aaNotice = document.getElementById("aa-notice");
+const aaQueue = document.getElementById("aa-queue");
 
-const formIberia = document.getElementById("form-busca-iberia");
-const inputIberiaOrigem = document.getElementById("iberia-origem");
-const inputIberiaDestino = document.getElementById("iberia-destino");
-const inputIberiaTeto = document.getElementById("iberia-teto");
-const selectIberiaDetalhar = document.getElementById("iberia-detalhar");
-const selectIberiaConexoes = document.getElementById("iberia-conexoes");
-const selectIberiaCabine = document.getElementById("iberia-cabine");
-const checkboxIberiaIdaVolta = document.getElementById("iberia-ida-volta");
-const avisoIberia = document.getElementById("iberia-aviso");
-const filaIberia = document.getElementById("iberia-fila-buscas");
+const iberiaForm = document.getElementById("iberia-search-form");
+const iberiaOriginInput = document.getElementById("iberia-origin");
+const iberiaDestinationInput = document.getElementById("iberia-destination");
+const iberiaCeilingInput = document.getElementById("iberia-ceiling");
+const iberiaDetailDaysSelect = document.getElementById("iberia-detail-days");
+const iberiaStopsSelect = document.getElementById("iberia-stops");
+const iberiaCabinSelect = document.getElementById("iberia-cabin");
+const iberiaRoundTripCheckbox = document.getElementById("iberia-round-trip");
+const iberiaNotice = document.getElementById("iberia-notice");
+const iberiaQueue = document.getElementById("iberia-queue");
 
-const formSmiles = document.getElementById("form-busca-smiles");
-const inputSmilesOrigem = document.getElementById("smiles-origem");
-const inputSmilesDestino = document.getElementById("smiles-destino");
-const checkboxSmilesIdaVolta = document.getElementById("smiles-ida-volta");
-const inputSmilesDe = document.getElementById("smiles-de");
-const inputSmilesAte = document.getElementById("smiles-ate");
-const inputSmilesTetoEconomica = document.getElementById("smiles-teto-economica");
-const inputSmilesTetoPremium = document.getElementById("smiles-teto-premium");
-const inputSmilesTetoExecutiva = document.getElementById("smiles-teto-executiva");
-const avisoSmiles = document.getElementById("smiles-aviso");
-const filaSmiles = document.getElementById("smiles-fila-buscas");
+const smilesForm = document.getElementById("smiles-search-form");
+const smilesOriginInput = document.getElementById("smiles-origin");
+const smilesDestinationInput = document.getElementById("smiles-destination");
+const smilesRoundTripCheckbox = document.getElementById("smiles-round-trip");
+const smilesFromInput = document.getElementById("smiles-from");
+const smilesUntilInput = document.getElementById("smiles-until");
+const smilesEconomyCeilingInput = document.getElementById("smiles-ceiling-economy");
+const smilesPremiumCeilingInput = document.getElementById("smiles-ceiling-premium");
+const smilesBusinessCeilingInput = document.getElementById("smiles-ceiling-business");
+const smilesNotice = document.getElementById("smiles-notice");
+const smilesQueue = document.getElementById("smiles-queue");
 
-// Aba LATAM (tarifas em dinheiro; ida e volta vêm na mesma busca).
-const formLatam = document.getElementById("form-busca-latam");
-const inputLatamOrigem = document.getElementById("latam-origem");
-const inputLatamDestino = document.getElementById("latam-destino");
-const inputLatamTeto = document.getElementById("latam-teto");
-const checkboxLatamMenorTarifa = document.getElementById("latam-menor-tarifa");
-const checkboxLatamConfirmarMilhas = document.getElementById("latam-confirmar-milhas");
-const avisoLatam = document.getElementById("latam-aviso");
-const filaLatam = document.getElementById("latam-fila-buscas");
+const latamForm = document.getElementById("latam-search-form");
+const latamOriginInput = document.getElementById("latam-origin");
+const latamDestinationInput = document.getElementById("latam-destination");
+const latamCeilingInput = document.getElementById("latam-ceiling");
+const latamLowestFareCheckbox = document.getElementById("latam-lowest-fare");
+const latamConfirmMilesCheckbox = document.getElementById("latam-confirm-miles");
+const latamNotice = document.getElementById("latam-notice");
+const latamQueue = document.getElementById("latam-queue");
 
-const tplJob = document.getElementById("tpl-job");
-const tplPerna = document.getElementById("tpl-perna");
-const abasBtns = document.querySelectorAll(".aba-btn");
-const painelTap = document.getElementById("painel-tap");
-const painelSeatspy = document.getElementById("painel-seatspy");
-const painelAa = document.getElementById("painel-aa");
-const painelIberia = document.getElementById("painel-iberia");
-const painelSmiles = document.getElementById("painel-smiles");
-const painelLatam = document.getElementById("painel-latam");
-const painelHistorico = document.getElementById("painel-historico");
-const listaHistorico = document.getElementById("lista-historico");
-const historicoVazio = document.getElementById("historico-vazio");
-const historicoTopo = document.getElementById("historico-topo");
-const historicoResumo = document.getElementById("historico-resumo");
-const btnLimparHistorico = document.getElementById("btn-limpar-historico");
+const jobTemplate = document.getElementById("job-template");
+const legTemplate = document.getElementById("leg-template");
+const tabButtons = document.querySelectorAll(".tab-button");
+const panels = {
+  tap: document.getElementById("panel-tap"),
+  seatspy: document.getElementById("panel-seatspy"),
+  aa: document.getElementById("panel-aa"),
+  iberia: document.getElementById("panel-iberia"),
+  smiles: document.getElementById("panel-smiles"),
+  latam: document.getElementById("panel-latam"),
+  history: document.getElementById("panel-history"),
+};
+const historyList = document.getElementById("history-list");
+const historyEmpty = document.getElementById("history-empty");
+const historyTop = document.getElementById("history-top");
+const historySummary = document.getElementById("history-summary");
+const clearHistoryButton = document.getElementById("clear-history-button");
 
-const MESES_PT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
-const HISTORICO_KEY = "awardtool_historico";
-const TOLERANCIA_DIAS = 5;
-const TOLERANCIA_MS = TOLERANCIA_DIAS * 24 * 60 * 60 * 1000;
+const MONTHS_PT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+const HISTORY_KEY = "awardtool.history.v2";
+const LEGACY_HISTORY_KEY = "awardtool_historico";
+const TOLERANCE_DAYS = 5;
+const TOLERANCE_MS = TOLERANCE_DAYS * 24 * 60 * 60 * 1000;
 
-const PROGRAMA_LABEL = {
+const PROGRAM_LABELS = {
   tap: "TAP",
   AA: "American Airlines",
   LATAM: "LATAM",
   SMILES: "Smiles",
-  // `IB` é a Iberia vista pelo SeatSpy; `IBERIA` é a busca direta no site
-  // dela. São fontes diferentes e o histórico precisa distinguir.
+  // `IB` is Iberia seen through SeatSpy; `IBERIA` is the direct search on its own
+  // site. They are different sources and the history must tell them apart.
   IBERIA: "Iberia (Avios)",
   AF: "Air France",
   B6: "JetBlue",
@@ -108,1981 +105,1811 @@ const PROGRAMA_LABEL = {
   VIR: "Virgin Atlantic",
 };
 
-const CABINE_AA_LABEL = { economica: "Econômica", premium: "Premium Economy", executiva: "Executiva", primeira: "Primeira Classe" };
-const CABINE_AA_COR = { economica: "cartao-economica", premium: "cartao-premium", executiva: "cartao-executiva", primeira: "cartao-primeira" };
-// Registros antigos do histórico (antes do seletor de programa) eram sempre TAP.
-const programaDe = (item) => item.programa || "tap";
+const AA_CABIN_LABELS = { economy: "Econômica", premium: "Premium Economy", business: "Executiva", first: "Primeira Classe" };
+const AA_CABIN_CLASSES = { economy: "cabin-economy", premium: "cabin-premium", business: "cabin-business", first: "cabin-first" };
 
-// Cada aba (TAP/SeatSpy/Histórico) só troca de hidden — nada é destruído ou
-// recriado, então os cards de busca em andamento numa aba continuam rodando
-// e visíveis quando você volta pra ela, mesmo com outra aba aberta no meio.
-abasBtns.forEach((btn) => {
-  btn.addEventListener("click", () => {
-    abasBtns.forEach((b) => b.classList.remove("ativo"));
-    btn.classList.add("ativo");
-    const aba = btn.dataset.aba;
-    painelTap.hidden = aba !== "tap";
-    painelSeatspy.hidden = aba !== "seatspy";
-    painelAa.hidden = aba !== "aa";
-    painelSmiles.hidden = aba !== "smiles";
-    painelIberia.hidden = aba !== "iberia";
-    painelLatam.hidden = aba !== "latam";
-    painelHistorico.hidden = aba !== "historico";
-    if (aba === "historico") renderizarHistorico();
+// Tabs only toggle hidden: nothing is destroyed or recreated, so running search
+// cards in one tab keep going and stay visible when you come back.
+tabButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    tabButtons.forEach((other) => other.classList.remove("active"));
+    button.classList.add("active");
+    const tab = button.dataset.tab;
+    for (const [name, panel] of Object.entries(panels)) panel.hidden = name !== tab;
+    if (tab === "history") renderHistory();
   });
 });
 
-function ativarAba(aba) {
-  document.querySelector(`.aba-btn[data-aba="${aba}"]`).click();
+function activateTab(tab) {
+  document.querySelector(`.tab-button[data-tab="${tab}"]`).click();
 }
 
-function carregarHistorico() {
+// The history used to live under another key with Portuguese fields. It is
+// moved once, then the old key goes away so clearing the history cannot bring it back.
+function migrateLegacyHistory() {
+  const legacyAaCabins = { economica: "economy", premium: "premium", executiva: "business", primeira: "first" };
   try {
-    return JSON.parse(localStorage.getItem(HISTORICO_KEY)) || [];
+    const legacy = JSON.parse(localStorage.getItem(LEGACY_HISTORY_KEY));
+    if (!Array.isArray(legacy)) return;
+    const migrated = legacy.map((item) => ({
+      origin: item.origem,
+      destination: item.destino,
+      program: item.programa || "tap",
+      roundTrip: Boolean(item.idaEVolta),
+      ...(item.cabine ? { cabin: legacyAaCabins[item.cabine] || item.cabine } : {}),
+      ...(item.passageiros ? { passengers: item.passageiros } : {}),
+      timestamp: item.timestamp,
+    }));
+    localStorage.setItem(HISTORY_KEY, JSON.stringify([...loadHistory(), ...migrated]));
+    localStorage.removeItem(LEGACY_HISTORY_KEY);
+  } catch (err) {
+    console.error("Não consegui migrar o histórico antigo:", err);
+  }
+}
+
+function loadHistory() {
+  try {
+    return JSON.parse(localStorage.getItem(HISTORY_KEY)) || [];
   } catch {
     return [];
   }
 }
 
-function salvarNoHistorico(origem, destino, programa, idaEVolta = false, extras = {}) {
-  const historico = carregarHistorico();
-  historico.push({ origem, destino, programa, idaEVolta, ...extras, timestamp: Date.now() });
-  localStorage.setItem(HISTORICO_KEY, JSON.stringify(historico));
+function saveToHistory(origin, destination, program, roundTrip = false, extras = {}) {
+  const history = loadHistory();
+  history.push({ origin, destination, program, roundTrip, ...extras, timestamp: Date.now() });
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
 }
 
-// Na TAP as pernas rodam em sequência: a ida entra no histórico assim que
-// termina e, se a volta também completar, o registro vira ida e volta (em vez
-// de virar dois registros separados).
-function promoverUltimaParaIdaEVolta(origem, destino, programa) {
-  const historico = carregarHistorico();
-  const ultima = historico
-    .filter((h) => h.origem === origem && h.destino === destino && programaDe(h) === programa)
-    .reduce((mais, atual) => (!mais || atual.timestamp > mais.timestamp ? atual : mais), null);
-  if (ultima) {
-    ultima.idaEVolta = true;
-    localStorage.setItem(HISTORICO_KEY, JSON.stringify(historico));
+// Legs that run in sequence enter the history as soon as the outbound ends; if
+// the return also completes, the entry becomes a round trip instead of two entries.
+function promoteLatestToRoundTrip(origin, destination, program) {
+  const history = loadHistory();
+  const latest = history
+    .filter((item) => item.origin === origin && item.destination === destination && item.program === program)
+    .reduce((newest, item) => (!newest || item.timestamp > newest.timestamp ? item : newest), null);
+  if (latest) {
+    latest.roundTrip = true;
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
   }
 }
 
-// Um registro ida e volta cobre as duas direções do trecho.
-function buscaRecenteDe(origem, destino, programa) {
-  const historico = carregarHistorico();
-  const doMesmoTrecho = historico.filter(
-    (h) =>
-      programaDe(h) === programa &&
-      ((h.origem === origem && h.destino === destino) ||
-        (h.idaEVolta && h.origem === destino && h.destino === origem)),
+// A round-trip entry covers both directions of the route.
+function latestSearchOf(origin, destination, program) {
+  const sameRoute = loadHistory().filter(
+    (item) =>
+      item.program === program &&
+      ((item.origin === origin && item.destination === destination) ||
+        (item.roundTrip && item.origin === destination && item.destination === origin)),
   );
-  if (doMesmoTrecho.length === 0) return null;
-  return doMesmoTrecho.reduce((mais, atual) => (atual.timestamp > mais.timestamp ? atual : mais));
+  if (sameRoute.length === 0) return null;
+  return sameRoute.reduce((newest, item) => (item.timestamp > newest.timestamp ? item : newest));
 }
 
-function formatarDataHora(timestamp) {
-  const data = new Date(timestamp);
-  const dataStr = data.toLocaleDateString("pt-BR");
-  const horaStr = data.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-  return `${dataStr} às ${horaStr}`;
+function formatDateTime(timestamp) {
+  const date = new Date(timestamp);
+  const day = date.toLocaleDateString("pt-BR");
+  const time = date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  return `${day} às ${time}`;
 }
 
-function formatarTempoRelativo(timestamp) {
-  const diffMs = Date.now() - timestamp;
-  const diffMin = Math.floor(diffMs / 60000);
-  if (diffMin < 1) return "agora mesmo";
-  if (diffMin < 60) return `há ${diffMin} min`;
-  const diffHoras = Math.floor(diffMin / 60);
-  if (diffHoras < 24) return `há ${diffHoras}h`;
-  const diffDias = Math.floor(diffHoras / 24);
-  if (diffDias === 1) return "há 1 dia";
-  return `há ${diffDias} dias`;
+function formatRelativeTime(timestamp) {
+  const minutes = Math.floor((Date.now() - timestamp) / 60000);
+  if (minutes < 1) return "agora mesmo";
+  if (minutes < 60) return `há ${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `há ${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return "há 1 dia";
+  return `há ${days} dias`;
 }
 
-// "2026-07-17" no fuso local, pra agrupar buscas por dia.
-function chaveDoDia(timestamp) {
-  const d = new Date(timestamp);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+// "2026-07-17" in the local time zone, to group searches by day.
+function dayKey(timestamp) {
+  const date = new Date(timestamp);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
-function rotuloDoDia(timestamp) {
-  const hoje = chaveDoDia(Date.now());
-  const ontem = chaveDoDia(Date.now() - 24 * 60 * 60 * 1000);
-  const chave = chaveDoDia(timestamp);
-  if (chave === hoje) return "Hoje";
-  if (chave === ontem) return "Ontem";
-  const texto = new Date(timestamp).toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
-  return texto.charAt(0).toUpperCase() + texto.slice(1);
+function dayLabel(timestamp) {
+  const key = dayKey(timestamp);
+  if (key === dayKey(Date.now())) return "Hoje";
+  if (key === dayKey(Date.now() - 24 * 60 * 60 * 1000)) return "Ontem";
+  const text = new Date(timestamp).toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-// Preenche o formulário da aba certa (TAP, SeatSpy ou AA) com o trecho do
-// histórico e troca pra ela.
-function repetirBusca(item) {
-  const programa = programaDe(item);
-  if (programa === "tap") {
-    inputTapOrigem.value = item.origem;
-    inputTapDestino.value = item.destino;
-    checkboxTapIdaVolta.checked = Boolean(item.idaEVolta);
-    ativarAba("tap");
-    inputTapOrigem.focus();
-  } else if (programa === "SMILES") {
-    inputSmilesOrigem.value = item.origem;
-    inputSmilesDestino.value = item.destino;
-    checkboxSmilesIdaVolta.checked = Boolean(item.idaEVolta);
-    ativarAba("smiles");
-    inputSmilesOrigem.focus();
-  } else if (programa === "AA") {
-    inputAaOrigem.value = item.origem;
-    inputAaDestino.value = item.destino;
-    if (item.cabine) selectAaCabine.value = item.cabine;
-    // Buscas antigas não têm o campo — sem o padrão, o select ficaria em branco.
-    selectAaPassageiros.value = String(item.passageiros || 1);
-    checkboxAaIdaVolta.checked = Boolean(item.idaEVolta);
-    ativarAba("aa");
-    inputAaOrigem.focus();
+// Fills the right tab's form with the history route and switches to it.
+function repeatSearch(item) {
+  if (item.program === "tap") {
+    tapOriginInput.value = item.origin;
+    tapDestinationInput.value = item.destination;
+    tapRoundTripCheckbox.checked = Boolean(item.roundTrip);
+    activateTab("tap");
+    tapOriginInput.focus();
+  } else if (item.program === "SMILES") {
+    smilesOriginInput.value = item.origin;
+    smilesDestinationInput.value = item.destination;
+    smilesRoundTripCheckbox.checked = Boolean(item.roundTrip);
+    activateTab("smiles");
+    smilesOriginInput.focus();
+  } else if (item.program === "AA") {
+    aaOriginInput.value = item.origin;
+    aaDestinationInput.value = item.destination;
+    if (item.cabin) aaCabinSelect.value = item.cabin;
+    // Older entries lack the field; without the default the select would be blank.
+    aaPassengersSelect.value = String(item.passengers || 1);
+    aaRoundTripCheckbox.checked = Boolean(item.roundTrip);
+    activateTab("aa");
+    aaOriginInput.focus();
   } else {
-    selectSeatspyPrograma.value = programa;
-    inputSeatspyOrigem.value = item.origem;
-    inputSeatspyDestino.value = item.destino;
-    checkboxSeatspyIdaVolta.checked = Boolean(item.idaEVolta);
-    ativarAba("seatspy");
-    inputSeatspyOrigem.focus();
+    seatspyProgramSelect.value = item.program;
+    seatspyOriginInput.value = item.origin;
+    seatspyDestinationInput.value = item.destination;
+    seatspyRoundTripCheckbox.checked = Boolean(item.roundTrip);
+    activateTab("seatspy");
+    seatspyOriginInput.focus();
   }
 }
 
-// Registros novos de ida e volta já vêm como um item só, mas o histórico
-// antigo guardava as duas pernas separadas (A→B e B→A). Aqui esses pares
-// (mesmo programa, direções opostas, até 3h de diferença) viram um item ⇄ na
-// exibição, com a direção original da ida e o horário em que terminou.
-function agruparParaExibicao(historico) {
-  const JANELA_PAR_MS = 3 * 60 * 60 * 1000;
-  const usados = new Set();
-  const exibicao = [];
+// Older history kept both legs apart (A→B and B→A). Those pairs (same program,
+// opposite directions, up to 3h apart) show as one ⇄ entry, with the outbound's
+// direction and the time the return ended.
+function groupForDisplay(history) {
+  const PAIR_WINDOW_MS = 3 * 60 * 60 * 1000;
+  const used = new Set();
+  const display = [];
 
-  for (let i = 0; i < historico.length; i++) {
-    if (usados.has(i)) continue;
-    const item = historico[i];
+  for (let i = 0; i < history.length; i++) {
+    if (used.has(i)) continue;
+    const item = history[i];
 
-    if (!item.idaEVolta) {
-      const j = historico.findIndex(
-        (outro, k) =>
+    if (!item.roundTrip) {
+      const j = history.findIndex(
+        (other, k) =>
           k > i &&
-          !usados.has(k) &&
-          !outro.idaEVolta &&
-          programaDe(outro) === programaDe(item) &&
-          outro.origem === item.destino &&
-          outro.destino === item.origem &&
-          item.timestamp - outro.timestamp < JANELA_PAR_MS,
+          !used.has(k) &&
+          !other.roundTrip &&
+          other.program === item.program &&
+          other.origin === item.destination &&
+          other.destination === item.origin &&
+          item.timestamp - other.timestamp < PAIR_WINDOW_MS,
       );
       if (j !== -1) {
-        usados.add(j);
-        // O registro mais antigo do par é a ida: dita a direção exibida.
-        const ida = historico[j];
-        // `timestamps` é só de exibição: é a chave usada pra apagar o item, e
-        // um par juntado apaga os dois registros que o formaram.
-        exibicao.push({ ...ida, idaEVolta: true, timestamp: item.timestamp, timestamps: [ida.timestamp, item.timestamp] });
+        used.add(j);
+        // The older entry of the pair is the outbound: it sets the direction shown.
+        const outbound = history[j];
+        // `timestamps` is the delete key: a merged pair deletes both entries.
+        display.push({ ...outbound, roundTrip: true, timestamp: item.timestamp, timestamps: [outbound.timestamp, item.timestamp] });
         continue;
       }
     }
-    exibicao.push({ ...item, timestamps: [item.timestamp] });
+    display.push({ ...item, timestamps: [item.timestamp] });
   }
-  return exibicao;
+  return display;
 }
 
-function removerDoHistorico(timestamps) {
-  const alvos = new Set(timestamps);
-  localStorage.setItem(HISTORICO_KEY, JSON.stringify(carregarHistorico().filter((h) => !alvos.has(h.timestamp))));
-  renderizarHistorico();
+function removeFromHistory(timestamps) {
+  const targets = new Set(timestamps);
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(loadHistory().filter((item) => !targets.has(item.timestamp))));
+  renderHistory();
 }
 
-function renderizarHistorico() {
-  const bruto = carregarHistorico().slice().sort((a, b) => b.timestamp - a.timestamp);
-  const historico = agruparParaExibicao(bruto);
-  listaHistorico.innerHTML = "";
-  historicoVazio.hidden = historico.length > 0;
-  historicoTopo.hidden = historico.length === 0;
+function renderHistory() {
+  const history = groupForDisplay(loadHistory().slice().sort((a, b) => b.timestamp - a.timestamp));
+  historyList.innerHTML = "";
+  historyEmpty.hidden = history.length > 0;
+  historyTop.hidden = history.length === 0;
 
-  if (historico.length === 0) return;
+  if (history.length === 0) return;
 
-  // Resumo geral no topo. Trechos de ida e volta contam como um só,
-  // independente da direção.
-  const trechosUnicos = new Set(
-    historico.map((h) => {
-      const rota = h.idaEVolta ? [h.origem, h.destino].sort().join("⇄") : `${h.origem}→${h.destino}`;
-      return `${programaDe(h)}|${rota}`;
+  // Round-trip routes count once, whatever the direction.
+  const uniqueRoutes = new Set(
+    history.map((item) => {
+      const route = item.roundTrip ? [item.origin, item.destination].sort().join("⇄") : `${item.origin}→${item.destination}`;
+      return `${item.program}|${route}`;
     }),
   ).size;
-  const emTolerancia = historico.filter((h) => Date.now() - h.timestamp < TOLERANCIA_MS).length;
-  historicoResumo.textContent =
-    `${historico.length} busca(s) · ${trechosUnicos} trecho(s) diferente(s) · ` +
-    `${emTolerancia} dentro da tolerância de ${TOLERANCIA_DIAS} dias · última ${formatarTempoRelativo(historico[0].timestamp)}`;
+  const withinTolerance = history.filter((item) => Date.now() - item.timestamp < TOLERANCE_MS).length;
+  historySummary.textContent =
+    `${history.length} busca(s) · ${uniqueRoutes} trecho(s) diferente(s) · ` +
+    `${withinTolerance} dentro da tolerância de ${TOLERANCE_DAYS} dias · última ${formatRelativeTime(history[0].timestamp)}`;
 
-  // Agrupa por dia, mantendo a ordem (mais recente primeiro).
-  const grupos = new Map();
-  for (const item of historico) {
-    const chave = chaveDoDia(item.timestamp);
-    if (!grupos.has(chave)) grupos.set(chave, []);
-    grupos.get(chave).push(item);
+  const groups = new Map();
+  for (const item of history) {
+    const key = dayKey(item.timestamp);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(item);
   }
 
-  for (const itens of grupos.values()) {
-    const grupo = document.createElement("section");
-    grupo.className = "dia-grupo";
+  for (const items of groups.values()) {
+    const group = document.createElement("section");
+    group.className = "day-group";
 
-    const cabecalho = document.createElement("div");
-    cabecalho.className = "dia-cabecalho";
+    const header = document.createElement("div");
+    header.className = "day-header";
 
-    const rotulo = document.createElement("span");
-    rotulo.className = "dia-rotulo";
-    rotulo.textContent = rotuloDoDia(itens[0].timestamp);
+    const label = document.createElement("span");
+    label.className = "day-label";
+    label.textContent = dayLabel(items[0].timestamp);
 
-    const sub = document.createElement("span");
-    sub.className = "dia-sub";
-    const dataCurta = new Date(itens[0].timestamp).toLocaleDateString("pt-BR");
-    sub.textContent = `${dataCurta} · ${itens.length} busca(s)`;
+    const subtitle = document.createElement("span");
+    subtitle.className = "day-subtitle";
+    subtitle.textContent = `${new Date(items[0].timestamp).toLocaleDateString("pt-BR")} · ${items.length} busca(s)`;
 
-    cabecalho.append(rotulo, sub);
-    grupo.appendChild(cabecalho);
+    header.append(label, subtitle);
+    group.appendChild(header);
 
-    for (const item of itens) {
-      grupo.appendChild(criarItemHistorico(item));
-    }
-    listaHistorico.appendChild(grupo);
+    for (const item of items) group.appendChild(createHistoryItem(item));
+    historyList.appendChild(group);
   }
 }
 
-function criarItemHistorico(item) {
-  const programa = programaDe(item);
+function historyCabins(item) {
+  if (item.program === "tap") return [["Executiva", "cabin-business"], ["Econômica", "cabin-economy"]];
+  if (item.program === "LATAM" || item.program === "IBERIA") return [["Econômica", "cabin-economy"]];
+  if (item.program === "SMILES") return [["Econômica", "cabin-economy"], ["Conforto", "cabin-premium"], ["Executiva", "cabin-business"]];
+  if (item.program === "AA") {
+    // Passengers only show when more than one, to tell it apart from the regular entry of the same route.
+    const label = (AA_CABIN_LABELS[item.cabin] || "Cabine n/d") + (item.passengers > 1 ? ` · ${item.passengers} pax` : "");
+    return [[label, AA_CABIN_CLASSES[item.cabin] || "cabin-economy"]];
+  }
+  return [["Econômica", "cabin-economy"], ["Premium", "cabin-premium"], ["Executiva", "cabin-business"], ["Primeira", "cabin-first"]];
+}
 
-  const linha = document.createElement("div");
-  linha.className = `item-historico accent-${programa}`;
+function createHistoryItem(item) {
+  const row = document.createElement("div");
+  row.className = `history-item accent-${item.program}`;
 
-  const principal = document.createElement("div");
-  principal.className = "item-historico-principal";
+  const main = document.createElement("div");
+  main.className = "history-item-main";
 
-  const tagPrograma = document.createElement("span");
-  tagPrograma.className = `tag-programa tag-${programa}`;
-  tagPrograma.textContent = PROGRAMA_LABEL[programa] || programa;
+  const programTag = document.createElement("span");
+  programTag.className = `program-tag tag-${item.program}`;
+  programTag.textContent = PROGRAM_LABELS[item.program] || item.program;
 
-  const rota = document.createElement("span");
-  rota.className = "item-historico-rota";
-  const de = document.createElement("strong");
-  de.textContent = item.origem;
-  const seta = document.createElement("span");
-  seta.className = item.idaEVolta ? "rota-seta rota-seta-iv" : "rota-seta";
-  seta.textContent = item.idaEVolta ? "⇄" : "→";
-  seta.title = item.idaEVolta ? "Ida e volta" : "Somente ida";
-  const para = document.createElement("strong");
-  para.textContent = item.destino;
-  rota.append(de, seta, para);
+  const route = document.createElement("span");
+  route.className = "history-item-route";
+  const from = document.createElement("strong");
+  from.textContent = item.origin;
+  const arrow = document.createElement("span");
+  arrow.className = item.roundTrip ? "route-arrow route-arrow-round-trip" : "route-arrow";
+  arrow.textContent = item.roundTrip ? "⇄" : "→";
+  arrow.title = item.roundTrip ? "Ida e volta" : "Somente ida";
+  const to = document.createElement("strong");
+  to.textContent = item.destination;
+  route.append(from, arrow, to);
 
-  principal.append(tagPrograma, rota);
+  main.append(programTag, route);
 
-  if (Date.now() - item.timestamp < TOLERANCIA_MS) {
-    const ponto = document.createElement("span");
-    ponto.className = "ponto-recente";
-    ponto.title = `Dentro da tolerância de ${TOLERANCIA_DIAS} dias. Repetir esse trecho vai gerar aviso.`;
-    principal.appendChild(ponto);
+  if (Date.now() - item.timestamp < TOLERANCE_MS) {
+    const dot = document.createElement("span");
+    dot.className = "recent-dot";
+    dot.title = `Dentro da tolerância de ${TOLERANCE_DAYS} dias. Repetir esse trecho vai gerar aviso.`;
+    main.appendChild(dot);
   }
 
-  // TAP traz Executiva + Econômica; SeatSpy traz Premium também; AA é uma
-  // cabine por busca (a que ficou registrada no item).
-  const cabines =
-    programa === "tap"
-      ? [["Executiva", "cartao-executiva"], ["Econômica", "cartao-economica"]]
-      : programa === "LATAM"
-        ? [["Econômica", "cartao-economica"]]
-      : programa === "SMILES"
-        ? [["Econômica", "cartao-economica"], ["Conforto", "cartao-premium"], ["Executiva", "cartao-executiva"]]
-      : programa === "AA"
-        ? [
-            [
-              // Passageiros só aparece quando é mais de um, pra distinguir do
-              // registro normal do mesmo trecho.
-              (CABINE_AA_LABEL[item.cabine] || "Cabine n/d") +
-                (item.passageiros > 1 ? ` · ${item.passageiros} pax` : ""),
-              CABINE_AA_COR[item.cabine] || "cartao-economica",
-            ],
-          ]
-        : [["Econômica", "cartao-economica"], ["Premium", "cartao-premium"], ["Executiva", "cartao-executiva"], ["Primeira", "cartao-primeira"]];
-  const grupoCabines = document.createElement("div");
-  grupoCabines.className = "item-historico-cabines";
-  for (const [texto, classe] of cabines) {
+  const cabins = document.createElement("div");
+  cabins.className = "history-item-cabins";
+  for (const [text, className] of historyCabins(item)) {
     const tag = document.createElement("span");
-    tag.className = `item-historico-cabine ${classe}`;
-    tag.textContent = texto;
-    grupoCabines.appendChild(tag);
+    tag.className = `history-item-cabin ${className}`;
+    tag.textContent = text;
+    cabins.appendChild(tag);
   }
 
-  const direita = document.createElement("div");
-  direita.className = "item-historico-direita";
+  const right = document.createElement("div");
+  right.className = "history-item-right";
 
-  const hora = document.createElement("span");
-  hora.className = "item-historico-hora";
-  hora.textContent = new Date(item.timestamp).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  const time = document.createElement("span");
+  time.className = "history-item-time";
+  time.textContent = new Date(item.timestamp).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 
-  const relativo = document.createElement("span");
-  relativo.className = "item-historico-relativo";
-  relativo.textContent = formatarTempoRelativo(item.timestamp);
+  const relative = document.createElement("span");
+  relative.className = "history-item-relative";
+  relative.textContent = formatRelativeTime(item.timestamp);
 
-  direita.append(hora, relativo);
+  right.append(time, relative);
 
-  const btnRepetir = document.createElement("button");
-  btnRepetir.type = "button";
-  btnRepetir.className = "btn-rebuscar";
-  btnRepetir.title = "Preencher a busca com esse trecho";
-  btnRepetir.textContent = "↻";
-  btnRepetir.addEventListener("click", () => repetirBusca(item));
+  const repeatButton = document.createElement("button");
+  repeatButton.type = "button";
+  repeatButton.className = "repeat-search-button";
+  repeatButton.title = "Preencher a busca com esse trecho";
+  repeatButton.textContent = "↻";
+  repeatButton.addEventListener("click", () => repeatSearch(item));
 
-  // Apagar um trecho só. Um item de ida e volta que veio de dois registros
-  // apaga os dois — senão a metade que sobrasse reapareceria sozinha.
-  const btnApagar = document.createElement("button");
-  btnApagar.type = "button";
-  btnApagar.className = "btn-apagar-item";
-  btnApagar.title = "Remover este trecho do histórico";
-  btnApagar.textContent = "✕";
-  btnApagar.addEventListener("click", () => removerDoHistorico(item.timestamps || [item.timestamp]));
+  // A round-trip entry that came from two entries deletes both, or the leftover
+  // half would reappear on its own.
+  const deleteButton = document.createElement("button");
+  deleteButton.type = "button";
+  deleteButton.className = "delete-item-button";
+  deleteButton.title = "Remover este trecho do histórico";
+  deleteButton.textContent = "✕";
+  deleteButton.addEventListener("click", () => removeFromHistory(item.timestamps || [item.timestamp]));
 
-  linha.append(principal, grupoCabines, direita, btnRepetir, btnApagar);
-  return linha;
+  row.append(main, cabins, right, repeatButton, deleteButton);
+  return row;
 }
 
-btnLimparHistorico.addEventListener("click", () => {
+clearHistoryButton.addEventListener("click", () => {
   if (!confirm("Apagar todo o histórico de buscas? Isso não pode ser desfeito.")) return;
-  localStorage.removeItem(HISTORICO_KEY);
-  renderizarHistorico();
+  localStorage.removeItem(HISTORY_KEY);
+  renderHistory();
 });
 
-function mostrarAviso(avisoEl, mensagem) {
-  avisoEl.textContent = mensagem;
-  avisoEl.hidden = false;
+function showNotice(noticeEl, message) {
+  noticeEl.textContent = message;
+  noticeEl.hidden = false;
 }
 
-function limparAviso(avisoEl) {
-  avisoEl.hidden = true;
-  avisoEl.textContent = "";
+function clearNotice(noticeEl) {
+  noticeEl.hidden = true;
+  noticeEl.textContent = "";
 }
 
-function atualizarBarra(barraEl, fracao) {
-  barraEl.style.width = `${Math.min(Math.round(fracao * 100), 100)}%`;
+function updateBar(barEl, fraction) {
+  barEl.style.width = `${Math.min(Math.round(fraction * 100), 100)}%`;
 }
 
-// Monta um card de busca (ver tpl-job) e já pendura na fila visual da aba
-// (filaBuscasEl é a fila da aba TAP ou da aba SeatSpy). Cada busca tem seu
-// próprio card, então várias rodam em paralelo sem uma atrapalhar o
-// progresso/resultado da outra.
-function criarCardJob(filaBuscasEl, tituloRota) {
-  const fragmento = tplJob.content.cloneNode(true);
-  const raiz = fragmento.querySelector(".job-busca");
+// Every search gets its own card, so several run in parallel without one
+// disturbing another's progress or result.
+function createJobCard(queueEl, routeTitle) {
+  const fragment = jobTemplate.content.cloneNode(true);
+  const root = fragment.querySelector(".search-job");
 
   const card = {
-    raiz,
-    rotaEl: raiz.querySelector(".job-rota"),
-    statusEl: raiz.querySelector(".job-status"),
-    progressoEl: raiz.querySelector(".progresso"),
-    progressoLabelEl: raiz.querySelector(".progresso-label"),
-    progressoJanelaEl: raiz.querySelector(".progresso-janela"),
-    barraEl: raiz.querySelector(".barra-preenchida"),
-    avisoEl: raiz.querySelector(".aviso"),
-    tetosEl: raiz.querySelector(".job-tetos"),
-    subAbasEl: raiz.querySelector(".sub-abas"),
-    subAbaBtnsEl: raiz.querySelectorAll(".sub-aba-btn"),
-    resultadoEl: raiz.querySelector(".resultado"),
-    subpainelUpgradeEl: raiz.querySelector(".subpainel-upgrade"),
-    listaUpgradeEl: raiz.querySelector(".lista-upgrade"),
-    upgradeVazioEl: raiz.querySelector(".upgrade-vazio"),
-    acoesEl: raiz.querySelector(".job-acoes"),
-    btnCopiarIdaEl: raiz.querySelector(".btn-copiar-ida"),
-    btnCopiarVoltaEl: raiz.querySelector(".btn-copiar-volta"),
-    btnMinimizarEl: raiz.querySelector(".btn-minimizar"),
-    btnPararEl: raiz.querySelector(".btn-parar-busca"),
-    btnRemoverEl: raiz.querySelector(".btn-remover"),
-    pernasParaUpgrade: [],
-    // Datas por perna na ordem em que chegam (ida primeiro), pros botões de
-    // copiar do cabeçalho — ver registrarPernaCopia.
-    pernasCopia: [],
+    root,
+    routeEl: root.querySelector(".job-route"),
+    statusEl: root.querySelector(".job-status"),
+    progressEl: root.querySelector(".progress"),
+    progressLabelEl: root.querySelector(".progress-label"),
+    progressWindowEl: root.querySelector(".progress-window"),
+    barEl: root.querySelector(".bar-fill"),
+    noticeEl: root.querySelector(".notice"),
+    ceilingsEl: root.querySelector(".job-ceilings"),
+    subtabsEl: root.querySelector(".subtabs"),
+    subtabButtons: root.querySelectorAll(".subtab-button"),
+    resultEl: root.querySelector(".result"),
+    upgradeSubpanelEl: root.querySelector(".upgrade-subpanel"),
+    upgradeListEl: root.querySelector(".upgrade-list"),
+    upgradeEmptyEl: root.querySelector(".upgrade-empty"),
+    actionsEl: root.querySelector(".job-actions"),
+    copyOutboundButton: root.querySelector(".copy-outbound-button"),
+    copyReturnButton: root.querySelector(".copy-return-button"),
+    minimizeButton: root.querySelector(".minimize-button"),
+    stopButton: root.querySelector(".stop-search-button"),
+    removeButton: root.querySelector(".remove-button"),
+    upgradeLegs: [],
+    // Dates per leg in arrival order (outbound first), for the header's copy buttons.
+    copyLegs: [],
   };
 
-  card.rotaEl.textContent = tituloRota;
+  card.routeEl.textContent = routeTitle;
 
-  card.subAbaBtnsEl.forEach((btn) => {
-    btn.addEventListener("click", () => {
-      card.subAbaBtnsEl.forEach((b) => b.classList.remove("ativo"));
-      btn.classList.add("ativo");
-      const sub = btn.dataset.subaba;
-      card.resultadoEl.hidden = sub !== "datas";
-      card.subpainelUpgradeEl.hidden = sub !== "upgrade";
-      if (sub === "upgrade") renderizarUpgrade(card);
+  card.subtabButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      card.subtabButtons.forEach((other) => other.classList.remove("active"));
+      button.classList.add("active");
+      const subtab = button.dataset.subtab;
+      card.resultEl.hidden = subtab !== "dates";
+      card.upgradeSubpanelEl.hidden = subtab !== "upgrade";
+      if (subtab === "upgrade") renderUpgrade(card);
     });
   });
 
-  function definirStatus(texto, classe) {
-    card.statusEl.textContent = texto;
-    card.statusEl.className = `job-status ${classe}`;
-    card.btnPararEl.hidden = classe === "status-pronto" || classe === "status-erro";
-    // Busca que termina em erro nunca chega no `atualizarAcoesCard`, e a barra
-    // de ações fica escondida: o card vira um bloco morto na tela, sem Remover
-    // nem Minimizar, e só sai com F5. Os botões de copiar seguem escondidos,
-    // porque não há o que copiar. Vale pra todas as fontes.
-    if (classe === "status-erro") card.acoesEl.hidden = false;
-  }
-  card.definirStatus = definirStatus;
+  card.setStatus = (text, className) => {
+    card.statusEl.textContent = text;
+    card.statusEl.className = `job-status ${className}`;
+    card.stopButton.hidden = className === "status-done" || className === "status-error";
+    // A search ending in error never reaches updateCardActions: without this the
+    // card is a dead block with no Remove or Minimize until a reload.
+    if (className === "status-error") card.actionsEl.hidden = false;
+  };
 
-  card.btnCopiarIdaEl.addEventListener("click", () => copiarPerna(card, 0, card.btnCopiarIdaEl, "Copiar ida"));
-  card.btnCopiarVoltaEl.addEventListener("click", () => copiarPerna(card, 1, card.btnCopiarVoltaEl, "Copiar volta"));
+  card.copyOutboundButton.addEventListener("click", () => copyLeg(card, 0, card.copyOutboundButton, "Copiar ida"));
+  card.copyReturnButton.addEventListener("click", () => copyLeg(card, 1, card.copyReturnButton, "Copiar volta"));
 
-  // Minimizar recolhe tudo abaixo do cabeçalho — com várias buscas na fila,
-  // dá pra fechar as prontas e continuar vendo as outras sem rolar tanto.
-  card.minimizado = false;
-  card.btnMinimizarEl.addEventListener("click", () => {
-    card.minimizado = !card.minimizado;
-    const abaAtiva = raiz.querySelector(".sub-aba-btn.ativo")?.dataset.subaba || "datas";
-    card.resultadoEl.hidden = card.minimizado || abaAtiva !== "datas";
-    card.subpainelUpgradeEl.hidden = card.minimizado || abaAtiva !== "upgrade";
-    card.subAbasEl.hidden = card.minimizado;
-    card.btnMinimizarEl.textContent = card.minimizado ? "Expandir" : "Minimizar";
+  card.minimized = false;
+  card.minimizeButton.addEventListener("click", () => {
+    card.minimized = !card.minimized;
+    const activeSubtab = root.querySelector(".subtab-button.active")?.dataset.subtab || "dates";
+    card.resultEl.hidden = card.minimized || activeSubtab !== "dates";
+    card.upgradeSubpanelEl.hidden = card.minimized || activeSubtab !== "upgrade";
+    card.subtabsEl.hidden = card.minimized;
+    card.minimizeButton.textContent = card.minimized ? "Expandir" : "Minimizar";
   });
 
-  // Parar existe pro clique errado: a busca some da fila antes de gastar
-  // consulta, ou encerra no próximo ponto seguro se já estiver rodando. O botão
-  // some quando a busca termina, porque aí não há o que parar.
-  card.btnPararEl.addEventListener("click", async () => {
-    const jobId = raiz.dataset.jobId;
-    card.btnPararEl.disabled = true;
+  // Stop exists for the wrong click: the search leaves the queue before spending
+  // a query, or ends at the next safe point if already running.
+  card.stopButton.addEventListener("click", async () => {
+    const jobId = root.dataset.jobId;
+    card.stopButton.disabled = true;
     if (!jobId) {
-      // Ainda nem chegou a virar job no servidor: some da tela e pronto.
-      raiz.remove();
+      root.remove();
       return;
     }
     try {
-      const r = await fetch(`/api/buscar/${jobId}/cancelar`, { method: "POST" });
-      if (!r.ok && r.status !== 409) throw new Error((await r.json().catch(() => ({}))).erro || "Falha ao parar.");
+      const response = await fetch(`/api/searches/${jobId}/cancel`, { method: "POST" });
+      if (!response.ok && response.status !== 409) {
+        throw new Error((await response.json().catch(() => ({}))).error || "Falha ao parar.");
+      }
     } catch (err) {
-      card.btnPararEl.disabled = false;
-      card.avisoEl.textContent = err.message || "Falha ao parar a busca.";
-      card.avisoEl.hidden = false;
+      card.stopButton.disabled = false;
+      card.noticeEl.textContent = err.message || "Falha ao parar a busca.";
+      card.noticeEl.hidden = false;
     }
   });
 
-  // Remover tira o card da tela E da memória — sem isso ele voltaria no
-  // próximo F5, que é justamente o que a persistência faz.
-  card.btnRemoverEl.addEventListener("click", () => {
-    const id = raiz.dataset.buscaId;
-    if (id) gravarBuscas(carregarBuscas().filter((b) => b.id !== id));
-    raiz.remove();
+  // Remove takes the card off the screen AND out of storage; otherwise it would
+  // come back on the next reload, which is exactly what persistence does.
+  card.removeButton.addEventListener("click", () => {
+    const id = root.dataset.searchId;
+    if (id) saveSearches(loadSearches().filter((search) => search.id !== id));
+    root.remove();
   });
 
-  filaBuscasEl.prepend(raiz);
+  queueEl.prepend(root);
   return card;
 }
 
-// Guarda as datas de uma perna (ida ou volta) pros botões de copiar do
-// cabeçalho. `secoes` é sempre [{ rotulo, dias, texto }] — o mesmo formato
-// que o SeatSpy já devolve e no qual TAP/AA são normalizados.
-function registrarPernaCopia(card, secoes) {
-  card.pernasCopia.push(secoes.filter((s) => s && s.dias?.length > 0));
+// `sections` is always [{ label, days, text }], the shape every source ends up in.
+function recordLegForCopy(card, sections) {
+  card.copyLegs.push(sections.filter((section) => section && section.days?.length > 0));
 }
 
-// Texto no formato "Mmm YYYY: DD, DD" — o mesmo que o gerador de alertas
-// espera colado nos campos de datas. Com mais de uma cabine, cada bloco vai
-// rotulado pra não misturar.
-function textoDaPerna(secoes) {
-  if (!secoes || secoes.length === 0) return "";
-  if (secoes.length === 1) return secoes[0].texto;
-  return secoes.map((s) => `${s.rotulo}\n${s.texto}`).join("\n\n");
+// "Mmm YYYY: DD, DD", what the alert generator expects pasted in its date
+// fields. With more than one cabin each block is labeled so they never mix.
+function legText(sections) {
+  if (!sections || sections.length === 0) return "";
+  if (sections.length === 1) return sections[0].text;
+  return sections.map((section) => `${section.label}\n${section.text}`).join("\n\n");
 }
 
-async function copiarPerna(card, indice, botao, rotuloOriginal) {
-  const texto = textoDaPerna(card.pernasCopia[indice]);
-  if (!texto) return;
-  await navigator.clipboard.writeText(texto);
-  botao.textContent = "Copiado!";
-  setTimeout(() => (botao.textContent = rotuloOriginal), 1500);
+async function copyLeg(card, index, button, originalLabel) {
+  const text = legText(card.copyLegs[index]);
+  if (!text) return;
+  await navigator.clipboard.writeText(text);
+  button.textContent = "Copiado!";
+  setTimeout(() => (button.textContent = originalLabel), 1500);
 }
 
-// Mostra a barra de ações do cabeçalho: "Copiar volta" só aparece quando a
-// busca tem duas pernas, e ambos os copiar só quando há datas de fato.
-function atualizarAcoesCard(card) {
-  card.acoesEl.hidden = false;
-  card.btnCopiarIdaEl.hidden = !textoDaPerna(card.pernasCopia[0]);
-  card.btnCopiarVoltaEl.hidden = !textoDaPerna(card.pernasCopia[1]);
+function updateCardActions(card) {
+  card.actionsEl.hidden = false;
+  card.copyOutboundButton.hidden = !legText(card.copyLegs[0]);
+  card.copyReturnButton.hidden = !legText(card.copyLegs[1]);
 }
 
+// Searches survive a reload. The server keeps each job in memory and the events
+// endpoint replays the current state, "done" included, so the front only has to
+// remember WHICH searches it started: the source, the original arguments and
+// the steps (one leg = one step = one server job). A finished step also keeps
+// its result, so a completed search comes back even if the server restarted.
+const SEARCHES_KEY = "awardtool.searches.v2";
+const LEGACY_SEARCHES_KEY = "botEmissoes.buscas.v1";
+const MAX_SAVED_SEARCHES = 10;
+const SEARCH_TTL_MS = 24 * 60 * 60 * 1000;
+// localStorage usually stops at 5 MB; the cap keeps one huge search from breaking the others' saves.
+const MAX_SEARCHES_BYTES = 1_500_000;
 
-// ── Buscas que sobrevivem ao F5 ─────────────────────────────────────────────
-//
-// O servidor guarda cada job em memória e o endpoint de eventos reenvia o
-// estado atual pra quem chega atrasado — inclusive o "done" com o relatório
-// inteiro. Então basta o front lembrar QUAIS buscas ele começou.
-//
-// De cada busca ficam guardados: a fonte, os argumentos originais e a lista de
-// passos (uma perna = um passo = um job no servidor). Quando um passo termina,
-// o resultado dele também é guardado — assim uma busca concluída volta na hora,
-// mesmo que o servidor tenha reiniciado no meio.
-const BUSCAS_KEY = "botEmissoes.buscas.v1";
-const MAX_BUSCAS_SALVAS = 10;
-const VALIDADE_BUSCA_MS = 24 * 60 * 60 * 1000;
-// localStorage costuma parar em 5 MB; um relatório de ano inteiro tem alguns KB.
-// O teto existe pra uma busca gigante não derrubar a gravação das outras.
-const MAX_BYTES_BUSCAS = 1_500_000;
-
-function carregarBuscas() {
+function loadSearches() {
   try {
-    const lista = JSON.parse(localStorage.getItem(BUSCAS_KEY)) || [];
-    const limite = Date.now() - VALIDADE_BUSCA_MS;
-    return lista.filter((b) => b.criadaEm > limite);
+    const cutoff = Date.now() - SEARCH_TTL_MS;
+    return (JSON.parse(localStorage.getItem(SEARCHES_KEY)) || []).filter((search) => search.createdAt > cutoff);
   } catch {
     return [];
   }
 }
 
-function gravarBuscas(lista) {
-  // Descarta as mais antigas até caber. Falhar em silêncio aqui seria pior que
-  // perder histórico: a busca em si continua funcionando.
-  let recorte = lista.slice(-MAX_BUSCAS_SALVAS);
-  while (recorte.length > 0) {
-    const texto = JSON.stringify(recorte);
-    if (texto.length <= MAX_BYTES_BUSCAS) {
+function saveSearches(list) {
+  // Drops the oldest until it fits. The search itself keeps working either way.
+  let slice = list.slice(-MAX_SAVED_SEARCHES);
+  while (slice.length > 0) {
+    const text = JSON.stringify(slice);
+    if (text.length <= MAX_SEARCHES_BYTES) {
       try {
-        localStorage.setItem(BUSCAS_KEY, texto);
+        localStorage.setItem(SEARCHES_KEY, text);
         return;
       } catch {
-        /* cota estourada: tenta com menos */
+        // Quota exceeded: try again with fewer.
       }
     }
-    recorte = recorte.slice(1);
+    slice = slice.slice(1);
   }
-  localStorage.removeItem(BUSCAS_KEY);
+  localStorage.removeItem(SEARCHES_KEY);
 }
 
-function persistirSessao(sessao) {
-  const lista = carregarBuscas().filter((b) => b.id !== sessao.registro.id);
-  lista.push(sessao.registro);
-  gravarBuscas(lista);
+function persistSession(session) {
+  const list = loadSearches().filter((search) => search.id !== session.record.id);
+  list.push(session.record);
+  saveSearches(list);
 }
 
-// `args` precisa ser serializável: é com ele que a busca é remontada depois.
-function novaSessao(fonte, args) {
+// `args` must be serializable: it is what rebuilds the search later.
+function newSession(source, args) {
   return {
-    registro: { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, fonte, args, passos: [], criadaEm: Date.now() },
-    retomando: false,
-    indice: 0,
+    record: { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, source, args, steps: [], createdAt: Date.now() },
+    resuming: false,
+    index: 0,
   };
 }
 
-// Qual função remonta cada fonte. A ordem dos argumentos é a mesma com que a
-// busca foi iniciada — por isso `args` é guardado como veio.
-const RETOMAR_POR_FONTE = {
-  tap: (...a) => iniciarBuscaTap(...a),
-  seatspy: (...a) => iniciarBuscaSeatspy(...a),
-  smiles: (...a) => iniciarBuscaSmiles(...a),
-  aa: (...a) => iniciarBuscaAA(...a),
-  latam: (...a) => iniciarBuscaLatam(...a),
-  iberia: (...a) => iniciarBuscaIberia(...a),
+// The argument order is the one each search started with, which is why `args` is kept as it came.
+const RESUME_BY_SOURCE = {
+  tap: (...args) => startTapSearch(...args),
+  seatspy: (...args) => startSeatspySearch(...args),
+  smiles: (...args) => startSmilesSearch(...args),
+  aa: (...args) => startAaSearch(...args),
+  latam: (...args) => startLatamSearch(...args),
+  iberia: (...args) => startIberiaSearch(...args),
 };
 
-async function restaurarBuscas() {
-  const salvas = carregarBuscas();
-  if (salvas.length === 0) return;
+async function restoreSearches() {
+  // Saved results before the English API have another shape; they are only kept for 24h anyway.
+  localStorage.removeItem(LEGACY_SEARCHES_KEY);
+  const saved = loadSearches();
+  if (saved.length === 0) return;
 
-  const vivas = [];
-  for (const registro of salvas) {
-    const remontar = RETOMAR_POR_FONTE[registro.fonte];
-    if (!remontar) continue;
+  const alive = [];
+  for (const record of saved) {
+    if (!RESUME_BY_SOURCE[record.source]) continue;
 
-    // Um passo serve se já tem resultado guardado (não depende do servidor) ou
-    // se o job ainda existe lá. Se o servidor reiniciou e o passo estava no ar,
-    // não há o que recuperar — a busca inteira sai da lista em vez de voltar
-    // como um card quebrado.
-    const passos = [];
-    let intacta = true;
-    for (const passo of registro.passos) {
-      if (passo.resultado) {
-        passos.push(passo);
+    // A step is usable when its result is saved (no server needed) or its job
+    // still exists there. If the server restarted mid-step there is nothing to
+    // recover, and the whole search leaves instead of coming back broken.
+    const steps = [];
+    let intact = true;
+    for (const step of record.steps) {
+      if (step.result) {
+        steps.push(step);
         continue;
       }
-      const existe = await fetch(`/api/buscar/${passo.jobId}/estado`)
-        .then((r) => r.ok)
+      const exists = await fetch(`/api/searches/${step.jobId}/state`)
+        .then((response) => response.ok)
         .catch(() => false);
-      if (!existe) {
-        intacta = false;
+      if (!exists) {
+        intact = false;
         break;
       }
-      passos.push(passo);
+      steps.push(step);
     }
-    if (!intacta) continue;
-
-    vivas.push({ ...registro, passos });
+    if (intact) alive.push({ ...record, steps });
   }
 
-  gravarBuscas(vivas);
-  for (const registro of vivas) {
-    RETOMAR_POR_FONTE[registro.fonte](...registro.args, { registro, retomando: true, indice: 0 });
+  saveSearches(alive);
+  for (const record of alive) {
+    RESUME_BY_SOURCE[record.source](...record.args, { record, resuming: true, index: 0 });
   }
 }
 
-// O servidor pode parar no meio e perguntar algo (hoje: o AwardTool devolvendo
-// janela após janela sem nenhum voo, que tanto pode ser rota sem prêmio quanto
-// fonte fora do ar). A busca fica parada até alguém clicar — por isso a
-// pergunta aparece no card, e não num alert que se perde.
-function mostrarPergunta(card, jobId, { id, mensagem }) {
-  tirarPergunta(card);
+// The server may stop and ask something (today: AwardTool returning window after
+// window without flights, which is either a route without awards or a source
+// that is down). The search waits for a click, so the question shows in the
+// card instead of an alert that gets lost.
+function showQuestion(card, jobId, { id, message }) {
+  removeQuestion(card);
 
-  const caixa = document.createElement("div");
-  caixa.className = "pergunta";
+  const box = document.createElement("div");
+  box.className = "question";
 
-  const texto = document.createElement("p");
-  texto.className = "pergunta-texto";
-  texto.textContent = mensagem;
+  const text = document.createElement("p");
+  text.className = "question-text";
+  text.textContent = message;
 
-  const acoes = document.createElement("div");
-  acoes.className = "pergunta-acoes";
+  const actions = document.createElement("div");
+  actions.className = "question-actions";
 
-  const responder = async (continuar, botao) => {
-    acoes.querySelectorAll("button").forEach((b) => (b.disabled = true));
-    botao.textContent = "...";
+  const answer = async (proceed, button) => {
+    actions.querySelectorAll("button").forEach((other) => (other.disabled = true));
+    button.textContent = "...";
     try {
-      const r = await fetch(`/api/buscar/${jobId}/responder`, {
+      const response = await fetch(`/api/searches/${jobId}/answer`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, continuar }),
+        body: JSON.stringify({ id, proceed }),
       });
-      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).erro || "Falha ao enviar a resposta.");
+      if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || "Falha ao enviar a resposta.");
     } catch (err) {
-      // Sem isso o card ficaria mudo com os dois botões travados.
-      texto.textContent = `${mensagem}\n\n${err.message}`;
-      acoes.querySelectorAll("button").forEach((b) => (b.disabled = false));
-      botao.textContent = continuar ? "Continuar" : "Parar aqui";
+      // Otherwise the card would go silent with both buttons locked.
+      text.textContent = `${message}\n\n${err.message}`;
+      actions.querySelectorAll("button").forEach((other) => (other.disabled = false));
+      button.textContent = proceed ? "Continuar" : "Parar aqui";
     }
   };
 
-  const btnSim = document.createElement("button");
-  btnSim.type = "button";
-  btnSim.className = "btn-acao btn-continuar";
-  btnSim.textContent = "Continuar";
-  btnSim.addEventListener("click", () => responder(true, btnSim));
+  const continueButton = document.createElement("button");
+  continueButton.type = "button";
+  continueButton.className = "action-button continue-button";
+  continueButton.textContent = "Continuar";
+  continueButton.addEventListener("click", () => answer(true, continueButton));
 
-  const btnNao = document.createElement("button");
-  btnNao.type = "button";
-  btnNao.className = "btn-acao btn-parar";
-  btnNao.textContent = "Parar aqui";
-  btnNao.addEventListener("click", () => responder(false, btnNao));
+  const stopButton = document.createElement("button");
+  stopButton.type = "button";
+  stopButton.className = "action-button stop-button";
+  stopButton.textContent = "Parar aqui";
+  stopButton.addEventListener("click", () => answer(false, stopButton));
 
-  acoes.append(btnSim, btnNao);
-  caixa.append(texto, acoes);
-  card.raiz.querySelector(".job-cabecalho").after(caixa);
+  actions.append(continueButton, stopButton);
+  box.append(text, actions);
+  card.root.querySelector(".job-header").after(box);
 }
 
-function tirarPergunta(card) {
-  card.raiz.querySelector(":scope > .pergunta")?.remove();
+function removeQuestion(card) {
+  card.root.querySelector(":scope > .question")?.remove();
 }
 
-// Roda uma busca via SSE e resolve com o resultado final: o relatório da
-// perna (TAP) ou a lista de pernas (SeatSpy, que traz ida e volta juntas).
-// Atualiza só o card dessa busca — outros cards em paralelo não são afetados.
-function buscarNoServidor(card, corpo, rotuloProgresso, sessao) {
+// Runs one step over SSE and resolves with its final result. Only this search's
+// card is touched; cards running in parallel are unaffected.
+function runOnServer(card, body, progressLabel, session) {
   return new Promise(async (resolve, reject) => {
-    card.progressoLabelEl.textContent = rotuloProgresso;
-    card.progressoJanelaEl.textContent = "";
-    atualizarBarra(card.barraEl, 0);
-    card.definirStatus("Na fila", "status-fila");
+    card.progressLabelEl.textContent = progressLabel;
+    card.progressWindowEl.textContent = "";
+    updateBar(card.barEl, 0);
+    card.setStatus("Na fila", "status-queued");
 
-    // Cada chamada é um passo da busca (a ida é um, a volta é outro). Ao
-    // retomar, o passo já conhecido é reaproveitado; quando acabam os passos
-    // guardados, a busca simplesmente continua de onde parou — que é o que
-    // teria acontecido se o F5 não existisse.
-    const passo = sessao?.registro.passos[sessao.indice];
-    sessao && sessao.indice++;
+    // When resuming, a known step is reused; once the saved steps run out, the
+    // search simply carries on from where it stopped.
+    const step = session?.record.steps[session.index];
+    if (session) session.index++;
 
-    // Antes de qualquer saída: o botão Remover precisa saber qual registro
-    // apagar, e a busca recuperada do armazenamento sai logo abaixo. Marcar só
-    // depois deixava justamente essas — as que sobrevivem ao F5 — sem o id, e
-    // então Remover tirava o card da tela mas não da memória: no próximo F5
-    // elas voltavam.
-    if (sessao) card.raiz.dataset.buscaId = sessao.registro.id;
+    // Set before any early exit: Remove must know which record to delete, and a
+    // restored search leaves right below.
+    if (session) card.root.dataset.searchId = session.record.id;
 
-    if (passo?.resultado) {
-      card.definirStatus("Pronto", "status-pronto");
-      atualizarBarra(card.barraEl, 1);
-      card.progressoLabelEl.textContent = "Recuperado";
-      resolve(passo.resultado);
+    if (step?.result) {
+      card.setStatus("Pronto", "status-done");
+      updateBar(card.barEl, 1);
+      card.progressLabelEl.textContent = "Recuperado";
+      resolve(step.result);
       return;
     }
 
-    const guardarResultado = (dados) => {
-      if (!sessao) return;
-      const alvo = sessao.registro.passos[sessao.indice - 1];
-      if (alvo) alvo.resultado = dados;
-      persistirSessao(sessao);
+    const keepResult = (result) => {
+      if (!session) return;
+      const target = session.record.steps[session.index - 1];
+      if (target) target.result = result;
+      persistSession(session);
     };
 
-    let jobId = passo?.jobId;
-    // O botão Parar precisa do job pra cancelar no servidor. Numa busca
-    // retomada o id já existe aqui; numa nova, é preenchido logo depois do POST.
-    if (jobId) card.raiz.dataset.jobId = jobId;
-    let resposta;
+    let jobId = step?.jobId;
+    if (jobId) card.root.dataset.jobId = jobId;
     if (!jobId) {
+      let response;
       try {
-        resposta = await fetch("/api/buscar", {
+        response = await fetch("/api/searches", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(corpo),
+          body: JSON.stringify(body),
         });
       } catch {
         reject(new Error("Não foi possível conectar ao servidor."));
         return;
       }
 
-      if (!resposta.ok) {
-        const corpo = await resposta.json().catch(() => ({}));
-        reject(new Error(corpo.erro || "Erro ao iniciar a busca."));
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        reject(new Error(error.error || "Erro ao iniciar a busca."));
         return;
       }
 
-      ({ jobId } = await resposta.json());
-      card.raiz.dataset.jobId = jobId;
-      if (sessao) {
-        sessao.registro.passos[sessao.indice - 1] = { jobId };
-        persistirSessao(sessao);
+      ({ jobId } = await response.json());
+      card.root.dataset.jobId = jobId;
+      if (session) {
+        session.record.steps[session.index - 1] = { jobId };
+        persistSession(session);
       }
     }
 
-    const fonte = new EventSource(`/api/buscar/${jobId}/eventos`);
+    const events = new EventSource(`/api/searches/${jobId}/events`);
 
-    fonte.onmessage = (evento) => {
-      const dado = JSON.parse(evento.data);
-      if (dado.tipo === "fila") {
-        card.definirStatus("Na fila", "status-fila");
-      } else if (dado.tipo === "iniciou") {
-        card.definirStatus("Buscando...", "status-buscando");
-      } else if (dado.tipo === "progresso") {
-        atualizarBarra(card.barraEl, dado.fracao);
-      } else if (dado.tipo === "janela") {
-        card.progressoJanelaEl.textContent = `Janela ${dado.atual} de ${dado.total} · ${dado.inicio} – ${dado.fim}`;
-        card.avisoEl.hidden = true;
-      } else if (dado.tipo === "aviso") {
-        // Aviso transitório (ex.: cooldown de bloqueio de frequência do
-        // AwardTool) — some sozinho quando a próxima janela/progresso chegar.
-        card.avisoEl.textContent = dado.mensagem;
-        card.avisoEl.hidden = !dado.mensagem;
-      } else if (dado.tipo === "pergunta") {
-        mostrarPergunta(card, jobId, dado);
-      } else if (dado.tipo === "respondida") {
-        tirarPergunta(card);
-      } else if (dado.tipo === "done") {
-        fonte.close();
-        tirarPergunta(card);
-        // Sem isso o rótulo fica congelado no último "Buscando..." depois de a
-        // busca acabar — o card diz "Pronto" e "Buscando volta..." ao mesmo
-        // tempo. Vale pra todas as fontes; só ficou visível na Iberia, que
-        // termina em segundos.
-        card.progressoLabelEl.textContent = "";
-        const dados = {
-          resultado: dado.pernas || dado.secaoAA || dado.secaoIberia || dado.relatorio,
-          planilhaUrl: dado.planilhaUrl,
-          arquivoLocal: dado.arquivoLocal,
-          avisoParcial: dado.avisoParcial,
-          tetosAplicados: dado.tetosAplicados,
-          confirmacao: dado.confirmacao,
-          interrompidaPorVoce: dado.interrompidaPorVoce,
+    events.onmessage = (message) => {
+      const event = JSON.parse(message.data);
+      if (event.type === "queued") {
+        card.setStatus("Na fila", "status-queued");
+      } else if (event.type === "started") {
+        card.setStatus("Buscando...", "status-searching");
+      } else if (event.type === "progress") {
+        updateBar(card.barEl, event.fraction);
+      } else if (event.type === "window") {
+        card.progressWindowEl.textContent = `Janela ${event.current} de ${event.total} · ${event.start} – ${event.end}`;
+        card.noticeEl.hidden = true;
+      } else if (event.type === "notice") {
+        // Transient (e.g. AwardTool's rate-limit cooldown): cleared by the next window or progress.
+        card.noticeEl.textContent = event.message;
+        card.noticeEl.hidden = !event.message;
+      } else if (event.type === "question") {
+        showQuestion(card, jobId, event);
+      } else if (event.type === "answered") {
+        removeQuestion(card);
+      } else if (event.type === "done") {
+        events.close();
+        removeQuestion(card);
+        // Otherwise the label stays frozen on the last "Buscando..." after the search ends.
+        card.progressLabelEl.textContent = "";
+        const result = {
+          result: event.legs || event.section || event.report,
+          spreadsheetUrl: event.spreadsheetUrl,
+          localFile: event.localFile,
+          partialNotice: event.partialNotice,
+          appliedCeilings: event.appliedCeilings,
+          confirmation: event.confirmation,
+          stoppedByUser: event.stoppedByUser,
         };
-        guardarResultado(dados);
-        resolve(dados);
-      } else if (dado.tipo === "erro") {
-        fonte.close();
-        tirarPergunta(card);
-        reject(new Error(dado.mensagem));
+        keepResult(result);
+        resolve(result);
+      } else if (event.type === "error") {
+        events.close();
+        removeQuestion(card);
+        reject(new Error(event.message));
       }
     };
 
-    fonte.onerror = () => {
-      fonte.close();
+    events.onerror = () => {
+      events.close();
       reject(new Error("Conexão com o servidor perdida."));
     };
   });
 }
 
-function formatarPorMes(dias) {
-  const grupos = new Map();
-  for (const { data, assentos, link } of dias) {
-    const [ano, mes, dia] = data.split("-");
-    const chave = `${ano}-${mes}`;
-    if (!grupos.has(chave)) grupos.set(chave, []);
-    // assentos só existe no SeatSpy (vagas do voo cotado, como no hover deles).
-    // link só existe na AA (emissão daquela data); data vai junto pro title.
-    grupos.get(chave).push({ dia, assentos, link, data });
+function groupByMonth(items) {
+  const groups = new Map();
+  for (const item of items) {
+    const [year, month] = item.date.split("-");
+    const key = `${year}-${month}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(item);
   }
-  return Array.from(grupos.keys())
+  return Array.from(groups.keys())
     .sort()
-    .map((chave) => {
-      const [ano, mesNum] = chave.split("-");
-      return { titulo: `${MESES_PT[parseInt(mesNum, 10) - 1]} ${ano}`, dias: grupos.get(chave) };
+    .map((key) => {
+      const [year, month] = key.split("-");
+      return { title: `${MONTHS_PT[parseInt(month, 10) - 1]} ${year}`, items: groups.get(key) };
     });
 }
 
-// Mesmo agrupamento por mês do formatarPorMes, mas mantendo o objeto do dia
-// inteiro (não só o número), pra aba Upgrade poder mostrar os dois preços.
-function agruparPorMesCompleto(itens) {
-  const grupos = new Map();
-  for (const item of itens) {
-    const [ano, mes] = item.data.split("-");
-    const chave = `${ano}-${mes}`;
-    if (!grupos.has(chave)) grupos.set(chave, []);
-    grupos.get(chave).push(item);
-  }
-  return Array.from(grupos.keys())
-    .sort()
-    .map((chave) => {
-      const [ano, mesNum] = chave.split("-");
-      return { titulo: `${MESES_PT[parseInt(mesNum, 10) - 1]} ${ano}`, itens: grupos.get(chave) };
-    });
-}
-
-function textoDatasPorMes(datas) {
-  return agruparPorMesCompleto(datas.map((data) => ({ data })))
-    .map((g) => `${g.titulo}: ${g.itens.map((it) => it.data.split("-")[2]).join(", ")}`)
+function datesTextByMonth(dates) {
+  return groupByMonth(dates.map((date) => ({ date })))
+    .map((group) => `${group.title}: ${group.items.map((item) => item.date.split("-")[2]).join(", ")}`)
     .join("\n");
 }
 
-// Dias em que Executiva e Econômica têm disponibilidade no mesmo dia — é
-// nesses dias que dá pra emitir a passagem em Econômica e pedir upgrade pra
-// Executiva na TAP, saindo mais barato que emitir direto em Executiva.
-function calcularUpgrade(diasExecutiva, diasEconomica) {
-  const mapaEconomica = new Map((diasEconomica || []).map((d) => [d.data, d.valorK]));
-  return (diasExecutiva || [])
-    .filter((d) => mapaEconomica.has(d.data))
-    .map((d) => ({ data: d.data, execK: d.valorK, econK: mapaEconomica.get(d.data) }))
-    .sort((a, b) => a.data.localeCompare(b.data));
+// Days where business and economy are both available: on those days the ticket
+// can be issued in economy and upgraded to business on TAP, cheaper than issuing
+// business directly.
+function computeUpgrade(businessDays, economyDays) {
+  const economyByDate = new Map((economyDays || []).map((day) => [day.date, day.valueK]));
+  return (businessDays || [])
+    .filter((day) => economyByDate.has(day.date))
+    .map((day) => ({ date: day.date, businessK: day.valueK, economyK: economyByDate.get(day.date) }))
+    .sort((a, b) => a.date.localeCompare(b.date));
 }
 
-function renderizarUpgrade(card) {
-  const { listaUpgradeEl, upgradeVazioEl, pernasParaUpgrade } = card;
-  listaUpgradeEl.innerHTML = "";
-  upgradeVazioEl.hidden = pernasParaUpgrade.length > 0;
-  if (pernasParaUpgrade.length === 0) return;
+function renderUpgrade(card) {
+  const { upgradeListEl, upgradeEmptyEl, upgradeLegs } = card;
+  upgradeListEl.innerHTML = "";
+  upgradeEmptyEl.hidden = upgradeLegs.length > 0;
+  if (upgradeLegs.length === 0) return;
 
-  for (const perna of pernasParaUpgrade) {
-    const cruzadas = calcularUpgrade(perna.executiva, perna.economica);
+  for (const leg of upgradeLegs) {
+    const crossed = computeUpgrade(leg.business, leg.economy);
 
-    // <details> deixa cada perna colapsável — pernas sem cruzamento já
-    // nascem fechadas, pra sobrar espaço pras que têm datas de verdade.
-    const bloco = document.createElement("details");
-    bloco.className = "perna-upgrade";
-    bloco.open = cruzadas.length > 0;
+    // Legs without crossed dates are born closed, leaving room for the ones that have them.
+    const block = document.createElement("details");
+    block.className = "upgrade-leg";
+    block.open = crossed.length > 0;
 
-    const cabecalho = document.createElement("summary");
-    cabecalho.className = "coluna-cabecalho";
+    const header = document.createElement("summary");
+    header.className = "column-header";
 
     const chevron = document.createElement("span");
     chevron.className = "chevron";
     chevron.setAttribute("aria-hidden", "true");
     chevron.textContent = "›";
-    cabecalho.appendChild(chevron);
+    header.appendChild(chevron);
 
-    const titulo = document.createElement("h3");
-    titulo.className = "upgrade-titulo";
-    titulo.textContent = perna.rotulo;
-    cabecalho.appendChild(titulo);
+    const title = document.createElement("h3");
+    title.className = "upgrade-title";
+    title.textContent = leg.label;
+    header.appendChild(title);
 
-    if (cruzadas.length > 0) {
-      const btnCopiar = document.createElement("button");
-      btnCopiar.type = "button";
-      btnCopiar.className = "btn-copiar";
-      btnCopiar.textContent = "Copiar datas";
-      btnCopiar.onclick = (evento) => {
-        // Impede que o clique no botão (dentro do <summary>) também colapse o bloco.
-        evento.preventDefault();
-        evento.stopPropagation();
-        navigator.clipboard.writeText(textoDatasPorMes(cruzadas.map((c) => c.data)));
-        btnCopiar.textContent = "Copiado!";
-        setTimeout(() => (btnCopiar.textContent = "Copiar datas"), 1500);
+    if (crossed.length > 0) {
+      const copyButton = document.createElement("button");
+      copyButton.type = "button";
+      copyButton.className = "copy-button";
+      copyButton.textContent = "Copiar datas";
+      copyButton.onclick = (event) => {
+        // Keeps the click on the button (inside <summary>) from also collapsing the block.
+        event.preventDefault();
+        event.stopPropagation();
+        navigator.clipboard.writeText(datesTextByMonth(crossed.map((item) => item.date)));
+        copyButton.textContent = "Copiado!";
+        setTimeout(() => (copyButton.textContent = "Copiar datas"), 1500);
       };
-      cabecalho.appendChild(btnCopiar);
+      header.appendChild(copyButton);
     }
-    bloco.appendChild(cabecalho);
+    block.appendChild(header);
 
-    const resumo = document.createElement("p");
-    resumo.className = "coluna-resumo";
-    resumo.textContent =
-      cruzadas.length > 0
-        ? `${cruzadas.length} dia(s) com as duas cabines disponíveis.`
+    const summary = document.createElement("p");
+    summary.className = "column-summary";
+    summary.textContent =
+      crossed.length > 0
+        ? `${crossed.length} dia(s) com as duas cabines disponíveis.`
         : "Nenhum dia com Executiva e Econômica juntas nesse período.";
-    bloco.appendChild(resumo);
+    block.appendChild(summary);
 
-    if (cruzadas.length > 0) {
-      const lista = document.createElement("div");
-      lista.className = "upgrade-lista";
-      for (const grupo of agruparPorMesCompleto(cruzadas)) {
-        const tituloMes = document.createElement("div");
-        tituloMes.className = "mes-titulo";
-        tituloMes.textContent = grupo.titulo;
-        lista.appendChild(tituloMes);
+    if (crossed.length > 0) {
+      const dates = document.createElement("div");
+      dates.className = "upgrade-dates";
+      for (const group of groupByMonth(crossed)) {
+        const monthTitle = document.createElement("div");
+        monthTitle.className = "month-title";
+        monthTitle.textContent = group.title;
+        dates.appendChild(monthTitle);
 
-        const linhas = document.createElement("div");
-        linhas.className = "upgrade-linhas";
-        for (const item of grupo.itens) {
-          const linha = document.createElement("div");
-          linha.className = "upgrade-linha";
+        const rows = document.createElement("div");
+        rows.className = "upgrade-rows";
+        for (const item of group.items) {
+          const row = document.createElement("div");
+          row.className = "upgrade-row";
 
-          const dia = document.createElement("span");
-          dia.className = "upgrade-dia";
-          dia.textContent = item.data.split("-")[2];
+          const day = document.createElement("span");
+          day.className = "upgrade-day";
+          day.textContent = item.date.split("-")[2];
 
-          const exec = document.createElement("span");
-          exec.className = "cartao cartao-executiva";
-          exec.textContent = item.execK != null ? `Exec ${item.execK}K` : "Exec (preço n/d)";
+          const business = document.createElement("span");
+          business.className = "date-chip cabin-business";
+          business.textContent = item.businessK != null ? `Exec ${item.businessK}K` : "Exec (preço n/d)";
 
-          const econ = document.createElement("span");
-          econ.className = "cartao cartao-economica";
-          econ.textContent = item.econK != null ? `Econ ${item.econK}K` : "Econ (preço n/d)";
+          const economy = document.createElement("span");
+          economy.className = "date-chip cabin-economy";
+          economy.textContent = item.economyK != null ? `Econ ${item.economyK}K` : "Econ (preço n/d)";
 
-          linha.append(dia, exec, econ);
-          linhas.appendChild(linha);
+          row.append(day, business, economy);
+          rows.appendChild(row);
         }
-        lista.appendChild(linhas);
+        dates.appendChild(rows);
       }
-      bloco.appendChild(lista);
+      block.appendChild(dates);
     }
 
-    listaUpgradeEl.appendChild(bloco);
+    upgradeListEl.appendChild(block);
   }
 }
 
-function renderizarColuna(colunaEl, secao, corClasse) {
-  const resumoEl = colunaEl.querySelector(".coluna-resumo");
-  const cartoesEl = colunaEl.querySelector(".cartoes");
-  const btnCopiar = colunaEl.querySelector(".btn-copiar");
+function renderColumn(columnEl, section, colorClass) {
+  const summaryEl = columnEl.querySelector(".column-summary");
+  const chipsEl = columnEl.querySelector(".date-chips");
+  const copyButton = columnEl.querySelector(".copy-button");
 
-  if (!secao.dias || secao.dias.length === 0) {
-    resumoEl.textContent = "Sem disponibilidade nesse período.";
-    btnCopiar.hidden = true;
-    colunaEl.open = false;
+  if (!section.days || section.days.length === 0) {
+    summaryEl.textContent = "Sem disponibilidade nesse período.";
+    copyButton.hidden = true;
+    columnEl.open = false;
     return;
   }
-  colunaEl.open = true;
+  columnEl.open = true;
 
-  // Fontes de milhas mostram "123K"; a LATAM manda unidade "BRL" e vira
-  // "R$ 909". Quando o SeatSpy marca o dia como disponível sem informar o
-  // valor (tarifa mista/parceira), menor/maior ficam null.
-  const fmt = (v) => (secao.unidade === "BRL" ? `R$ ${v.toLocaleString("pt-BR")}` : `${v}K`);
-  resumoEl.textContent =
-    secao.menor != null
-      ? `${fmt(secao.menor)}–${fmt(secao.maior)} · ${secao.dias.length} dia(s)`
-      : `Preço não informado · ${secao.dias.length} dia(s)`;
+  // Miles sources show "123K"; LATAM sends unit "BRL" and becomes "R$ 909". When
+  // SeatSpy marks a day available without a price, min/max are null.
+  const format = (value) => (section.unit === "BRL" ? `R$ ${value.toLocaleString("pt-BR")}` : `${value}K`);
+  summaryEl.textContent =
+    section.min != null
+      ? `${format(section.min)}–${format(section.max)} · ${section.days.length} dia(s)`
+      : `Preço não informado · ${section.days.length} dia(s)`;
 
-  const grupos = formatarPorMes(secao.dias);
-  cartoesEl.innerHTML = "";
-  for (const grupo of grupos) {
-    const tituloMes = document.createElement("div");
-    tituloMes.className = "mes-titulo";
-    tituloMes.textContent = grupo.titulo;
-    cartoesEl.appendChild(tituloMes);
+  chipsEl.innerHTML = "";
+  for (const group of groupByMonth(section.days)) {
+    const monthTitle = document.createElement("div");
+    monthTitle.className = "month-title";
+    monthTitle.textContent = group.title;
+    chipsEl.appendChild(monthTitle);
 
-    const linha = document.createElement("div");
-    linha.className = "linha-cartoes";
-    for (const { dia, assentos, link, data } of grupo.dias) {
-      // Com link o dia vira âncora de verdade (abre em aba nova, dá pra copiar
-      // o endereço); sem link continua sendo o mesmo span de antes.
-      const cartao = document.createElement(link ? "a" : "span");
-      cartao.className = `cartao ${corClasse}${link ? " cartao-link" : ""}`;
-      cartao.textContent = dia;
+    const row = document.createElement("div");
+    row.className = "date-chip-row";
+    for (const { date, seats, link } of group.items) {
+      // With a link the day becomes a real anchor (opens in a new tab, the address can be copied).
+      const chip = document.createElement(link ? "a" : "span");
+      chip.className = `date-chip ${colorClass}${link ? " date-chip-link" : ""}`;
+      chip.textContent = date.split("-")[2];
       if (link) {
-        cartao.href = link;
-        cartao.target = "_blank";
-        cartao.rel = "noopener noreferrer";
-        cartao.title = `Abrir a emissão de ${data} no site`;
+        chip.href = link;
+        chip.target = "_blank";
+        chip.rel = "noopener noreferrer";
+        chip.title = `Abrir a emissão de ${date} no site`;
       }
-      if (assentos > 0) {
-        const vagas = document.createElement("small");
-        vagas.className = "cartao-vagas";
-        vagas.textContent = assentos;
-        vagas.title = `${assentos} vaga(s)`;
-        cartao.appendChild(vagas);
+      if (seats > 0) {
+        const seatsEl = document.createElement("small");
+        seatsEl.className = "date-chip-seats";
+        seatsEl.textContent = seats;
+        seatsEl.title = `${seats} vaga(s)`;
+        chip.appendChild(seatsEl);
       }
-      linha.appendChild(cartao);
+      row.appendChild(chip);
     }
-    cartoesEl.appendChild(linha);
+    chipsEl.appendChild(row);
   }
 
-  btnCopiar.hidden = false;
-  btnCopiar.onclick = (evento) => {
-    evento.preventDefault();
-    evento.stopPropagation();
-    navigator.clipboard.writeText(secao.texto);
-    btnCopiar.textContent = "Copiado!";
-    setTimeout(() => (btnCopiar.textContent = "Copiar"), 1500);
+  copyButton.hidden = false;
+  copyButton.onclick = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    navigator.clipboard.writeText(section.text);
+    copyButton.textContent = "Copiado!";
+    setTimeout(() => (copyButton.textContent = "Copiar"), 1500);
   };
 }
 
-function renderizarPerna(destinoEl, rotulo, relatorio) {
-  const fragmento = tplPerna.content.cloneNode(true);
-  const raiz = fragmento.querySelector(".perna");
-  raiz.querySelector(".perna-titulo").textContent = rotulo;
-  renderizarColuna(raiz.querySelector(".coluna-executiva"), relatorio.executivas, "cartao-executiva");
-  renderizarColuna(raiz.querySelector(".coluna-economica"), relatorio.economicas, "cartao-economica");
-  destinoEl.appendChild(raiz);
+function renderTapLeg(targetEl, label, report) {
+  const fragment = legTemplate.content.cloneNode(true);
+  const root = fragment.querySelector(".leg");
+  root.querySelector(".leg-title").textContent = label;
+  renderColumn(root.querySelector(".column-business"), report.business, "cabin-business");
+  renderColumn(root.querySelector(".column-economy"), report.economy, "cabin-economy");
+  targetEl.appendChild(root);
 }
 
-// Versão do SeatSpy: as cabines vêm do servidor (Econômica/Premium/Executiva),
-// então as colunas são montadas dinamicamente em vez de vir do template.
-function renderizarPernaSecoes(destinoEl, rotulo, secoes) {
-  // details/summary: a perna inteira fecha num clique, igual às colunas.
-  const raiz = document.createElement("details");
-  raiz.className = "perna";
-  raiz.open = true;
+// For sources whose cabins come from the server, so columns are built on the fly.
+function renderLegSections(targetEl, label, sections) {
+  const root = document.createElement("details");
+  root.className = "leg";
+  root.open = true;
 
-  const titulo = document.createElement("summary");
-  titulo.className = "perna-titulo";
-  titulo.textContent = rotulo;
-  raiz.appendChild(titulo);
+  const title = document.createElement("summary");
+  title.className = "leg-title";
+  title.textContent = label;
+  root.appendChild(title);
 
-  const colunas = document.createElement("div");
-  colunas.className = "colunas colunas-3";
-  for (const secao of secoes) {
-    const col = document.createElement("details");
-    col.className = "coluna";
-    col.innerHTML = `
-      <summary class="coluna-cabecalho">
+  const columns = document.createElement("div");
+  columns.className = "columns columns-3";
+  for (const section of sections) {
+    const column = document.createElement("details");
+    column.className = "column";
+    column.innerHTML = `
+      <summary class="column-header">
         <span class="chevron" aria-hidden="true">›</span>
         <h3></h3>
-        <button type="button" class="btn-copiar">Copiar</button>
+        <button type="button" class="copy-button">Copiar</button>
       </summary>
-      <p class="coluna-resumo"></p>
-      <div class="cartoes"></div>`;
-    col.querySelector("h3").textContent = secao.rotulo;
-    renderizarColuna(col, secao, secao.corClasse);
-    colunas.appendChild(col);
+      <p class="column-summary"></p>
+      <div class="date-chips"></div>`;
+    column.querySelector("h3").textContent = section.label;
+    renderColumn(column, section, section.colorClass);
+    columns.appendChild(column);
   }
-  raiz.appendChild(colunas);
-  destinoEl.appendChild(raiz);
+  root.appendChild(columns);
+  targetEl.appendChild(root);
 }
 
-function tetoEmMilhas(input) {
-  const valor = parseFloat(input.value);
-  return Number.isFinite(valor) && valor > 0 ? Math.round(valor * 1000) : null;
+function ceilingInMiles(input) {
+  const value = parseFloat(input.value);
+  return Number.isFinite(value) && value > 0 ? Math.round(value * 1000) : null;
 }
 
-// Cada chamada cria seu próprio card (ver criarCardJob) e roda de forma
-// independente — várias buscas podem estar em andamento ao mesmo tempo
-// (modo agents), cada uma numa sessão própria do pool no servidor.
-async function iniciarBuscaTap(origem, destino, idaEVolta, tetos, sessao) {
-  sessao = sessao || novaSessao("tap", [origem, destino, idaEVolta, tetos]);
-  const seta = idaEVolta ? "⇄" : "→";
-  const card = criarCardJob(filaTap, `TAP: ${origem} ${seta} ${destino}`);
-  const avisosParciais = [];
+function showFailure(card, err) {
+  card.setStatus("Erro", "status-error");
+  card.noticeEl.textContent = err.message || "Erro inesperado.";
+  card.noticeEl.hidden = false;
+}
+
+function showPartialNotices(card, notices) {
+  if (notices.length === 0) return;
+  card.noticeEl.textContent = [...new Set(notices)].join(" ");
+  card.noticeEl.hidden = false;
+}
+
+async function startTapSearch(origin, destination, roundTrip, ceilings, session) {
+  session = session || newSession("tap", [origin, destination, roundTrip, ceilings]);
+  const arrow = roundTrip ? "⇄" : "→";
+  const card = createJobCard(tapQueue, `TAP: ${origin} ${arrow} ${destination}`);
+  const partialNotices = [];
 
   try {
-    const rotuloIda = idaEVolta ? "Buscando ida..." : "Buscando...";
-    const {
-      resultado: relatorioIda,
-      avisoParcial: avisoIda,
-      tetosAplicados,
-      interrompidaPorVoce,
-    } = await buscarNoServidor(card, { origem, destino, tetos }, rotuloIda, sessao);
-    if (tetosAplicados) {
-      card.tetosEl.textContent =
-        `Teto aplicado: Executiva ${tetosAplicados.executivaK}K · Econômica ${tetosAplicados.economicaK}K`;
-      card.tetosEl.hidden = false;
+    const outbound = await runOnServer(
+      card,
+      { source: "tap", origin, destination, ceilings },
+      roundTrip ? "Buscando ida..." : "Buscando...",
+      session,
+    );
+    const outboundReport = outbound.result;
+    if (outbound.appliedCeilings) {
+      card.ceilingsEl.textContent =
+        `Teto aplicado: Executiva ${outbound.appliedCeilings.businessK}K · Econômica ${outbound.appliedCeilings.economyK}K`;
+      card.ceilingsEl.hidden = false;
     }
-    if (avisoIda) avisosParciais.push(avisoIda);
-    const rotuloPernaIda = idaEVolta ? `Ida: ${origem} → ${destino}` : `${origem} → ${destino}`;
-    renderizarPerna(card.resultadoEl, rotuloPernaIda, relatorioIda);
-    card.pernasParaUpgrade.push({
-      rotulo: rotuloPernaIda,
-      executiva: relatorioIda.executivas.dias,
-      economica: relatorioIda.economicas.dias,
-    });
-    registrarPernaCopia(card, [
-      { rotulo: "Executiva", ...relatorioIda.executivas },
-      { rotulo: "Econômica", ...relatorioIda.economicas },
+    if (outbound.partialNotice) partialNotices.push(outbound.partialNotice);
+    const outboundLabel = roundTrip ? `Ida: ${origin} → ${destination}` : `${origin} → ${destination}`;
+    renderTapLeg(card.resultEl, outboundLabel, outboundReport);
+    card.upgradeLegs.push({ label: outboundLabel, business: outboundReport.business.days, economy: outboundReport.economy.days });
+    recordLegForCopy(card, [
+      { label: "Executiva", ...outboundReport.business },
+      { label: "Econômica", ...outboundReport.economy },
     ]);
-    if (!sessao.retomando) salvarNoHistorico(origem, destino, "tap");
+    if (!session.resuming) saveToHistory(origin, destination, "tap");
 
-    // Se você mandou parar a ida (janelas vazias = fonte provavelmente fora do
-    // ar), a volta nem começa: seriam mais 10 buscas gastas no AwardTool pra
-    // trazer o mesmo vazio.
-    let relatorioVolta = null;
-    if (idaEVolta && interrompidaPorVoce) {
-      avisosParciais.push("A volta não foi buscada. Você interrompeu a ida, e a volta gastaria as mesmas buscas no site.");
-    } else if (idaEVolta) {
-      const { resultado, avisoParcial: avisoVolta } = await buscarNoServidor(
+    // When you stopped the outbound (empty windows usually mean the source is
+    // down), the return does not start: it would spend 10 more AwardTool
+    // searches to bring the same emptiness.
+    let returnReport = null;
+    if (roundTrip && outbound.stoppedByUser) {
+      partialNotices.push("A volta não foi buscada. Você interrompeu a ida, e a volta gastaria as mesmas buscas no site.");
+    } else if (roundTrip) {
+      const inbound = await runOnServer(
         card,
-        { origem: destino, destino: origem, tetos },
-        "Buscando volta...", sessao,
+        { source: "tap", origin: destination, destination: origin, ceilings },
+        "Buscando volta...",
+        session,
       );
-      relatorioVolta = resultado;
-      if (avisoVolta) avisosParciais.push(avisoVolta);
-      const rotuloPernaVolta = `Volta: ${destino} → ${origem}`;
-      renderizarPerna(card.resultadoEl, rotuloPernaVolta, relatorioVolta);
-      card.pernasParaUpgrade.push({
-        rotulo: rotuloPernaVolta,
-        executiva: relatorioVolta.executivas.dias,
-        economica: relatorioVolta.economicas.dias,
-      });
-      registrarPernaCopia(card, [
-        { rotulo: "Executiva", ...relatorioVolta.executivas },
-        { rotulo: "Econômica", ...relatorioVolta.economicas },
+      returnReport = inbound.result;
+      if (inbound.partialNotice) partialNotices.push(inbound.partialNotice);
+      const returnLabel = `Volta: ${destination} → ${origin}`;
+      renderTapLeg(card.resultEl, returnLabel, returnReport);
+      card.upgradeLegs.push({ label: returnLabel, business: returnReport.business.days, economy: returnReport.economy.days });
+      recordLegForCopy(card, [
+        { label: "Executiva", ...returnReport.business },
+        { label: "Econômica", ...returnReport.economy },
       ]);
-      promoverUltimaParaIdaEVolta(origem, destino, "tap");
+      promoteLatestToRoundTrip(origin, destination, "tap");
     }
 
-    card.definirStatus("Pronto", "status-pronto");
-    card.resultadoEl.hidden = false;
-    card.subAbasEl.hidden = false;
-    if (avisosParciais.length > 0) {
-      card.avisoEl.textContent = [...new Set(avisosParciais)].join(" ");
-      card.avisoEl.hidden = false;
-    }
-    atualizarAcoesCard(card);
-    mostrarBotoesAlerta(card, "tap", origem, destino, [
-      { classe: "Executiva", secaoIda: relatorioIda.executivas, secaoVolta: relatorioVolta?.executivas },
-      { classe: "Econômica", secaoIda: relatorioIda.economicas, secaoVolta: relatorioVolta?.economicas },
+    card.setStatus("Pronto", "status-done");
+    card.resultEl.hidden = false;
+    card.subtabsEl.hidden = false;
+    showPartialNotices(card, partialNotices);
+    updateCardActions(card);
+    showAlertButtons(card, "tap", origin, destination, [
+      { cabinClass: "Executiva", outbound: outboundReport.business, inbound: returnReport?.business },
+      { cabinClass: "Econômica", outbound: outboundReport.economy, inbound: returnReport?.economy },
     ]);
   } catch (err) {
-    card.definirStatus("Erro", "status-erro");
-    card.avisoEl.textContent = err.message || "Erro inesperado.";
-    card.avisoEl.hidden = false;
+    showFailure(card, err);
   } finally {
-    card.progressoEl.hidden = true;
+    card.progressEl.hidden = true;
   }
 }
 
-// Idem, mas pro SeatSpy: uma busca só já traz ida e volta juntas (e consome
-// um crédito só), então não tem o passo separado de "buscar volta" da TAP.
-async function iniciarBuscaSeatspy(programa, origem, destino, idaEVolta, mostrarAssentos, sessao) {
-  sessao = sessao || novaSessao("seatspy", [programa, origem, destino, idaEVolta, mostrarAssentos]);
-  const rotuloPrograma = PROGRAMA_LABEL[programa] || programa;
-  const seta = idaEVolta ? "⇄" : "→";
-  const card = criarCardJob(filaSeatspy, `${rotuloPrograma}: ${origem} ${seta} ${destino}`);
+// One SeatSpy search already brings both legs (and spends a single credit).
+async function startSeatspySearch(program, origin, destination, roundTrip, showSeats, session) {
+  session = session || newSession("seatspy", [program, origin, destination, roundTrip, showSeats]);
+  const arrow = roundTrip ? "⇄" : "→";
+  const card = createJobCard(seatspyQueue, `${PROGRAM_LABELS[program] || program}: ${origin} ${arrow} ${destination}`);
 
   try {
-    const { resultado: pernas } = await buscarNoServidor(
+    const { result: legs } = await runOnServer(
       card,
       {
-        fonte: "seatspy",
-        companhia: programa,
-        origem,
-        destino,
-        idaEVolta,
-        mostrarAssentos,
-        tetos: {
-          economica: tetoEmMilhas(inputSeatspyTetoEconomica),
-          premium: tetoEmMilhas(inputSeatspyTetoPremium),
-          executiva: tetoEmMilhas(inputSeatspyTetoExecutiva),
+        source: "seatspy",
+        airline: program,
+        origin,
+        destination,
+        roundTrip,
+        showSeats,
+        ceilings: {
+          economy: ceilingInMiles(seatspyEconomyCeilingInput),
+          premium: ceilingInMiles(seatspyPremiumCeilingInput),
+          business: ceilingInMiles(seatspyBusinessCeilingInput),
         },
       },
-      idaEVolta ? "Buscando ida e volta..." : "Buscando...", sessao,
+      roundTrip ? "Buscando ida e volta..." : "Buscando...",
+      session,
     );
-    for (const perna of pernas) {
-      renderizarPernaSecoes(card.resultadoEl, perna.rotulo, perna.secoes);
-      registrarPernaCopia(card, perna.secoes);
+    for (const leg of legs) {
+      renderLegSections(card.resultEl, leg.label, leg.sections);
+      recordLegForCopy(card, leg.sections);
     }
-    if (!sessao.retomando) salvarNoHistorico(origem, destino, programa, idaEVolta);
+    if (!session.resuming) saveToHistory(origin, destination, program, roundTrip);
 
-    card.definirStatus("Pronto", "status-pronto");
-    card.resultadoEl.hidden = false;
-    // Sem aba Upgrade: o upgrade é um produto da TAP, comprado com as datas do
-    // AwardTool. Nos programas do SeatSpy a aba prometia uma jogada que não
-    // existe naquelas companhias.
-    // pernas[0] = ida, pernas[1] = volta (quando ida e volta). O rótulo
-    // "Premium" do SeatSpy vira "Premium Economy" na nomenclatura do portal.
-    atualizarAcoesCard(card);
-    const secaoDe = (perna, rotulo) => perna?.secoes.find((s) => s.rotulo === rotulo);
-    mostrarBotoesAlerta(card, programa, origem, destino, [
-      { classe: "Econômica", secaoIda: secaoDe(pernas[0], "Econômica"), secaoVolta: secaoDe(pernas[1], "Econômica") },
-      { classe: "Premium Economy", secaoIda: secaoDe(pernas[0], "Premium"), secaoVolta: secaoDe(pernas[1], "Premium") },
-      { classe: "Executiva", secaoIda: secaoDe(pernas[0], "Executiva"), secaoVolta: secaoDe(pernas[1], "Executiva") },
-      { classe: "Primeira Classe", secaoIda: secaoDe(pernas[0], "Primeira Classe"), secaoVolta: secaoDe(pernas[1], "Primeira Classe") },
+    card.setStatus("Pronto", "status-done");
+    card.resultEl.hidden = false;
+    // No Upgrade tab: the upgrade is a TAP product; on SeatSpy's programs it
+    // promised a move those airlines do not offer.
+    updateCardActions(card);
+    // SeatSpy's "Premium" is "Premium Economy" in the portal's naming.
+    const sectionOf = (leg, label) => leg?.sections.find((section) => section.label === label);
+    showAlertButtons(card, program, origin, destination, [
+      { cabinClass: "Econômica", outbound: sectionOf(legs[0], "Econômica"), inbound: sectionOf(legs[1], "Econômica") },
+      { cabinClass: "Premium Economy", outbound: sectionOf(legs[0], "Premium"), inbound: sectionOf(legs[1], "Premium") },
+      { cabinClass: "Executiva", outbound: sectionOf(legs[0], "Executiva"), inbound: sectionOf(legs[1], "Executiva") },
+      { cabinClass: "Primeira Classe", outbound: sectionOf(legs[0], "Primeira Classe"), inbound: sectionOf(legs[1], "Primeira Classe") },
     ]);
   } catch (err) {
-    card.definirStatus("Erro", "status-erro");
-    card.avisoEl.textContent = err.message || "Erro inesperado.";
-    card.avisoEl.hidden = false;
+    showFailure(card, err);
   } finally {
-    card.progressoEl.hidden = true;
+    card.progressEl.hidden = true;
   }
 }
 
-// Link da planilha daquela busca (uma planilha nova por busca — ver
-// planilha.ts). Vira um bloco clicável no card, junto do resultado.
-// O Google Sheets pode estar fora ou desconfigurado; o CSV local sempre existe
-// quando houve voo. Mostrar o caminho evita a pergunta "cadê a planilha?".
-function mostrarArquivoLocal(card, caminho, rotulo) {
-  if (!caminho) return;
-  const bloco = document.createElement("p");
-  bloco.className = "link-planilha";
-  bloco.textContent = `💾 Planilha da ${rotulo} em ${caminho}`;
-  card.raiz.appendChild(bloco);
+// Google Sheets may be down or unconfigured; the local CSV always exists when
+// there was a flight. Showing the path avoids the "where is the sheet?" question.
+function showLocalFile(card, path, label) {
+  if (!path) return;
+  const block = document.createElement("p");
+  block.className = "spreadsheet-link";
+  block.textContent = `💾 Planilha da ${label} em ${path}`;
+  card.root.appendChild(block);
 }
 
-function mostrarLinkPlanilha(card, url, rotulo) {
+function showSpreadsheetLink(card, url, label) {
   if (!url) return;
-  const bloco = document.createElement("p");
-  bloco.className = "link-planilha";
+  const block = document.createElement("p");
+  block.className = "spreadsheet-link";
   const link = document.createElement("a");
   link.href = url;
   link.target = "_blank";
   link.rel = "noopener";
-  link.textContent = `📊 Planilha da ${rotulo}`;
-  bloco.append(link);
-  card.raiz.appendChild(bloco);
+  link.textContent = `📊 Planilha da ${label}`;
+  block.append(link);
+  card.root.appendChild(block);
 }
 
-// Smiles: uma direção por job (o endpoint é de ida simples), com as três
-// cabines juntas — o front pede a volta como segundo job, igual à AA.
-async function iniciarBuscaSmiles(origem, destino, tetos, idaEVolta, periodo, sessao) {
-  sessao = sessao || novaSessao("smiles", [origem, destino, tetos, idaEVolta, periodo]);
-  const seta = idaEVolta ? "⇄" : "→";
-  const card = criarCardJob(filaSmiles, `Smiles: ${origem} ${seta} ${destino}`);
-  const avisosParciais = [];
-  let urlPlanilhaVolta = null;
-  const corpoBase = { fonte: "smiles", tetos, periodo };
+// One direction per job (the endpoint is one-way), all three cabins together.
+async function startSmilesSearch(origin, destination, ceilings, roundTrip, period, session) {
+  session = session || newSession("smiles", [origin, destination, ceilings, roundTrip, period]);
+  const arrow = roundTrip ? "⇄" : "→";
+  const card = createJobCard(smilesQueue, `Smiles: ${origin} ${arrow} ${destination}`);
+  const partialNotices = [];
+  const baseBody = { source: "smiles", ceilings, period };
 
   try {
-    const { resultado: pernasIda, avisoParcial: avisoIda, planilhaUrl: planilhaIda } = await buscarNoServidor(
+    const outbound = await runOnServer(
       card,
-      { ...corpoBase, origem, destino },
-      idaEVolta ? "Buscando ida..." : "Buscando...", sessao,
+      { ...baseBody, origin, destination },
+      roundTrip ? "Buscando ida..." : "Buscando...",
+      session,
     );
-    if (avisoIda) avisosParciais.push(avisoIda);
-    const rotuloIda = idaEVolta ? `Ida: ${origem} → ${destino}` : `${origem} → ${destino}`;
-    renderizarPernaSecoes(card.resultadoEl, rotuloIda, pernasIda[0].secoes);
-    registrarPernaCopia(card, pernasIda[0].secoes);
-    if (!sessao.retomando) salvarNoHistorico(origem, destino, "SMILES", false);
+    const outboundLegs = outbound.result;
+    if (outbound.partialNotice) partialNotices.push(outbound.partialNotice);
+    renderLegSections(card.resultEl, roundTrip ? `Ida: ${origin} → ${destination}` : `${origin} → ${destination}`, outboundLegs[0].sections);
+    recordLegForCopy(card, outboundLegs[0].sections);
+    if (!session.resuming) saveToHistory(origin, destination, "SMILES", false);
 
-    let pernasVolta = null;
-    if (idaEVolta) {
-      const { resultado, avisoParcial: avisoVolta, planilhaUrl: planilhaVolta } = await buscarNoServidor(
+    let returnLegs = null;
+    let returnSpreadsheetUrl = null;
+    if (roundTrip) {
+      const inbound = await runOnServer(
         card,
-        { ...corpoBase, origem: destino, destino: origem },
-        "Buscando volta...", sessao,
+        { ...baseBody, origin: destination, destination: origin },
+        "Buscando volta...",
+        session,
       );
-      pernasVolta = resultado;
-      if (avisoVolta) avisosParciais.push(avisoVolta);
-      urlPlanilhaVolta = planilhaVolta;
-      renderizarPernaSecoes(card.resultadoEl, `Volta: ${destino} → ${origem}`, pernasVolta[0].secoes);
-      registrarPernaCopia(card, pernasVolta[0].secoes);
-      promoverUltimaParaIdaEVolta(origem, destino, "SMILES");
+      returnLegs = inbound.result;
+      returnSpreadsheetUrl = inbound.spreadsheetUrl;
+      if (inbound.partialNotice) partialNotices.push(inbound.partialNotice);
+      renderLegSections(card.resultEl, `Volta: ${destination} → ${origin}`, returnLegs[0].sections);
+      recordLegForCopy(card, returnLegs[0].sections);
+      promoteLatestToRoundTrip(origin, destination, "SMILES");
     }
 
-    card.definirStatus("Pronto", "status-pronto");
-    card.resultadoEl.hidden = false;
-    if (avisosParciais.length > 0) {
-      card.avisoEl.textContent = [...new Set(avisosParciais)].join(" ");
-      card.avisoEl.hidden = false;
-    }
-    atualizarAcoesCard(card);
-    mostrarLinkPlanilha(card, planilhaIda, idaEVolta ? "ida" : "busca");
-    mostrarLinkPlanilha(card, urlPlanilhaVolta, "volta");
+    card.setStatus("Pronto", "status-done");
+    card.resultEl.hidden = false;
+    showPartialNotices(card, partialNotices);
+    updateCardActions(card);
+    showSpreadsheetLink(card, outbound.spreadsheetUrl, roundTrip ? "ida" : "busca");
+    showSpreadsheetLink(card, returnSpreadsheetUrl, "volta");
 
-    const secaoDe = (pernas, rotulo) => pernas?.[0]?.secoes.find((s) => s.rotulo === rotulo);
-    mostrarBotoesAlerta(card, "SMILES", origem, destino, [
-      { classe: "Econômica", secaoIda: secaoDe(pernasIda, "Econômica"), secaoVolta: secaoDe(pernasVolta, "Econômica") },
-      { classe: "Premium Economy", secaoIda: secaoDe(pernasIda, "Conforto"), secaoVolta: secaoDe(pernasVolta, "Conforto") },
-      { classe: "Executiva", secaoIda: secaoDe(pernasIda, "Executiva"), secaoVolta: secaoDe(pernasVolta, "Executiva") },
+    const sectionOf = (legs, label) => legs?.[0]?.sections.find((section) => section.label === label);
+    showAlertButtons(card, "SMILES", origin, destination, [
+      { cabinClass: "Econômica", outbound: sectionOf(outboundLegs, "Econômica"), inbound: sectionOf(returnLegs, "Econômica") },
+      { cabinClass: "Premium Economy", outbound: sectionOf(outboundLegs, "Conforto"), inbound: sectionOf(returnLegs, "Conforto") },
+      { cabinClass: "Executiva", outbound: sectionOf(outboundLegs, "Executiva"), inbound: sectionOf(returnLegs, "Executiva") },
     ]);
   } catch (err) {
-    card.definirStatus("Erro", "status-erro");
-    card.avisoEl.textContent = err.message || "Erro inesperado.";
-    card.avisoEl.hidden = false;
+    showFailure(card, err);
   } finally {
-    card.progressoEl.hidden = true;
+    card.progressEl.hidden = true;
   }
 }
 
-// ─── Geração de alertas (conexão com o vcc-alertas-portal) ────────────────
-// Depois que uma busca termina, cada cabine com disponibilidade vira um
-// botão "Gerar alerta": o servidor renderiza o card oficial do portal e a
-// legenda de WhatsApp, e devolve as imagens prontas pra encaminhar no grupo.
+// After a search, each cabin with availability becomes a "generate alert"
+// button: the server renders the portal's official card and the WhatsApp
+// caption, and returns the images ready to forward to the group.
 
-// Junta o menor/maior das duas direções (a legenda mostra uma faixa só).
-function faixaDeMilhas(secaoIda, secaoVolta) {
-  const menores = [secaoIda?.menor, secaoVolta?.menor].filter((v) => v != null);
-  const maiores = [secaoIda?.maior, secaoVolta?.maior].filter((v) => v != null);
+// Min/max across both directions: the caption shows a single range.
+function milesRange(outbound, inbound) {
+  const mins = [outbound?.min, inbound?.min].filter((value) => value != null);
+  const maxes = [outbound?.max, inbound?.max].filter((value) => value != null);
   return {
-    menorK: menores.length ? Math.min(...menores) : null,
-    maiorK: maiores.length ? Math.max(...maiores) : null,
+    minK: mins.length ? Math.min(...mins) : null,
+    maxK: maxes.length ? Math.max(...maxes) : null,
   };
 }
 
-function temDias(secao) {
-  return (secao?.dias?.length || 0) > 0;
+function hasDays(section) {
+  return (section?.days?.length || 0) > 0;
 }
 
-// opcoes: [{ classe, secaoIda, secaoVolta }] — só viram botão as cabines com
-// alguma disponibilidade.
-function mostrarBotoesAlerta(card, fonte, origem, destino, opcoes) {
-  const comDados = opcoes.filter((o) => temDias(o.secaoIda) || temDias(o.secaoVolta));
-  if (comDados.length === 0) return;
+async function requestAlert(body) {
+  const response = await fetch("/api/alerts", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const alert = await response.json();
+  if (!response.ok) throw new Error(alert.error || "Falha ao gerar o alerta.");
+  return alert;
+}
 
-  const barra = document.createElement("div");
-  barra.className = "alerta-acoes";
-  const rotuloBarra = document.createElement("span");
-  rotuloBarra.className = "alerta-rotulo";
-  rotuloBarra.textContent = "Alerta pro grupo:";
-  barra.appendChild(rotuloBarra);
+// options: [{ cabinClass, outbound, inbound }]; only cabins with some availability become buttons.
+function showAlertButtons(card, source, origin, destination, options) {
+  const withData = options.filter((option) => hasDays(option.outbound) || hasDays(option.inbound));
+  if (withData.length === 0) return;
 
-  for (const opcao of comDados) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "btn-alerta";
-    btn.textContent = `📢 ${opcao.classe}`;
-    btn.addEventListener("click", async () => {
-      btn.disabled = true;
-      btn.textContent = "⏳ Gerando...";
+  const bar = document.createElement("div");
+  bar.className = "alert-actions";
+  const label = document.createElement("span");
+  label.className = "alert-label";
+  label.textContent = "Alerta pro grupo:";
+  bar.appendChild(label);
+
+  for (const option of withData) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "alert-button";
+    button.textContent = `📢 ${option.cabinClass}`;
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      button.textContent = "⏳ Gerando...";
       try {
-        const resposta = await fetch("/api/alerta", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            fonte,
-            origem,
-            destino,
-            classe: opcao.classe,
-            ...faixaDeMilhas(opcao.secaoIda, opcao.secaoVolta),
-            textoIda: temDias(opcao.secaoIda) ? opcao.secaoIda.texto : "",
-            textoVolta: temDias(opcao.secaoVolta) ? opcao.secaoVolta.texto : "",
-          }),
+        const alert = await requestAlert({
+          source,
+          origin,
+          destination,
+          cabinClass: option.cabinClass,
+          ...milesRange(option.outbound, option.inbound),
+          outboundText: hasDays(option.outbound) ? option.outbound.text : "",
+          returnText: hasDays(option.inbound) ? option.inbound.text : "",
         });
-        const corpo = await resposta.json();
-        if (!resposta.ok) throw new Error(corpo.erro || "Falha ao gerar o alerta.");
-        mostrarAlertaGerado(card, corpo);
-        btn.textContent = `✓ ${opcao.classe}`;
+        showGeneratedAlert(card, alert);
+        button.textContent = `✓ ${option.cabinClass}`;
       } catch (err) {
-        btn.textContent = `📢 ${opcao.classe}`;
-        card.avisoEl.textContent = err.message || "Falha ao gerar o alerta.";
-        card.avisoEl.hidden = false;
+        button.textContent = `📢 ${option.cabinClass}`;
+        card.noticeEl.textContent = err.message || "Falha ao gerar o alerta.";
+        card.noticeEl.hidden = false;
       } finally {
-        btn.disabled = false;
+        button.disabled = false;
       }
     });
-    barra.appendChild(btn);
+    bar.appendChild(button);
   }
-  // No topo, logo abaixo do cabeçalho: gerar alerta é a ação que se faz assim
-  // que a busca termina, e no fim do card ela ficava atrás de meses de
-  // resultado.
-  card.raiz.querySelector(".job-cabecalho").after(barra);
+  // At the top, right under the header: generating the alert is what happens as
+  // soon as the search ends, and at the bottom it sat behind months of results.
+  card.root.querySelector(".job-header").after(bar);
 }
 
-// Monta um bloco "imagens + legenda + copiar" — usado tanto pro alerta
-// principal quanto pro complementar de combinações.
-function blocoDeAlerta(titulo, imagens, legenda) {
-  const bloco = document.createElement("div");
-  bloco.className = "alerta-resultado";
+// An "images + caption + copy" block, used for the main alert and the combinations one.
+function alertBlock(title, images, caption) {
+  const block = document.createElement("div");
+  block.className = "alert-result";
 
-  if (titulo) {
-    const tituloEl = document.createElement("div");
-    tituloEl.className = "alerta-titulo";
-    tituloEl.textContent = titulo;
-    bloco.appendChild(tituloEl);
+  if (title) {
+    const titleEl = document.createElement("div");
+    titleEl.className = "alert-title";
+    titleEl.textContent = title;
+    block.appendChild(titleEl);
   }
 
-  const galeria = document.createElement("div");
-  galeria.className = "alerta-galeria";
-  for (const url of imagens) {
+  const gallery = document.createElement("div");
+  gallery.className = "alert-gallery";
+  for (const url of images) {
     const link = document.createElement("a");
     link.href = url;
     link.target = "_blank";
     link.download = url.split("/").pop();
-    const img = document.createElement("img");
-    img.src = url;
-    img.alt = "Imagem do alerta";
-    link.appendChild(img);
-    galeria.appendChild(link);
+    const image = document.createElement("img");
+    image.src = url;
+    image.alt = "Imagem do alerta";
+    link.appendChild(image);
+    gallery.appendChild(link);
   }
-  bloco.appendChild(galeria);
+  block.appendChild(gallery);
 
-  const legendaEl = document.createElement("pre");
-  legendaEl.className = "alerta-legenda";
-  legendaEl.textContent = legenda;
-  bloco.appendChild(legendaEl);
+  const captionEl = document.createElement("pre");
+  captionEl.className = "alert-caption";
+  captionEl.textContent = caption;
+  block.appendChild(captionEl);
 
-  const btnCopiar = document.createElement("button");
-  btnCopiar.type = "button";
-  btnCopiar.className = "btn-copiar";
-  btnCopiar.textContent = "Copiar legenda";
-  btnCopiar.addEventListener("click", () => {
-    navigator.clipboard.writeText(legenda);
-    btnCopiar.textContent = "Copiado!";
-    setTimeout(() => (btnCopiar.textContent = "Copiar legenda"), 1500);
+  const copyButton = document.createElement("button");
+  copyButton.type = "button";
+  copyButton.className = "copy-button";
+  copyButton.textContent = "Copiar legenda";
+  copyButton.addEventListener("click", () => {
+    navigator.clipboard.writeText(caption);
+    copyButton.textContent = "Copiado!";
+    setTimeout(() => (copyButton.textContent = "Copiar legenda"), 1500);
   });
-  bloco.appendChild(btnCopiar);
+  block.appendChild(copyButton);
 
-  return bloco;
+  return block;
 }
 
-function mostrarAlertaGerado(card, { imagens, legenda, imagemCombo, legendaCombo }) {
-  // Combos só vem quando as datas de ida e volta se cruzam — é o alerta que
-  // vocês mandam depois do principal, com as combinações já prontas.
-  const temCombo = Boolean(imagemCombo);
-  // As imagens nascem logo abaixo dos botões que as geraram, não no fim do card.
-  inserirDepoisDoAlerta(card, blocoDeAlerta(temCombo ? "Alerta principal" : "", imagens, legenda));
-  if (temCombo) {
-    inserirDepoisDoAlerta(card, blocoDeAlerta("Combinações ida + volta", [imagemCombo], legendaCombo || ""));
-  }
+function showGeneratedAlert(card, { images, caption, comboImage, comboCaption }) {
+  // Combos only come when outbound and return dates cross: the alert sent after
+  // the main one, with the combinations ready.
+  const hasCombo = Boolean(comboImage);
+  insertAfterAlert(card, alertBlock(hasCombo ? "Alerta principal" : "", images, caption));
+  if (hasCombo) insertAfterAlert(card, alertBlock("Combinações ida + volta", [comboImage], comboCaption || ""));
 }
 
-// Empilha os blocos gerados na ordem em que saíram, logo depois da barra de
-// botões — e cai pro fim do card se a barra não existir (fonte sem alerta).
-function inserirDepoisDoAlerta(card, bloco) {
-  // Empilha na ordem em que saíram, logo abaixo da barra que os gerou — e nunca
-  // depois do resultado, que pode ter um ano de datas na frente.
-  const anteriores = card.raiz.querySelectorAll(":scope > .alerta-resultado");
-  const ancora = anteriores.length
-    ? anteriores[anteriores.length - 1]
-    : card.raiz.querySelector(":scope > .alerta-acoes");
-  if (ancora) ancora.after(bloco);
-  else card.raiz.querySelector(".job-cabecalho").after(bloco);
+// Stacks generated blocks in order right under the bar that produced them, never
+// after the result, which may have a year of dates in front.
+function insertAfterAlert(card, block) {
+  const previous = card.root.querySelectorAll(":scope > .alert-result");
+  const anchor = previous.length ? previous[previous.length - 1] : card.root.querySelector(":scope > .alert-actions");
+  if (anchor) anchor.after(block);
+  else card.root.querySelector(".job-header").after(block);
 }
 
-// Um atalho clicável no topo do card: o dia mais barato de cada perna, com o
-// link que abre a emissão daquela data no site. Mesmo formato do bloco da
-// LATAM — valor, data e link à direita. Todos os dias do resultado continuam
-// clicáveis; isto só evita ter que descer um ano de datas pra achar um.
-function mostrarExemploEmissaoAA(card, pernas) {
-  const linhas = pernas
-    .map(({ rotulo, secao }) => ({ rotulo, dia: diaMaisBaratoComLink(secao) }))
-    .filter(({ dia }) => dia);
-  if (linhas.length === 0) return;
+// A clickable shortcut at the top of the card: each leg's cheapest day with its
+// booking link. Every day stays clickable; this only saves scrolling a year of dates.
+function showAaBookingShortcut(card, legs) {
+  const rows = legs.map(({ label, section }) => ({ label, day: cheapestDayWithLink(section) })).filter(({ day }) => day);
+  if (rows.length === 0) return;
 
-  const bloco = document.createElement("div");
-  bloco.className = "exemplo-aa";
+  const block = document.createElement("div");
+  block.className = "aa-booking-shortcut";
 
-  const titulo = document.createElement("div");
-  titulo.className = "alerta-titulo";
-  titulo.textContent = "Ir direto pra emissão";
-  bloco.appendChild(titulo);
+  const title = document.createElement("div");
+  title.className = "alert-title";
+  title.textContent = "Ir direto pra emissão";
+  block.appendChild(title);
 
-  for (const { rotulo, dia } of linhas) {
-    const linha = document.createElement("div");
-    linha.className = "par-latam";
+  for (const { label, day } of rows) {
+    const row = document.createElement("div");
+    row.className = "pair-row";
 
-    const valor = document.createElement("strong");
-    valor.className = "par-valor";
-    valor.textContent = `${dia.valorK}K`;
+    const value = document.createElement("strong");
+    value.className = "pair-value";
+    value.textContent = `${day.valueK}K`;
 
-    const datas = document.createElement("span");
-    datas.className = "par-datas";
-    datas.textContent = `${rotulo} · ${dia.data.split("-").reverse().slice(0, 2).join("/")}`;
+    const dates = document.createElement("span");
+    dates.className = "pair-dates";
+    dates.textContent = `${label} · ${day.date.split("-").reverse().slice(0, 2).join("/")}`;
 
     const link = document.createElement("a");
-    link.className = "par-abrir";
-    link.href = dia.link;
+    link.className = "pair-open";
+    link.href = day.link;
     link.target = "_blank";
     link.rel = "noopener noreferrer";
     link.textContent = "abrir no site";
 
-    linha.append(valor, datas, link);
-    bloco.appendChild(linha);
+    row.append(value, dates, link);
+    block.appendChild(row);
   }
 
-  card.raiz.querySelector(".job-cabecalho").after(bloco);
+  card.root.querySelector(".job-header").after(block);
 }
 
-// O dia mais barato que tem link. No empate fica o primeiro, que é o mais
-// próximo — os dias vêm em ordem cronológica.
-function diaMaisBaratoComLink(secao) {
-  const comLink = (secao?.dias ?? []).filter((d) => d.link);
-  if (comLink.length === 0) return null;
-  return comLink.reduce((menor, d) => (d.valorK < menor.valorK ? d : menor));
+// Ties keep the first one, the nearest: days come in chronological order.
+function cheapestDayWithLink(section) {
+  const withLink = (section?.days ?? []).filter((day) => day.link);
+  if (withLink.length === 0) return null;
+  return withLink.reduce((cheapest, day) => (day.valueK < cheapest.valueK ? day : cheapest));
 }
 
-// AA: uma cabine por busca, cada direção é um job próprio (como na TAP).
-// Sem aba Upgrade (não há cruzamento de cabines numa busca de cabine única).
-async function iniciarBuscaAA(origem, destino, cabine, maxConexoes, tetoK, idaEVolta, passageiros = 1, sessao) {
-  sessao = sessao || novaSessao("aa", [origem, destino, cabine, maxConexoes, tetoK, idaEVolta, passageiros]);
-  const seta = idaEVolta ? "⇄" : "→";
-  const rotuloCabine = CABINE_AA_LABEL[cabine] || cabine;
-  // O caso comum é 1 passageiro; só polui o título do card quando for mais.
-  const rotuloPax = passageiros > 1 ? `, ${passageiros} passageiros` : "";
-  const card = criarCardJob(
-    filaAa,
-    `American Airlines (${rotuloCabine}${rotuloPax}): ${origem} ${seta} ${destino}`,
-  );
-  const avisosParciais = [];
-  const corpoBase = { fonte: "aa", cabine, maxConexoes, teto: tetoK, passageiros };
+// One cabin per search, one job per direction; no Upgrade tab (a single cabin never crosses another).
+async function startAaSearch(origin, destination, cabin, maxStops, ceiling, roundTrip, passengers = 1, session) {
+  session = session || newSession("aa", [origin, destination, cabin, maxStops, ceiling, roundTrip, passengers]);
+  const arrow = roundTrip ? "⇄" : "→";
+  const cabinLabel = AA_CABIN_LABELS[cabin] || cabin;
+  // One passenger is the common case; the title only mentions it when there are more.
+  const passengersLabel = passengers > 1 ? `, ${passengers} passageiros` : "";
+  const card = createJobCard(aaQueue, `American Airlines (${cabinLabel}${passengersLabel}): ${origin} ${arrow} ${destination}`);
+  const partialNotices = [];
+  const baseBody = { source: "aa", cabin, maxStops, ceiling, passengers };
 
   try {
-    const rotuloIda = idaEVolta ? "Buscando ida..." : "Buscando...";
-    const { resultado: secaoIda, avisoParcial: avisoIda } = await buscarNoServidor(
+    const outbound = await runOnServer(
       card,
-      { ...corpoBase, origem, destino },
-      rotuloIda,
-      sessao,
+      { ...baseBody, origin, destination },
+      roundTrip ? "Buscando ida..." : "Buscando...",
+      session,
     );
-    if (avisoIda) avisosParciais.push(avisoIda);
-    const rotuloPernaIda = idaEVolta ? `Ida: ${origem} → ${destino}` : `${origem} → ${destino}`;
-    renderizarPernaSecoes(card.resultadoEl, rotuloPernaIda, [{ ...secaoIda, corClasse: CABINE_AA_COR[cabine] }]);
-    registrarPernaCopia(card, [secaoIda]);
-    if (!sessao.retomando) salvarNoHistorico(origem, destino, "AA", false, { cabine, passageiros });
-
-    let secaoVolta = null;
-    if (idaEVolta) {
-      const { resultado, avisoParcial: avisoVolta } = await buscarNoServidor(
-        card,
-        { ...corpoBase, origem: destino, destino: origem },
-        "Buscando volta...", sessao,
-      );
-      secaoVolta = resultado;
-      if (avisoVolta) avisosParciais.push(avisoVolta);
-      renderizarPernaSecoes(card.resultadoEl, `Volta: ${destino} → ${origem}`, [
-        { ...secaoVolta, corClasse: CABINE_AA_COR[cabine] },
-      ]);
-      registrarPernaCopia(card, [secaoVolta]);
-      promoverUltimaParaIdaEVolta(origem, destino, "AA");
-    }
-
-    card.definirStatus("Pronto", "status-pronto");
-    card.resultadoEl.hidden = false;
-    if (avisosParciais.length > 0) {
-      card.avisoEl.textContent = [...new Set(avisosParciais)].join(" ");
-      card.avisoEl.hidden = false;
-    }
-    atualizarAcoesCard(card);
-    // Antes da barra de alerta: as duas entram logo abaixo do cabeçalho, e a
-    // última a entrar é a que fica no topo.
-    mostrarExemploEmissaoAA(card, [
-      { rotulo: `${origem} → ${destino}`, secao: secaoIda },
-      ...(secaoVolta ? [{ rotulo: `${destino} → ${origem}`, secao: secaoVolta }] : []),
+    const outboundSection = outbound.result;
+    if (outbound.partialNotice) partialNotices.push(outbound.partialNotice);
+    renderLegSections(card.resultEl, roundTrip ? `Ida: ${origin} → ${destination}` : `${origin} → ${destination}`, [
+      { ...outboundSection, colorClass: AA_CABIN_CLASSES[cabin] },
     ]);
-    mostrarBotoesAlerta(card, "aa", origem, destino, [
-      { classe: CABINE_AA_LABEL[cabine] || cabine, secaoIda, secaoVolta },
+    recordLegForCopy(card, [outboundSection]);
+    if (!session.resuming) saveToHistory(origin, destination, "AA", false, { cabin, passengers });
+
+    let returnSection = null;
+    if (roundTrip) {
+      const inbound = await runOnServer(
+        card,
+        { ...baseBody, origin: destination, destination: origin },
+        "Buscando volta...",
+        session,
+      );
+      returnSection = inbound.result;
+      if (inbound.partialNotice) partialNotices.push(inbound.partialNotice);
+      renderLegSections(card.resultEl, `Volta: ${destination} → ${origin}`, [
+        { ...returnSection, colorClass: AA_CABIN_CLASSES[cabin] },
+      ]);
+      recordLegForCopy(card, [returnSection]);
+      promoteLatestToRoundTrip(origin, destination, "AA");
+    }
+
+    card.setStatus("Pronto", "status-done");
+    card.resultEl.hidden = false;
+    showPartialNotices(card, partialNotices);
+    updateCardActions(card);
+    // Before the alert bar: both go right under the header, and the last one in stays on top.
+    showAaBookingShortcut(card, [
+      { label: `${origin} → ${destination}`, section: outboundSection },
+      ...(returnSection ? [{ label: `${destination} → ${origin}`, section: returnSection }] : []),
+    ]);
+    showAlertButtons(card, "aa", origin, destination, [
+      { cabinClass: AA_CABIN_LABELS[cabin] || cabin, outbound: outboundSection, inbound: returnSection },
     ]);
   } catch (err) {
-    card.definirStatus("Erro", "status-erro");
-    card.avisoEl.textContent = err.message || "Erro inesperado.";
-    card.avisoEl.hidden = false;
+    showFailure(card, err);
   } finally {
-    card.progressoEl.hidden = true;
+    card.progressEl.hidden = true;
   }
 }
 
-// Mostra o resultado da confirmação em milhas: o par de datas mais barato,
-// o total e o print de cada perna (o mesmo enquadramento do alerta).
-// A LATAM precifica o PAR, não as pernas somadas: o mesmo GRU⇄JNB que dava
-// 243.535 milhas perna a perna sai por 90.302 comprado junto. Cada par
-// confirmado vem com a escada de combinações milhas+dinheiro que a LATAM
-// oferece — quatro linhas, da opção "tudo em milhas" até "mínimo de milhas".
-function mostrarConfirmacaoMilhas(card, confirmacao) {
-  const pares = confirmacao?.pares ?? [];
-  if (pares.length === 0) return;
+// LATAM prices the PAIR, not the legs added up: the same GRU⇄JNB that cost
+// 243.535 miles leg by leg costs 90.302 bought together. Each confirmed pair
+// comes with LATAM's miles+cash ladder, from "all miles" to "fewest miles".
+function showMilesConfirmation(card, confirmation) {
+  const pairs = confirmation?.pairs ?? [];
+  if (pairs.length === 0) return;
 
-  const bloco = document.createElement("div");
-  // Classe própria: com `alerta-resultado` ele era confundido com um alerta já
-  // gerado, e os alertas novos iam parar depois dele, no fim do card.
-  bloco.className = "confirmacao-latam";
+  const block = document.createElement("div");
+  // Its own class: as `alert-result` it was taken for a generated alert, and new
+  // alerts ended up after it, at the bottom of the card.
+  block.className = "latam-confirmation";
 
-  const titulo = document.createElement("div");
-  titulo.className = "alerta-titulo";
-  titulo.textContent = "Ida e volta conferido";
-  bloco.appendChild(titulo);
+  const title = document.createElement("div");
+  title.className = "alert-title";
+  title.textContent = "Ida e volta conferido";
+  block.appendChild(title);
 
-  for (const par of pares) bloco.appendChild(blocoDoPar(card, par));
+  for (const pair of pairs) block.appendChild(pairRow(pair));
 
-  const btnCopiar = document.createElement("button");
-  btnCopiar.type = "button";
-  btnCopiar.className = "btn-copiar";
-  btnCopiar.textContent = "Copiar";
-  const texto = pares
+  const copyButton = document.createElement("button");
+  copyButton.type = "button";
+  copyButton.className = "copy-button";
+  copyButton.textContent = "Copiar";
+  const text = pairs
     .map(
-      (p) =>
-        `${p.opcoes[0].milhas.toLocaleString("pt-BR")} pts + R$ ` +
-        `${p.opcoes[0].totalReais.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} · ` +
-        `${p.dataIda} → ${p.dataVolta}`,
+      (pair) =>
+        `${pair.options[0].miles.toLocaleString("pt-BR")} pts + R$ ` +
+        `${pair.options[0].totalReais.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} · ` +
+        `${pair.outboundDate} → ${pair.returnDate}`,
     )
     .join("\n");
-  btnCopiar.addEventListener("click", () => {
-    navigator.clipboard.writeText(texto);
-    btnCopiar.textContent = "Copiado!";
-    setTimeout(() => (btnCopiar.textContent = "Copiar"), 1500);
+  copyButton.addEventListener("click", () => {
+    navigator.clipboard.writeText(text);
+    copyButton.textContent = "Copiado!";
+    setTimeout(() => (copyButton.textContent = "Copiar"), 1500);
   });
-  bloco.appendChild(btnCopiar);
-  // Preço perto do topo: é o número que se procura, e no fim do card ele ficava
-  // atrás de um ano de datas.
-  card.raiz.querySelector(".job-cabecalho").after(bloco);
+  block.appendChild(copyButton);
+  // Price near the top: it is the number people look for, and at the bottom it sat behind a year of dates.
+  card.root.querySelector(".job-header").after(block);
 }
 
-function blocoDoPar(card, par) {
-  const fmt = (n) => n.toLocaleString("pt-BR");
-  const reais = (n) => n.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
-  const dataBR = (iso) => iso.split("-").reverse().slice(0, 2).join("/");
+function pairRow(pair) {
+  const number = (value) => value.toLocaleString("pt-BR");
+  const reais = (value) => value.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
+  const shortDate = (iso) => iso.split("-").reverse().slice(0, 2).join("/");
 
-  const linha = document.createElement("div");
-  linha.className = "par-latam";
+  const row = document.createElement("div");
+  row.className = "pair-row";
 
-  const valor = document.createElement("strong");
-  valor.className = "par-valor";
-  valor.textContent = `${fmt(par.opcoes[0].milhas)} pts + R$ ${reais(par.opcoes[0].totalReais)}`;
+  const value = document.createElement("strong");
+  value.className = "pair-value";
+  value.textContent = `${number(pair.options[0].miles)} pts + R$ ${reais(pair.options[0].totalReais)}`;
 
-  const datas = document.createElement("span");
-  datas.className = "par-datas";
-  datas.textContent = `${dataBR(par.dataIda)} → ${dataBR(par.dataVolta)}`;
+  const dates = document.createElement("span");
+  dates.className = "pair-dates";
+  dates.textContent = `${shortDate(pair.outboundDate)} → ${shortDate(pair.returnDate)}`;
 
-  linha.append(valor, datas);
+  row.append(value, dates);
 
-  // O print da tela da LATAM fica atrás de um link: é comprovação, não algo
-  // pra ficar ocupando a tela toda vez.
-  if (par.imagem) {
+  // The capture of LATAM's screen sits behind a link: it is proof, not something to fill the screen every time.
+  if (pair.image) {
     const link = document.createElement("a");
-    link.className = "par-print";
-    link.href = par.imagem;
+    link.className = "pair-capture";
+    link.href = pair.image;
     link.target = "_blank";
     link.textContent = "print";
-    linha.appendChild(link);
+    row.appendChild(link);
   }
-  return linha;
+  return row;
 }
 
-// O alerta da LATAM leva TODAS as datas do calendário — os pares confirmados
-// entram só como preço. É a diferença entre "estas são as datas com
-// disponibilidade" e "estes três pares eu conferi": o cliente quer a primeira.
-//
-// A faixa de pontos sai dos pares: o menor e o maior que a confirmação viu.
-// Sem confirmação não há botão — um alerta da LATAM sem o número em pontos
-// seria um card com preço em branco.
-function mostrarBotaoAlertaLatam(card, origem, destino, pernas, confirmacao) {
-  const pares = confirmacao?.pares ?? [];
-  if (pares.length === 0) return;
+// The LATAM alert carries ALL calendar dates; the confirmed pairs only bring the
+// price. "These are the dates with availability" is what the client wants, not
+// "these three pairs I checked". Without a confirmation there is no button: a
+// LATAM alert without the points number would be a card with a blank price.
+function showLatamAlertButton(card, origin, destination, legs, confirmation) {
+  const pairs = confirmation?.pairs ?? [];
+  if (pairs.length === 0) return;
 
-  const secaoDe = (perna) => perna?.secoes?.find((s) => s.rotulo === "Econômica");
-  const secaoIda = secaoDe(pernas[0]);
-  const secaoVolta = secaoDe(pernas[1]);
-  if (!temDias(secaoIda) && !temDias(secaoVolta)) return;
+  const economyOf = (leg) => leg?.sections?.find((section) => section.label === "Econômica");
+  const outbound = economyOf(legs[0]);
+  const inbound = economyOf(legs[1]);
+  if (!hasDays(outbound) && !hasDays(inbound)) return;
 
-  // O card do alerta é POR PERNA: ele mostra um preço no cartão da ida e outro
-  // no da volta. Usar o total do par colocava o preço da viagem inteira nos
-  // dois cartões, dobrando o valor aos olhos de quem lê.
-  const porPerna = pares.flatMap((p) => [p.milhasIda, p.milhasVolta]).filter((v) => typeof v === "number");
-  if (porPerna.length === 0) return;
-  const menorK = Math.min(...porPerna) / 1000;
-  const maiorK = Math.max(...porPerna) / 1000;
+  // The alert card is PER LEG: one price on the outbound card and one on the
+  // return. The pair's total put the whole trip's price on both cards, doubling
+  // the value in the reader's eyes.
+  const perLeg = pairs.flatMap((pair) => [pair.outboundMiles, pair.returnMiles]).filter((value) => typeof value === "number");
+  if (perLeg.length === 0) return;
+  const minK = Math.min(...perLeg) / 1000;
+  const maxK = Math.max(...perLeg) / 1000;
 
-  const barra = document.createElement("div");
-  barra.className = "alerta-acoes";
-  const rotulo = document.createElement("span");
-  rotulo.className = "alerta-rotulo";
-  rotulo.textContent = "Alerta pro grupo:";
-  barra.appendChild(rotulo);
+  const bar = document.createElement("div");
+  bar.className = "alert-actions";
+  const label = document.createElement("span");
+  label.className = "alert-label";
+  label.textContent = "Alerta pro grupo:";
+  bar.appendChild(label);
 
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.className = "btn-alerta";
-  btn.textContent = "📢 Econômica";
-  btn.title = "Todas as datas do calendário, com os pontos vindos dos pares confirmados";
-  btn.addEventListener("click", async () => {
-    btn.disabled = true;
-    btn.textContent = "⏳ Gerando...";
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "alert-button";
+  button.textContent = "📢 Econômica";
+  button.title = "Todas as datas do calendário, com os pontos vindos dos pares confirmados";
+  button.addEventListener("click", async () => {
+    button.disabled = true;
+    button.textContent = "⏳ Gerando...";
     try {
-      const resposta = await fetch("/api/alerta", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fonte: "LATAM",
-          origem,
-          destino,
-          classe: "Econômica",
-          menorK,
-          maiorK,
-          textoIda: temDias(secaoIda) ? secaoIda.texto : "",
-          textoVolta: temDias(secaoVolta) ? secaoVolta.texto : "",
-        }),
+      const alert = await requestAlert({
+        source: "LATAM",
+        origin,
+        destination,
+        cabinClass: "Econômica",
+        minK,
+        maxK,
+        outboundText: hasDays(outbound) ? outbound.text : "",
+        returnText: hasDays(inbound) ? inbound.text : "",
       });
-      const corpo = await resposta.json();
-      if (!resposta.ok) throw new Error(corpo.erro || "Falha ao gerar o alerta.");
-      mostrarAlertaGerado(card, corpo);
-      btn.textContent = "✓ Econômica";
+      showGeneratedAlert(card, alert);
+      button.textContent = "✓ Econômica";
     } catch (err) {
-      btn.textContent = "📢 Econômica";
-      card.avisoEl.textContent = err.message || "Falha ao gerar o alerta.";
-      card.avisoEl.hidden = false;
+      button.textContent = "📢 Econômica";
+      card.noticeEl.textContent = err.message || "Falha ao gerar o alerta.";
+      card.noticeEl.hidden = false;
     } finally {
-      btn.disabled = false;
+      button.disabled = false;
     }
   });
-  barra.appendChild(btn);
-  card.raiz.querySelector(".job-cabecalho").after(barra);
+  bar.appendChild(button);
+  card.root.querySelector(".job-header").after(bar);
 }
 
-const origemDestinoDe = (card) => card.rotaEl.textContent || "";
-
-// LATAM: uma busca só devolve ida e volta (o calendário traz as duas
-// direções, em reais). O alerta sai da confirmação em milhas, que é onde
-// aparece o número que o cliente paga.
-async function iniciarBuscaLatam(origem, destino, tetos, confirmarMilhas, sessao) {
-  sessao = sessao || novaSessao("latam", [origem, destino, tetos, confirmarMilhas]);
-  const card = criarCardJob(filaLatam, `LATAM: ${origem} ⇄ ${destino}`);
+// One search returns both legs (the calendar has both directions, in reais).
+// The alert comes from the miles confirmation, where the number the client pays shows up.
+async function startLatamSearch(origin, destination, ceilings, confirmMiles, session) {
+  session = session || newSession("latam", [origin, destination, ceilings, confirmMiles]);
+  const card = createJobCard(latamQueue, `LATAM: ${origin} ⇄ ${destination}`);
 
   try {
-    const { resultado: pernas, avisoParcial, confirmacao } = await buscarNoServidor(
+    const { result: legs, partialNotice, confirmation } = await runOnServer(
       card,
-      { fonte: "latam", origem, destino, tetos, confirmarMilhas, margemIdaReais: 100, margemVoltaReais: 300 },
-      "Buscando ida e volta...", sessao,
+      { source: "latam", origin, destination, ceilings, confirmMiles, outboundMarginReais: 100, returnMarginReais: 300 },
+      "Buscando ida e volta...",
+      session,
     );
-    for (const perna of pernas) {
-      renderizarPernaSecoes(card.resultadoEl, perna.rotulo, perna.secoes);
-      registrarPernaCopia(card, perna.secoes);
+    for (const leg of legs) {
+      renderLegSections(card.resultEl, leg.label, leg.sections);
+      recordLegForCopy(card, leg.sections);
     }
-    if (confirmacao) mostrarConfirmacaoMilhas(card, confirmacao);
-    mostrarBotaoAlertaLatam(card, origem, destino, pernas, confirmacao);
-    if (!sessao.retomando) salvarNoHistorico(origem, destino, "LATAM", true);
+    if (confirmation) showMilesConfirmation(card, confirmation);
+    showLatamAlertButton(card, origin, destination, legs, confirmation);
+    if (!session.resuming) saveToHistory(origin, destination, "LATAM", true);
 
-    card.definirStatus("Pronto", "status-pronto");
-    card.resultadoEl.hidden = false;
-    if (avisoParcial) {
-      card.avisoEl.textContent = avisoParcial;
-      card.avisoEl.hidden = false;
-    }
-    atualizarAcoesCard(card);
+    card.setStatus("Pronto", "status-done");
+    card.resultEl.hidden = false;
+    if (partialNotice) showPartialNotices(card, [partialNotice]);
+    updateCardActions(card);
   } catch (err) {
-    card.definirStatus("Erro", "status-erro");
-    card.avisoEl.textContent = err.message || "Erro inesperado.";
-    card.avisoEl.hidden = false;
+    showFailure(card, err);
   } finally {
-    card.progressoEl.hidden = true;
+    card.progressEl.hidden = true;
   }
 }
 
-function avisoDeRepeticao(programa, origem, destino, idaEVolta) {
-  const trechos = idaEVolta
+function repeatWarning(program, origin, destination, roundTrip) {
+  const routes = roundTrip
     ? [
-        [origem, destino],
-        [destino, origem],
+        [origin, destination],
+        [destination, origin],
       ]
-    : [[origem, destino]];
+    : [[origin, destination]];
 
-  for (const [de, para] of trechos) {
-    const anterior = buscaRecenteDe(de, para, programa);
-    if (anterior && Date.now() - anterior.timestamp < TOLERANCIA_MS) {
-      const confirmado = confirm(
-        `Você já buscou ${de} → ${para} ${formatarTempoRelativo(anterior.timestamp)} ` +
-          `(${formatarDataHora(anterior.timestamp)}), há menos de ${TOLERANCIA_DIAS} dias. Buscar de novo mesmo assim?`,
+  for (const [from, to] of routes) {
+    const previous = latestSearchOf(from, to, program);
+    if (previous && Date.now() - previous.timestamp < TOLERANCE_MS) {
+      const confirmed = confirm(
+        `Você já buscou ${from} → ${to} ${formatRelativeTime(previous.timestamp)} ` +
+          `(${formatDateTime(previous.timestamp)}), há menos de ${TOLERANCE_DAYS} dias. Buscar de novo mesmo assim?`,
       );
-      if (!confirmado) return false;
+      if (!confirmed) return false;
     }
   }
   return true;
 }
 
-formTap.addEventListener("submit", (evento) => {
-  evento.preventDefault();
-  limparAviso(avisoTap);
-  const origem = inputTapOrigem.value.trim().toUpperCase();
-  const destino = inputTapDestino.value.trim().toUpperCase();
-  const idaEVolta = checkboxTapIdaVolta.checked;
-  if (!origem || !destino) {
-    mostrarAviso(avisoTap, "Preencha origem e destino.");
+tapForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  clearNotice(tapNotice);
+  const origin = tapOriginInput.value.trim().toUpperCase();
+  const destination = tapDestinationInput.value.trim().toUpperCase();
+  const roundTrip = tapRoundTripCheckbox.checked;
+  if (!origin || !destination) {
+    showNotice(tapNotice, "Preencha origem e destino.");
     return;
   }
-  if (!avisoDeRepeticao("tap", origem, destino, idaEVolta)) return;
-  const emK = (input) => {
-    const v = parseFloat(input.value);
-    return Number.isFinite(v) && v > 0 ? v : null;
+  if (!repeatWarning("tap", origin, destination, roundTrip)) return;
+  const inK = (input) => {
+    const value = parseFloat(input.value);
+    return Number.isFinite(value) && value > 0 ? value : null;
   };
-  iniciarBuscaTap(origem, destino, idaEVolta, {
-    executiva: emK(inputTapTetoExecutiva),
-    economica: emK(inputTapTetoEconomica),
+  startTapSearch(origin, destination, roundTrip, {
+    business: inK(tapBusinessCeilingInput),
+    economy: inK(tapEconomyCeilingInput),
   });
 });
 
-formLatam.addEventListener("submit", (evento) => {
-  evento.preventDefault();
-  limparAviso(avisoLatam);
-  const origem = inputLatamOrigem.value.trim().toUpperCase();
-  const destino = inputLatamDestino.value.trim().toUpperCase();
-  if (!origem || !destino) {
-    mostrarAviso(avisoLatam, "Preencha origem e destino.");
+latamForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  clearNotice(latamNotice);
+  const origin = latamOriginInput.value.trim().toUpperCase();
+  const destination = latamDestinationInput.value.trim().toUpperCase();
+  if (!origin || !destination) {
+    showNotice(latamNotice, "Preencha origem e destino.");
     return;
   }
-  const teto = parseFloat(inputLatamTeto.value);
-  // Buscar na LATAM é grátis, então não tem o aviso de repetição das fontes pagas.
-  iniciarBuscaLatam(
-    origem,
-    destino,
+  const ceiling = parseFloat(latamCeilingInput.value);
+  // Searching LATAM is free, so there is no repeat warning like the paid sources have.
+  startLatamSearch(
+    origin,
+    destination,
     {
-      reais: Number.isFinite(teto) && teto > 0 ? teto : null,
-      somenteMenorTarifa: checkboxLatamMenorTarifa.checked,
+      maxReais: Number.isFinite(ceiling) && ceiling > 0 ? ceiling : null,
+      lowestFareOnly: latamLowestFareCheckbox.checked,
     },
-    checkboxLatamConfirmarMilhas.checked,
+    latamConfirmMilesCheckbox.checked,
   );
 });
 
-// Iberia: uma direção por job, como a AA. Sem cabine — a grade devolve um
-// valor por dia e não diz de qual cabine é, então não há o que escolher.
-async function iniciarBuscaIberia(
-  origem,
-  destino,
-  tetoAvios,
-  idaEVolta,
-  detalharDias = 0,
-  maxConexoes = null,
-  cabine = "",
-  sessao,
-) {
-  sessao =
-    sessao ||
-    novaSessao("iberia", [origem, destino, tetoAvios, idaEVolta, detalharDias, maxConexoes, cabine]);
-  const seta = idaEVolta ? "⇄" : "→";
-  const card = criarCardJob(filaIberia, `Iberia (Avios): ${origem} ${seta} ${destino}`);
-  const avisosParciais = [];
-  const corpoBase = {
-    fonte: "iberia",
-    teto: tetoAvios,
-    detalharDias,
-    maxConexoes,
-    cabines: cabine ? [cabine] : [],
-  };
+// One direction per job, like AA. No cabin: the grid returns one value per day
+// without saying which cabin it is, so there is nothing to choose.
+async function startIberiaSearch(origin, destination, ceilingAvios, roundTrip, detailDays = 0, maxStops = null, cabin = "", session) {
+  session = session || newSession("iberia", [origin, destination, ceilingAvios, roundTrip, detailDays, maxStops, cabin]);
+  const arrow = roundTrip ? "⇄" : "→";
+  const card = createJobCard(iberiaQueue, `Iberia (Avios): ${origin} ${arrow} ${destination}`);
+  const partialNotices = [];
+  const baseBody = { source: "iberia", ceiling: ceilingAvios, detailDays, maxStops, cabins: cabin ? [cabin] : [] };
 
   try {
-    const {
-      resultado: secaoIda,
-      avisoParcial: avisoIda,
-      planilhaUrl: planilhaIda,
-      arquivoLocal: arquivoIda,
-    } = await buscarNoServidor(
+    const outbound = await runOnServer(
       card,
-      { ...corpoBase, origem, destino },
-      idaEVolta ? "Buscando ida..." : "Buscando...",
-      sessao,
+      { ...baseBody, origin, destination },
+      roundTrip ? "Buscando ida..." : "Buscando...",
+      session,
     );
-    if (avisoIda) avisosParciais.push(avisoIda);
-    const rotuloIda = idaEVolta ? `Ida: ${origem} → ${destino}` : `${origem} → ${destino}`;
-    renderizarPernaSecoes(card.resultadoEl, rotuloIda, [{ ...secaoIda, corClasse: "cartao-economica" }]);
-    registrarPernaCopia(card, [secaoIda]);
-    if (!sessao.retomando) salvarNoHistorico(origem, destino, "IBERIA", false, {});
+    if (outbound.partialNotice) partialNotices.push(outbound.partialNotice);
+    renderLegSections(card.resultEl, roundTrip ? `Ida: ${origin} → ${destination}` : `${origin} → ${destination}`, [
+      { ...outbound.result, colorClass: "cabin-economy" },
+    ]);
+    recordLegForCopy(card, [outbound.result]);
+    if (!session.resuming) saveToHistory(origin, destination, "IBERIA", false, {});
 
-    let planilhaVolta = null;
-    let arquivoDaVolta = null;
-    if (idaEVolta) {
-      const {
-        resultado: secaoVolta,
-        avisoParcial: avisoVolta,
-        planilhaUrl: urlVolta,
-        arquivoLocal: arquivoVolta,
-      } = await buscarNoServidor(
+    let inbound = null;
+    if (roundTrip) {
+      inbound = await runOnServer(
         card,
-        { ...corpoBase, origem: destino, destino: origem },
+        { ...baseBody, origin: destination, destination: origin },
         "Buscando volta...",
-        sessao,
+        session,
       );
-      planilhaVolta = urlVolta;
-      arquivoDaVolta = arquivoVolta;
-      if (avisoVolta) avisosParciais.push(avisoVolta);
-      renderizarPernaSecoes(card.resultadoEl, `Volta: ${destino} → ${origem}`, [
-        { ...secaoVolta, corClasse: "cartao-economica" },
-      ]);
-      registrarPernaCopia(card, [secaoVolta]);
-      promoverUltimaParaIdaEVolta(origem, destino, "IBERIA");
+      if (inbound.partialNotice) partialNotices.push(inbound.partialNotice);
+      renderLegSections(card.resultEl, `Volta: ${destination} → ${origin}`, [{ ...inbound.result, colorClass: "cabin-economy" }]);
+      recordLegForCopy(card, [inbound.result]);
+      promoteLatestToRoundTrip(origin, destination, "IBERIA");
     }
 
-    card.definirStatus("Pronto", "status-pronto");
-    card.resultadoEl.hidden = false;
-    if (avisosParciais.length > 0) {
-      card.avisoEl.textContent = [...new Set(avisosParciais)].join(" ");
-      card.avisoEl.hidden = false;
-    }
-    atualizarAcoesCard(card);
-    // Sem isto a planilha por voo era criada e o card não dizia nada: o
-    // arquivo existia em planilhas/ e a aba no Google também, mas de fora
-    // parecia que nada tinha sido gerado.
-    mostrarLinkPlanilha(card, planilhaIda, idaEVolta ? "ida" : "busca");
-    mostrarLinkPlanilha(card, planilhaVolta, "volta");
-    mostrarArquivoLocal(card, arquivoIda, idaEVolta ? "ida" : "busca");
-    mostrarArquivoLocal(card, arquivoDaVolta, "volta");
-  } catch (erro) {
-    card.definirStatus("Erro", "status-erro");
-    card.avisoEl.textContent = erro.message || "Erro inesperado.";
-    card.avisoEl.hidden = false;
+    card.setStatus("Pronto", "status-done");
+    card.resultEl.hidden = false;
+    showPartialNotices(card, partialNotices);
+    updateCardActions(card);
+    // Without this the per-flight sheet was created and the card said nothing:
+    // the file existed and so did the Google tab, but it looked like nothing was made.
+    showSpreadsheetLink(card, outbound.spreadsheetUrl, roundTrip ? "ida" : "busca");
+    showSpreadsheetLink(card, inbound?.spreadsheetUrl, "volta");
+    showLocalFile(card, outbound.localFile, roundTrip ? "ida" : "busca");
+    showLocalFile(card, inbound?.localFile, "volta");
+  } catch (err) {
+    showFailure(card, err);
   } finally {
-    // Igual às outras fontes: a barra de progresso some quando a busca acaba,
-    // dando ou não certo.
-    card.progressoEl.hidden = true;
+    card.progressEl.hidden = true;
   }
 }
 
-formIberia.addEventListener("submit", (evento) => {
-  evento.preventDefault();
-  limparAviso(avisoIberia);
-  const origem = inputIberiaOrigem.value.trim().toUpperCase();
-  const destino = inputIberiaDestino.value.trim().toUpperCase();
-  if (!origem || !destino) {
-    mostrarAviso(avisoIberia, "Preencha origem e destino.");
+iberiaForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  clearNotice(iberiaNotice);
+  const origin = iberiaOriginInput.value.trim().toUpperCase();
+  const destination = iberiaDestinationInput.value.trim().toUpperCase();
+  if (!origin || !destination) {
+    showNotice(iberiaNotice, "Preencha origem e destino.");
     return;
   }
-  const tetoK = parseFloat(inputIberiaTeto.value);
-  iniciarBuscaIberia(
-    origem,
-    destino,
-    Number.isFinite(tetoK) && tetoK > 0 ? tetoK * 1000 : null,
-    checkboxIberiaIdaVolta.checked,
-    Number(selectIberiaDetalhar.value) || 0,
-    selectIberiaConexoes.value === "" ? null : Number(selectIberiaConexoes.value),
-    selectIberiaCabine.value,
+  const ceilingK = parseFloat(iberiaCeilingInput.value);
+  startIberiaSearch(
+    origin,
+    destination,
+    Number.isFinite(ceilingK) && ceilingK > 0 ? ceilingK * 1000 : null,
+    iberiaRoundTripCheckbox.checked,
+    Number(iberiaDetailDaysSelect.value) || 0,
+    iberiaStopsSelect.value === "" ? null : Number(iberiaStopsSelect.value),
+    iberiaCabinSelect.value,
   );
 });
 
-formAa.addEventListener("submit", (evento) => {
-  evento.preventDefault();
-  limparAviso(avisoAa);
-  const origem = inputAaOrigem.value.trim().toUpperCase();
-  const destino = inputAaDestino.value.trim().toUpperCase();
-  if (!origem || !destino) {
-    mostrarAviso(avisoAa, "Preencha origem e destino.");
+aaForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  clearNotice(aaNotice);
+  const origin = aaOriginInput.value.trim().toUpperCase();
+  const destination = aaDestinationInput.value.trim().toUpperCase();
+  if (!origin || !destination) {
+    showNotice(aaNotice, "Preencha origem e destino.");
     return;
   }
-  const cabine = selectAaCabine.value;
-  const maxConexoes = selectAaConexoes.value === "" ? null : Number(selectAaConexoes.value);
-  const tetoK = parseFloat(inputAaTeto.value);
-  const passageiros = Number(selectAaPassageiros.value) || 1;
-  // Buscar na AA é grátis, então não tem o aviso de repetição em N dias das
-  // fontes pagas.
-  iniciarBuscaAA(
-    origem,
-    destino,
-    cabine,
-    maxConexoes,
-    Number.isFinite(tetoK) && tetoK > 0 ? tetoK * 1000 : null,
-    checkboxAaIdaVolta.checked,
-    passageiros,
+  const ceilingK = parseFloat(aaCeilingInput.value);
+  // Searching AA is free, so there is no repeat warning like the paid sources have.
+  startAaSearch(
+    origin,
+    destination,
+    aaCabinSelect.value,
+    aaStopsSelect.value === "" ? null : Number(aaStopsSelect.value),
+    Number.isFinite(ceilingK) && ceilingK > 0 ? ceilingK * 1000 : null,
+    aaRoundTripCheckbox.checked,
+    Number(aaPassengersSelect.value) || 1,
   );
 });
 
-formSmiles.addEventListener("submit", (evento) => {
-  evento.preventDefault();
-  limparAviso(avisoSmiles);
-  const origem = inputSmilesOrigem.value.trim().toUpperCase();
-  const destino = inputSmilesDestino.value.trim().toUpperCase();
-  if (!origem || !destino) {
-    mostrarAviso(avisoSmiles, "Preencha origem e destino.");
+smilesForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  clearNotice(smilesNotice);
+  const origin = smilesOriginInput.value.trim().toUpperCase();
+  const destination = smilesDestinationInput.value.trim().toUpperCase();
+  if (!origin || !destination) {
+    showNotice(smilesNotice, "Preencha origem e destino.");
     return;
   }
-  // Buscar no Smiles é grátis: sem o aviso de repetição das fontes pagas.
-  iniciarBuscaSmiles(
-    origem,
-    destino,
+  // Searching Smiles is free: no repeat warning like the paid sources have.
+  startSmilesSearch(
+    origin,
+    destination,
     {
-      economica: tetoEmMilhas(inputSmilesTetoEconomica),
-      premium: tetoEmMilhas(inputSmilesTetoPremium),
-      executiva: tetoEmMilhas(inputSmilesTetoExecutiva),
+      economy: ceilingInMiles(smilesEconomyCeilingInput),
+      premium: ceilingInMiles(smilesPremiumCeilingInput),
+      business: ceilingInMiles(smilesBusinessCeilingInput),
     },
-    checkboxSmilesIdaVolta.checked,
-    // Vazio nos dois = período padrão do servidor. Não invento data aqui pra
-    // não competir com a regra que já existe lá.
-    { de: inputSmilesDe.value || undefined, ate: inputSmilesAte.value || undefined },
+    smilesRoundTripCheckbox.checked,
+    // Both empty means the server's default period; no date is made up here to
+    // compete with the rule that already lives there.
+    { from: smilesFromInput.value || undefined, until: smilesUntilInput.value || undefined },
   );
 });
 
-formSeatspy.addEventListener("submit", (evento) => {
-  evento.preventDefault();
-  limparAviso(avisoSeatspy);
-  const programa = selectSeatspyPrograma.value;
-  const origem = inputSeatspyOrigem.value.trim().toUpperCase();
-  const destino = inputSeatspyDestino.value.trim().toUpperCase();
-  const idaEVolta = checkboxSeatspyIdaVolta.checked;
-  if (!origem || !destino) {
-    mostrarAviso(avisoSeatspy, "Preencha origem e destino.");
+seatspyForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  clearNotice(seatspyNotice);
+  const program = seatspyProgramSelect.value;
+  const origin = seatspyOriginInput.value.trim().toUpperCase();
+  const destination = seatspyDestinationInput.value.trim().toUpperCase();
+  const roundTrip = seatspyRoundTripCheckbox.checked;
+  if (!origin || !destination) {
+    showNotice(seatspyNotice, "Preencha origem e destino.");
     return;
   }
-  if (!avisoDeRepeticao(programa, origem, destino, idaEVolta)) return;
-  iniciarBuscaSeatspy(programa, origem, destino, idaEVolta, checkboxSeatspyMostrarAssentos.checked);
+  if (!repeatWarning(program, origin, destination, roundTrip)) return;
+  startSeatspySearch(program, origin, destination, roundTrip, seatspyShowSeatsCheckbox.checked);
 });
 
-// As buscas voltam sozinhas depois de um F5. Roda por último: as funções de
-// cada fonte e os elementos de formulário já precisam existir.
-restaurarBuscas();
+// Runs last: every source's functions and form elements must already exist.
+migrateLegacyHistory();
+restoreSearches();

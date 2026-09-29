@@ -8,11 +8,10 @@ export const ROOT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)
 
 export const PUBLIC_DIR = path.join(ROOT_DIR, "public");
 export const FIXTURES_DIR = path.join(ROOT_DIR, "fixtures");
-export const DOCS_DIR = path.join(ROOT_DIR, "contexto");
 
 // Generated outputs, kept out of git (see .gitignore).
-export const ALERTS_DIR = path.join(ROOT_DIR, "alertas");
-export const SPREADSHEETS_DIR = path.join(ROOT_DIR, "planilhas");
+export const ALERTS_DIR = path.join(ROOT_DIR, "alerts");
+export const SPREADSHEETS_DIR = path.join(ROOT_DIR, "spreadsheets");
 
 // The alerts portal is another repository, a sibling of this one.
 export const PORTAL_DIST_DIR = path.join(ROOT_DIR, "..", "vcc-alertas-portal", "dist");

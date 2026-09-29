@@ -17,16 +17,16 @@ describe("report builders", () => {
       {},
     );
     assert.deepEqual(report, {
-      executivas: {
-        menor: 150,
-        maior: 170,
-        dias: [
-          { data: "2026-10-01", valorK: 170 },
-          { data: "2026-11-05", valorK: 150 },
+      business: {
+        min: 150,
+        max: 170,
+        days: [
+          { date: "2026-10-01", valueK: 170 },
+          { date: "2026-11-05", valueK: 150 },
         ],
-        texto: "Out 2026: 01\nNov 2026: 05",
+        text: "Out 2026: 01\nNov 2026: 05",
       },
-      economicas: { menor: 45, maior: 45, dias: [{ data: "2026-10-01", valorK: 45 }], texto: "Out 2026: 01" },
+      economy: { min: 45, max: 45, days: [{ date: "2026-10-01", valueK: 45 }], text: "Out 2026: 01" },
     });
   });
 
@@ -40,19 +40,19 @@ describe("report builders", () => {
       true,
     );
     assert.deepEqual(
-      sections.map((s) => [s.rotulo, s.corClasse, s.menor, s.maior, s.texto]),
+      sections.map((s) => [s.label, s.colorClass, s.min, s.max, s.text]),
       [
-        ["Econômica", "cartao-economica", 30, 30, "Out 2026: 01 (4)"],
-        ["Premium", "cartao-premium", null, null, "Nenhuma disponibilidade encontrada nesse período."],
-        ["Executiva", "cartao-executiva", 90, 90, "Out 2026: 01 (2)"],
-        ["Primeira Classe", "cartao-primeira", null, null, "Nenhuma disponibilidade encontrada nesse período."],
+        ["Econômica", "cabin-economy", 30, 30, "Out 2026: 01 (4)"],
+        ["Premium", "cabin-premium", null, null, "Nenhuma disponibilidade encontrada nesse período."],
+        ["Executiva", "cabin-business", 90, 90, "Out 2026: 01 (2)"],
+        ["Primeira Classe", "cabin-first", null, null, "Nenhuma disponibilidade encontrada nesse período."],
       ],
     );
-    assert.deepEqual(sections[0]!.dias, [{ data: "2026-10-01", valorK: 30, assentos: 4 }]);
+    assert.deepEqual(sections[0]!.days, [{ date: "2026-10-01", valueK: 30, seats: 4 }]);
   });
 
   test("AA keeps days under the ceiling and links each one to the booking page", () => {
-    const route = { origin: "GRU", destination: "MIA", passengers: 2, cabin: "executiva" as const };
+    const route = { origin: "GRU", destination: "MIA", passengers: 2, cabin: "business" as const };
     const report = buildAaReport(
       [
         { date: "2026-10-01", miles: 60000 },
@@ -61,10 +61,10 @@ describe("report builders", () => {
       70000,
       route,
     );
-    assert.equal(report.menor, 60);
-    assert.equal(report.texto, "Out 2026: 01");
-    assert.equal(report.dias.length, 1);
-    assert.equal(report.dias[0]!.link, aaBookingLink(route, "2026-10-01"));
+    assert.equal(report.min, 60);
+    assert.equal(report.text, "Out 2026: 01");
+    assert.equal(report.days.length, 1);
+    assert.equal(report.days[0]!.link, aaBookingLink(route, "2026-10-01"));
     assert.match(aaBookingLink(route, "2026-10-01"), /pax=2&adult=2&type=OneWay&searchType=Award&cabin=BUSINESS/);
   });
 });

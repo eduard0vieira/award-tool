@@ -2,7 +2,7 @@ import { Body, Controller, HttpCode, Post } from "@nestjs/common";
 import { AlertsService } from "./alerts.service.ts";
 import { CreateAlertDto } from "./create-alert.dto.ts";
 
-@Controller("api/alerta")
+@Controller("api/alerts")
 export class AlertsController {
   constructor(private readonly alerts: AlertsService) {}
 

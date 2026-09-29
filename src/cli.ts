@@ -4,9 +4,9 @@ import type { ReportSection } from "./core/common.ts";
 import { buildTapReport, cabinParamOf, searchTapYear, startTapSession } from "./scrapers/tap/tap.scraper.ts";
 
 function sectionAsText(name: string, section: ReportSection): string {
-  if (section.dias.length === 0) return `${name}:\n${section.texto}`;
-  const summary = `Menor valor: ${section.menor}K | Maior valor: ${section.maior}K | Dias com disponibilidade: ${section.dias.length}`;
-  return `${name}:\n${summary}\n${section.texto}`;
+  if (section.days.length === 0) return `${name}:\n${section.text}`;
+  const summary = `Menor valor: ${section.min}K | Maior valor: ${section.max}K | Dias com disponibilidade: ${section.days.length}`;
+  return `${name}:\n${summary}\n${section.text}`;
 }
 
 async function askWithDefault(rl: readline.Interface, question: string, fallback: string): Promise<string> {
@@ -46,9 +46,9 @@ async function searchFromTerminal() {
     const report = buildTapReport(days);
 
     console.log("\n--- RESULTADO ---\n");
-    console.log(sectionAsText("Executivas", report.executivas));
+    console.log(sectionAsText("Executivas", report.business));
     console.log("");
-    console.log(sectionAsText("Economicas", report.economicas));
+    console.log(sectionAsText("Economicas", report.economy));
 
     if (!(await askYesNo(rl, "\nDeseja pesquisar mais algum trecho (ex.: a volta)?"))) break;
 

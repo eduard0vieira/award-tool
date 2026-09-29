@@ -10,7 +10,7 @@ export class JobStore {
 
   create(): string {
     const jobId = randomUUID();
-    this.jobs.set(jobId, { status: "fila", progress: 0, events: new Subject() });
+    this.jobs.set(jobId, { status: "queued", progress: 0, events: new Subject() });
     return jobId;
   }
 
@@ -26,15 +26,15 @@ export class JobStore {
       log: (message) => console.log(`[${jobId}] ${message}`),
       progress: (fraction) => {
         job.progress = fraction;
-        job.events.next({ tipo: "progresso", fracao: fraction });
+        job.events.next({ type: "progress", fraction });
       },
       notice: (message) => {
         job.notice = message;
-        job.events.next({ tipo: "aviso", mensagem: message });
+        job.events.next({ type: "notice", message });
       },
       window: (info) => {
         job.window = info;
-        job.events.next({ tipo: "janela", ...info });
+        job.events.next({ type: "window", ...info });
       },
       ask: (message) => this.ask(jobId, job, message),
       shouldStop: () => job.cancelled === true,
@@ -44,21 +44,21 @@ export class JobStore {
   markRunning(jobId: string) {
     const job = this.get(jobId);
     job.status = "running";
-    job.events.next({ tipo: "iniciou" });
+    job.events.next({ type: "started" });
   }
 
   complete(jobId: string, result: Record<string, unknown>) {
     const job = this.get(jobId);
     job.status = "done";
-    job.result = { tipo: "done", ...result };
+    job.result = { type: "done", ...result };
     job.events.next(job.result);
   }
 
   fail(jobId: string, message: string) {
     const job = this.get(jobId);
-    job.status = "erro";
+    job.status = "error";
     job.error = message;
-    job.events.next({ tipo: "erro", mensagem: message });
+    job.events.next({ type: "error", message });
   }
 
   close(jobId: string) {
@@ -67,7 +67,7 @@ export class JobStore {
 
   cancel(jobId: string) {
     const job = this.get(jobId);
-    if (job.status === "done" || job.status === "erro") throw new ConflictException("Essa busca já terminou.");
+    if (job.status === "done" || job.status === "error") throw new ConflictException("Essa busca já terminou.");
     job.cancelled = true;
     // Waiting on an open question would hold a browser slot for nothing.
     job.answer?.(false);
@@ -83,7 +83,7 @@ export class JobStore {
 
   state(jobId: string) {
     const job = this.get(jobId);
-    return { status: job.status, progresso: job.progress };
+    return { status: job.status, progress: job.progress };
   }
 
   stream(jobId: string): Observable<MessageEvent> {
@@ -92,26 +92,26 @@ export class JobStore {
     // a job finishing in between would otherwise end the stream without "done".
     return defer(() => {
       const replay = from(this.replay(job));
-      return job.status === "done" || job.status === "erro" ? replay : concat(replay, job.events);
+      return job.status === "done" || job.status === "error" ? replay : concat(replay, job.events);
     }).pipe(map((data) => ({ data })));
   }
 
   private replay(job: Job): JobEvent[] {
     const events: JobEvent[] = [];
-    if (job.status === "fila") events.push({ tipo: "fila" });
-    events.push({ tipo: "progresso", fracao: job.progress });
-    if (job.window) events.push({ tipo: "janela", ...job.window });
-    if (job.notice) events.push({ tipo: "aviso", mensagem: job.notice });
-    if (job.question) events.push({ tipo: "pergunta", ...job.question });
+    if (job.status === "queued") events.push({ type: "queued" });
+    events.push({ type: "progress", fraction: job.progress });
+    if (job.window) events.push({ type: "window", ...job.window });
+    if (job.notice) events.push({ type: "notice", message: job.notice });
+    if (job.question) events.push({ type: "question", ...job.question });
     if (job.status === "done" && job.result) events.push(job.result);
-    if (job.status === "erro") events.push({ tipo: "erro", mensagem: job.error });
+    if (job.status === "error") events.push({ type: "error", message: job.error });
     return events;
   }
 
   private ask(jobId: string, job: Job, message: string): Promise<boolean> {
     const id = `${jobId}-${Date.now()}`;
-    job.question = { id, mensagem: message };
-    job.events.next({ tipo: "pergunta", id, mensagem: message });
+    job.question = { id, message };
+    job.events.next({ type: "question", id, message });
 
     return new Promise<boolean>((resolve) => {
       let settled = false;
@@ -121,7 +121,7 @@ export class JobStore {
         clearTimeout(deadline);
         job.question = undefined;
         job.answer = undefined;
-        job.events.next({ tipo: "respondida", id, continuar: proceed });
+        job.events.next({ type: "answered", id, proceed });
         resolve(proceed);
       };
       const deadline = setTimeout(() => {

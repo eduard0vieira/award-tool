@@ -1,6 +1,6 @@
 export type OnLog = (message: string) => void;
 export type OnProgress = (fraction: number) => void;
-export type OnWindow = (info: { atual: number; total: number; inicio: string; fim: string }) => void;
+export type OnWindow = (info: { current: number; total: number; start: string; end: string }) => void;
 // Transient notices (e.g. "waiting N min for a rate-limit block") worth showing
 // even though they are neither an error nor progress.
 export type OnNotice = (message: string) => void;
@@ -11,21 +11,27 @@ export type OnNotice = (message: string) => void;
 export type ShouldStop = () => boolean;
 
 export type FormattedDay = {
-  data: string; // YYYY-MM-DD
-  valorK: number;
+  date: string; // YYYY-MM-DD
+  valueK: number;
   // Booking deep link for that day, when the source can build one. Never part of
-  // the copied `texto`: the group receives dates, not URLs.
+  // the copied `text`: the group receives dates, not URLs.
   link?: string;
 };
 
 export type ReportSection = {
-  menor: number | null;
-  maior: number | null;
-  dias: FormattedDay[]; // chronological
-  texto: string; // "Mmm YYYY: DD, DD, ..." (for copying)
+  min: number | null;
+  max: number | null;
+  days: FormattedDay[]; // chronological
+  text: string; // "Mmm YYYY: DD, DD, ..." (for copying)
   // How the front formats min/max and the values. Absent means "K" (thousands of
   // miles); LATAM uses "BRL" because it works with fares in reais.
-  unidade?: "K" | "BRL";
+  unit?: "K" | "BRL";
+};
+
+export type LabeledSection<Day = FormattedDay> = Omit<ReportSection, "days"> & {
+  label: string;
+  colorClass?: string;
+  days: Day[];
 };
 
 export const MONTHS_PT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];

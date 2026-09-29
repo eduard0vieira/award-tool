@@ -6,17 +6,17 @@ import { aaBookingLink, startAaSession, type AaCabin } from "../src/scrapers/aa/
 // "Calendário devolveu erro: 309" for some months and nothing for others, while
 // the site showed 75K on almost every day of July 2027.
 //
-// Usage: npx tsx scripts/probe-aa-calendar.ts HEL NRT executiva 0
+// Usage: npx tsx scripts/probe-aa-calendar.ts HEL NRT business 0
 
-const [origin = "HEL", destination = "NRT", cabin = "executiva", rawStops = ""] = process.argv.slice(2);
+const [origin = "HEL", destination = "NRT", cabin = "business", rawStops = ""] = process.argv.slice(2);
 const maxStops = rawStops === "" ? null : Number(rawStops);
 
 // Typed by AaCabin so a change in the source's cabin values breaks this probe at compile time.
 const REQUEST_CABINS: Record<AaCabin, string> = {
-  economica: "COACH",
+  economy: "COACH",
   premium: "PREMIUM_ECONOMY",
-  executiva: "BUSINESS,FIRST",
-  primeira: "FIRST",
+  business: "BUSINESS,FIRST",
+  first: "FIRST",
 };
 
 function requestBody(departureDate: string, requestCabin: string, stops: number | null) {

@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { chromium, type Browser, type BrowserContext, type Page, type Response } from "playwright";
-import { formatDatesByMonth, type OnLog, type OnProgress } from "../../core/common.ts";
+import { formatDatesByMonth, type LabeledSection, type OnLog, type OnProgress } from "../../core/common.ts";
 
 export type SeatspySession = {
   browser: Browser;
@@ -36,15 +36,10 @@ export type SeatspyDay = {
   first: CabinAvailability;
 };
 
-export type SeatspySection = {
-  rotulo: string;
-  corClasse: string;
-  menor: number | null; // in K (thousands of miles), counting only priced days
-  maior: number | null;
-  // Only SeatSpy has seats; LATAM and AA reuse this shape without them.
-  dias: { data: string; valorK: number | null; assentos?: number }[];
-  texto: string;
-};
+// Values in K (thousands of miles), min/max counting only priced days. Only
+// SeatSpy and Smiles have seats; LATAM and AA reuse this shape without them.
+export type SectionDay = { date: string; valueK: number | null; seats?: number };
+export type SeatspySection = LabeledSection<SectionDay>;
 
 export type SeatspyReport = { sections: SeatspySection[] };
 
@@ -345,10 +340,10 @@ export async function searchSeatspy(
 }
 
 const CABINS = [
-  { field: "economy", label: "Econômica", colorClass: "cartao-economica" },
-  { field: "premium", label: "Premium", colorClass: "cartao-premium" },
-  { field: "business", label: "Executiva", colorClass: "cartao-executiva" },
-  { field: "first", label: "Primeira Classe", colorClass: "cartao-primeira" },
+  { field: "economy", label: "Econômica", colorClass: "cabin-economy" },
+  { field: "premium", label: "Premium", colorClass: "cabin-premium" },
+  { field: "business", label: "Executiva", colorClass: "cabin-business" },
+  { field: "first", label: "Primeira Classe", colorClass: "cabin-first" },
 ] as const;
 
 // `showSeats = false` removes seats from the whole report: from the text that
@@ -367,35 +362,35 @@ export function buildSeatspyReport(days: SeatspyDay[], ceilings: SeatspyCeilings
 
     if (available.length === 0) {
       return {
-        rotulo: label,
-        corClasse: colorClass,
-        menor: null,
-        maior: null,
-        dias: [],
-        texto: "Nenhuma disponibilidade encontrada nesse período.",
+        label,
+        colorClass,
+        min: null,
+        max: null,
+        days: [],
+        text: "Nenhuma disponibilidade encontrada nesse período.",
       };
     }
 
     const formattedDays = available.map((day) => {
       const { miles, seats } = day[field];
-      const formatted: { data: string; valorK: number | null; assentos?: number } = {
-        data: day.date,
-        valorK: miles != null ? Math.round(miles / 10) / 100 : null,
+      const formatted: SectionDay = {
+        date: day.date,
+        valueK: miles != null ? Math.round(miles / 10) / 100 : null,
       };
-      if (showSeats) formatted.assentos = seats;
+      if (showSeats) formatted.seats = seats;
       return formatted;
     });
-    const seatsByDate = new Map(formattedDays.map((day) => [day.data, day.assentos ?? 0]));
-    const knownValues = formattedDays.map((day) => day.valorK).filter((value): value is number => value != null);
+    const seatsByDate = new Map(formattedDays.map((day) => [day.date, day.seats ?? 0]));
+    const knownValues = formattedDays.map((day) => day.valueK).filter((value): value is number => value != null);
 
     return {
-      rotulo: label,
-      corClasse: colorClass,
-      menor: knownValues.length > 0 ? Math.min(...knownValues) : null,
-      maior: knownValues.length > 0 ? Math.max(...knownValues) : null,
-      dias: formattedDays,
-      texto: formatDatesByMonth(
-        formattedDays.map((day) => day.data),
+      label,
+      colorClass,
+      min: knownValues.length > 0 ? Math.min(...knownValues) : null,
+      max: knownValues.length > 0 ? Math.max(...knownValues) : null,
+      days: formattedDays,
+      text: formatDatesByMonth(
+        formattedDays.map((day) => day.date),
         showSeats
           ? (date) => {
               const seats = seatsByDate.get(date) ?? 0;

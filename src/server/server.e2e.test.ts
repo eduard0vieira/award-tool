@@ -16,7 +16,7 @@ class FakeSearchDto extends RouteRequestDto {}
 
 // Stands in for a real source: no browser, and it waits for the test to release it.
 class FakeSource implements SearchSource<FakeSearchDto> {
-  readonly id = "tap";
+  readonly id = "fake";
   readonly requestDto = FakeSearchDto;
   private readonly pool = new SessionPool<object>({
     label: "fake",
@@ -39,11 +39,11 @@ class FakeSource implements SearchSource<FakeSearchDto> {
       job.progress(0.5);
       await new Promise<void>((resolve) => (this.release = resolve));
       if (job.shouldStop()) throw new Error("stopped");
-      if (request.origem === "ASK" && !(await job.ask("Continuar?"))) throw new Error("recusado");
+      if (request.origin === "ASK" && !(await job.ask("Continuar?"))) throw new Error("refused");
       this.jobs.complete(jobId, {
-        pernas: [{ rotulo: request.origem, secoes: [] }],
-        avisoParcial: "parcial",
-        arquivoLocal: "planilhas/voos.csv",
+        legs: [{ label: request.origin, sections: [] }],
+        partialNotice: "parcial",
+        localFile: "spreadsheets/voos.csv",
       });
     });
   }
@@ -67,7 +67,7 @@ async function startApp(credentials: Credentials | null) {
   return { app, url: await app.getUrl(), fake: fake! };
 }
 
-type Event = { tipo: string; [field: string]: unknown };
+type Event = { type: string; [field: string]: unknown };
 
 async function* readEvents(url: string): AsyncGenerator<Event> {
   const response = await fetch(url);
@@ -86,11 +86,11 @@ async function* readEvents(url: string): AsyncGenerator<Event> {
   }
 }
 
-async function nextEvent(events: AsyncGenerator<Event>, tipo: string): Promise<Event> {
+async function nextEvent(events: AsyncGenerator<Event>, type: string): Promise<Event> {
   for (;;) {
     const { value, done } = await events.next();
-    if (done) throw new Error(`stream ended before "${tipo}"`);
-    if (value.tipo === tipo) return value;
+    if (done) throw new Error(`stream ended before "${type}"`);
+    if (value.type === type) return value;
   }
 }
 
@@ -112,79 +112,82 @@ describe("server without auth", () => {
   after(() => app.close());
 
   test("runs a search from request to done, streaming its events", async () => {
-    const started = await post(`${url}/api/buscar`, { origem: "gru", destino: "mia" });
+    const started = await post(`${url}/api/searches`, { source: "fake", origin: "gru", destination: "mia" });
     assert.equal(started.status, 200);
     const jobId = started.body.jobId as string;
 
-    const events = readEvents(`${url}/api/buscar/${jobId}/eventos`);
-    assert.equal((await nextEvent(events, "progresso")).fracao, 0.5);
+    const events = readEvents(`${url}/api/searches/${jobId}/events`);
+    assert.equal((await nextEvent(events, "progress")).fraction, 0.5);
     fake.release();
     const done = await nextEvent(events, "done");
-    assert.deepEqual(done.pernas, [{ rotulo: "GRU", secoes: [] }]);
+    assert.deepEqual(done.legs, [{ label: "GRU", sections: [] }]);
     assert.equal((await events.next()).done, true);
 
-    const state = await fetch(`${url}/api/buscar/${jobId}/estado`).then((r) => r.json());
-    assert.deepEqual(state, { status: "done", progresso: 0.5 });
-    assert.equal((await post(`${url}/api/buscar/${jobId}/cancelar`)).status, 409);
-    assert.equal((await post(`${url}/api/buscar/${jobId}/responder`, { continuar: true })).status, 409);
+    const state = await fetch(`${url}/api/searches/${jobId}/state`).then((r) => r.json());
+    assert.deepEqual(state, { status: "done", progress: 0.5 });
+    assert.equal((await post(`${url}/api/searches/${jobId}/cancel`)).status, 409);
+    assert.equal((await post(`${url}/api/searches/${jobId}/answer`, { proceed: true })).status, 409);
   });
 
   test("replays the whole finished result to a late subscriber", async () => {
-    const { body } = await post(`${url}/api/buscar`, { fonte: "tap", origem: "GRU", destino: "LIS" });
-    const live = readEvents(`${url}/api/buscar/${body.jobId}/eventos`);
-    await nextEvent(live, "progresso");
+    const { body } = await post(`${url}/api/searches`, { source: "fake", origin: "GRU", destination: "LIS" });
+    const live = readEvents(`${url}/api/searches/${body.jobId}/events`);
+    await nextEvent(live, "progress");
     fake.release();
     const liveDone = await nextEvent(live, "done");
-    const replayed = await nextEvent(readEvents(`${url}/api/buscar/${body.jobId}/eventos`), "done");
+    const replayed = await nextEvent(readEvents(`${url}/api/searches/${body.jobId}/events`), "done");
     assert.deepEqual(replayed, liveDone);
   });
 
   test("asks the user and resumes after the answer", async () => {
-    const { body } = await post(`${url}/api/buscar`, { origem: "ASK", destino: "MIA" });
-    const events = readEvents(`${url}/api/buscar/${body.jobId}/eventos`);
-    await nextEvent(events, "progresso");
+    const { body } = await post(`${url}/api/searches`, { source: "fake", origin: "ASK", destination: "MIA" });
+    const events = readEvents(`${url}/api/searches/${body.jobId}/events`);
+    await nextEvent(events, "progress");
     fake.release();
-    const question = await nextEvent(events, "pergunta");
+    const question = await nextEvent(events, "question");
 
-    const stale = await post(`${url}/api/buscar/${body.jobId}/responder`, { id: "old", continuar: true });
+    const stale = await post(`${url}/api/searches/${body.jobId}/answer`, { id: "old", proceed: true });
     assert.equal(stale.status, 409);
-    const answered = await post(`${url}/api/buscar/${body.jobId}/responder`, { id: question.id, continuar: true });
+    const answered = await post(`${url}/api/searches/${body.jobId}/answer`, { id: question.id, proceed: true });
     assert.deepEqual(answered, { status: 200, body: { ok: true } });
-    assert.equal((await nextEvent(events, "respondida")).continuar, true);
+    assert.equal((await nextEvent(events, "answered")).proceed, true);
     await nextEvent(events, "done");
   });
 
   test("cancelling a running search ends it with the cancel message", async () => {
-    const { body } = await post(`${url}/api/buscar`, { origem: "GRU", destino: "MIA" });
-    const events = readEvents(`${url}/api/buscar/${body.jobId}/eventos`);
-    await nextEvent(events, "progresso");
-    assert.equal((await post(`${url}/api/buscar/${body.jobId}/cancelar`)).status, 200);
+    const { body } = await post(`${url}/api/searches`, { source: "fake", origin: "GRU", destination: "MIA" });
+    const events = readEvents(`${url}/api/searches/${body.jobId}/events`);
+    await nextEvent(events, "progress");
+    assert.equal((await post(`${url}/api/searches/${body.jobId}/cancel`)).status, 200);
     fake.release();
-    const error = await nextEvent(events, "erro");
-    assert.equal(error.mensagem, "Busca cancelada.");
+    const error = await nextEvent(events, "error");
+    assert.equal(error.message, "Busca cancelada.");
   });
 
-  test("rejects invalid requests with a Portuguese message in `erro`", async () => {
-    const missing = await post(`${url}/api/buscar`, { destino: "MIA" });
+  test("rejects invalid requests with a Portuguese message in `error`", async () => {
+    const missing = await post(`${url}/api/searches`, { source: "fake", destination: "MIA" });
     assert.equal(missing.status, 400);
-    assert.match(missing.body.erro as string, /origem é obrigatório/);
+    assert.match(missing.body.error as string, /origin é obrigatório/);
 
-    const unknown = await post(`${url}/api/buscar`, { fonte: "xyz", origem: "GRU", destino: "MIA" });
+    const unknown = await post(`${url}/api/searches`, { source: "xyz", origin: "GRU", destination: "MIA" });
     assert.equal(unknown.status, 400);
-    assert.match(unknown.body.erro as string, /fonte desconhecida: "xyz"/);
+    assert.match(unknown.body.error as string, /source desconhecida: "xyz"/);
 
-    const alert = await post(`${url}/api/alerta`, { origem: "GRU" });
+    const withoutSource = await post(`${url}/api/searches`, { origin: "GRU", destination: "MIA" });
+    assert.equal(withoutSource.status, 400);
+
+    const alert = await post(`${url}/api/alerts`, { origin: "GRU" });
     assert.equal(alert.status, 400);
-    assert.match(alert.body.erro as string, /destino é obrigatório/);
+    assert.match(alert.body.error as string, /destination é obrigatório/);
   });
 
   test("answers 404 for a job that no longer exists", async () => {
-    for (const path of ["estado", "eventos"]) {
-      const response = await fetch(`${url}/api/buscar/missing/${path}`);
+    for (const path of ["state", "events"]) {
+      const response = await fetch(`${url}/api/searches/missing/${path}`);
       assert.equal(response.status, 404);
-      assert.deepEqual(await response.json(), { erro: "Busca não existe mais." });
+      assert.deepEqual(await response.json(), { error: "Busca não existe mais." });
     }
-    assert.equal((await post(`${url}/api/buscar/missing/cancelar`)).status, 404);
+    assert.equal((await post(`${url}/api/searches/missing/cancel`)).status, 404);
   });
 });
 
@@ -197,7 +200,7 @@ describe("server with auth", () => {
   after(() => app.close());
 
   test("guards the page, the API and the generated alerts", async () => {
-    for (const path of ["/", "/api/buscar/x/estado", "/alertas/x.png", "/portal/index.html"]) {
+    for (const path of ["/", "/api/searches/x/state", "/alerts/x.png", "/portal/index.html"]) {
       const response = await fetch(`${url}${path}`);
       assert.equal(response.status, 401, path);
     }

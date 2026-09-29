@@ -5,6 +5,6 @@ export class AnswerQuestionDto {
   @IsString({ message: "O campo id deve ser texto." })
   id?: string;
 
-  @IsBoolean({ message: "O campo continuar deve ser verdadeiro ou falso." })
-  continuar!: boolean;
+  @IsBoolean({ message: "O campo proceed deve ser verdadeiro ou falso." })
+  proceed!: boolean;
 }

@@ -40,34 +40,34 @@ export type LatamYearResult = { outbound: LatamDay[]; inbound: LatamDay[]; faile
 // Keeping only one would choose for the client without saying so.
 export type RedemptionOption = {
   id: number;
-  milhas: number;
+  miles: number;
   // LATAM shows `cash + fee`, checked on all four rows of the recon (469,56 +
-  // 255,69 = 725,25, and so on). `totalReais` is that number; `dinheiroReais`
-  // is the part that trades miles for cash.
-  dinheiroReais: number;
+  // 255,69 = 725,25, and so on). `totalReais` is that number; `cashReais` is the
+  // part that trades miles for cash.
+  cashReais: number;
   totalReais: number;
 };
 
 export type PairConfirmation = {
   // Filled by the server with the shared formatter: it is what the alert
   // generator parses ("Out 2026: 31").
-  textoIda?: string;
-  textoVolta?: string;
-  origem: string;
-  destino: string;
-  dataIda: string;
-  dataVolta: string;
-  vooIda: string;
-  vooVolta: string;
+  outboundText?: string;
+  returnText?: string;
+  origin: string;
+  destination: string;
+  outboundDate: string;
+  returnDate: string;
+  outboundFlight: string;
+  returnFlight: string;
   // Points of EACH leg as LATAM prices them inside the pair (recon: 45.151 +
   // 45.151 = 90.302, option 1). Null when that direction's search response did
   // not come: the alert card speaks per leg, and making up half the total would
   // be a guess when legs cost differently.
-  milhasIda: number | null;
-  milhasVolta: number | null;
-  taxaReais: number;
-  opcoes: RedemptionOption[];
-  imagem: string;
+  outboundMiles: number | null;
+  returnMiles: number | null;
+  feeReais: number;
+  options: RedemptionOption[];
+  image: string;
 };
 
 export type LatamCeilings = {
@@ -258,18 +258,18 @@ export function buildLatamReport(days: LatamDay[], ceilings: LatamCeilings = {})
   const accepted = filterByCeilings(days, ceilings);
 
   if (accepted.length === 0) {
-    return { menor: null, maior: null, dias: [], texto: "Nenhuma tarifa encontrada nesse período." };
+    return { min: null, max: null, days: [], text: "Nenhuma tarifa encontrada nesse período." };
   }
 
-  const formattedDays = accepted.map((day) => ({ data: day.date, valorK: Math.round(day.price) }));
-  const values = formattedDays.map((day) => day.valorK);
+  const formattedDays = accepted.map((day) => ({ date: day.date, valueK: Math.round(day.price) }));
+  const values = formattedDays.map((day) => day.valueK);
 
   return {
-    menor: Math.min(...values),
-    maior: Math.max(...values),
-    dias: formattedDays,
-    texto: formatDatesByMonth(formattedDays.map((day) => day.data)),
-    unidade: "BRL",
+    min: Math.min(...values),
+    max: Math.max(...values),
+    days: formattedDays,
+    text: formatDatesByMonth(formattedDays.map((day) => day.date)),
+    unit: "BRL",
   };
 }
 
@@ -322,13 +322,13 @@ export function readRedemptionOptions(body: unknown): { feeReais: number; option
     const cash = requireNumber(option?.totalValueToPay?.money?.amount, `redemptionOptions[${i}].money.amount`);
     return {
       id: requireNumber(option?.id, `redemptionOptions[${i}].id`),
-      milhas: miles,
-      dinheiroReais: cash,
+      miles,
+      cashReais: cash,
       totalReais: Number((cash + feeReais).toFixed(2)),
     };
   });
   // Most miles to fewest, the order LATAM shows.
-  options.sort((a, b) => b.milhas - a.milhas);
+  options.sort((a, b) => b.miles - a.miles);
   return { feeReais, options };
 }
 
@@ -515,22 +515,22 @@ export async function confirmPairInMiles(
 
     const best = options[0]!;
     onLog(
-      `${outboundDate} → ${returnDate}: ${best.milhas.toLocaleString("pt-BR")} milhas + R$ ${best.totalReais.toFixed(2)} ` +
+      `${outboundDate} → ${returnDate}: ${best.miles.toLocaleString("pt-BR")} milhas + R$ ${best.totalReais.toFixed(2)} ` +
         `(${options.length} combinações).`,
     );
 
     return {
-      origem: origin,
-      destino: destination,
-      dataIda: outboundDate,
-      dataVolta: returnDate,
-      vooIda: describeFirstFlight(outboundSearch, origin, destination),
-      vooVolta: describeFirstFlight(returnSearch, destination, origin),
-      milhasIda: firstFlightMiles(outboundSearch),
-      milhasVolta: firstFlightMiles(returnSearch),
-      taxaReais: feeReais,
-      opcoes: options,
-      imagem: image,
+      origin,
+      destination,
+      outboundDate,
+      returnDate,
+      outboundFlight: describeFirstFlight(outboundSearch, origin, destination),
+      returnFlight: describeFirstFlight(returnSearch, destination, origin),
+      outboundMiles: firstFlightMiles(outboundSearch),
+      returnMiles: firstFlightMiles(returnSearch),
+      feeReais,
+      options,
+      image,
     };
   } finally {
     page.off("response", capture);

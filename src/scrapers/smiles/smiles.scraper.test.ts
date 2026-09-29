@@ -61,7 +61,7 @@ describe("Smiles response parser", () => {
   test("builds one section per cabin with seats in the copied text", () => {
     const response = readSmilesResponse(fixture("smiles-real.json"), "2026-10-13")!;
     assert.deepEqual(
-      buildSmilesReport([response], {}).map((section) => [section.rotulo, section.menor, section.maior, section.texto]),
+      buildSmilesReport([response], {}).map((section) => [section.label, section.min, section.max, section.text]),
       [
         ["Econômica", 138, 138, "Out 2026: 13 (9)"],
         ["Conforto", 219.5, 219.5, "Out 2026: 13 (9)"],
