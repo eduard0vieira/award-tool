@@ -123,7 +123,7 @@ async function launchOwnChrome(headless: boolean, label: string): Promise<BotBro
     if (/existing browser session|already in use|ProcessSingleton/i.test(message)) {
       throw new Error(
         "O perfil do bot já está em uso por outra janela do Chrome, e a conexão com ela falhou. " +
-          "Feche com `npm run chrome:parar` e busque de novo. O bot abre a janela dele sozinho, " +
+          "Feche com `npm run chrome:stop` e busque de novo. O bot abre a janela dele sozinho, " +
           "não é mais preciso rodar `npm run chrome` antes.",
       );
     }

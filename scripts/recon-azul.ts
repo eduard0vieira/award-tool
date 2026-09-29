@@ -1,56 +1,53 @@
 import "dotenv/config";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import type { Page } from "playwright";
 import { openChromeSession } from "../src/core/chrome-session.ts";
+import { FIXTURES_DIR } from "../src/core/paths.ts";
 
-// FASE 0 do módulo Azul: descobrir de onde a chamada precisa sair, e com quais
-// credenciais de sessão, ANTES de escrever qualquer linha de parsing.
+// PHASE 0 of the Azul source: find out where the call must come from, and with
+// which session credentials, BEFORE writing a single parsing line.
 //
-// O que se sabe do projeto antigo (projetos/cheap-flights, ver ANALISE.md lá):
-// - endpoint de pontos: b2c-api.voeazul.com.br/tudoAzulReservationAvailability/
-//   api/tudoazul/reservation/availability/v5/availability  (o gerador de headers
-//   do mesmo repo aponta pra v6 — a divergência é uma das perguntas daqui);
-// - é POST, e o corpo aceita ATÉ 6 DATAS de uma vez (array `criteria`), com
-//   flexibleDays ±3. Se confirmar, um ano custa ~61 requisições por direção;
-// - a autenticação é um `Authorization` de sessão + `Ocp-Apim-Subscription-Key`.
-//   No projeto antigo os dois eram colados à mão — foi exatamente isso que
-//   apodreceu e virou 403.
+// What was known from the old project (projetos/cheap-flights, see its ANALISE.md):
+// - points endpoint: b2c-api.voeazul.com.br/tudoAzulReservationAvailability/
+//   api/tudoazul/reservation/availability/v5/availability (the same repo's
+//   header generator points to v6; the mismatch is one of the questions here);
+// - it is a POST whose body takes UP TO 6 DATES at once (the `criteria` array)
+//   with flexibleDays ±3. If confirmed, a year costs ~61 requests per direction;
+// - authentication is a session `Authorization` plus `Ocp-Apim-Subscription-Key`.
+//   In the old project both were pasted by hand, which is exactly what rotted into 403s.
 //
-// A estratégia aqui é a mesma que funcionou na AA e no Smiles: deixar o site
-// gerar as credenciais e escutar. Nada é clicado — o deep link `selecao-voo`
-// com `cc=PTS` cai direto no resultado em pontos.
+// The strategy is the one that worked for AA and Smiles: let the site generate
+// the credentials and listen. Nothing is clicked: the `selecao-voo` deep link
+// with `cc=PTS` lands straight on the points result.
 //
-// Perguntas que este recon precisa responder:
-//   1. o deep link chega ao resultado sem passar por formulário?
-//   2. qual endpoint/versão o site chama HOJE, e com que headers?
-//   3. quantas datas voltam por resposta (o array `criteria` funciona mesmo)?
-//   4. dá pra repetir a chamada de dentro da página, com outra data?
+// Questions this recon must answer:
+//   1. does the deep link reach the result without a form?
+//   2. which endpoint and version does the site call TODAY, with which headers?
+//   3. how many dates come back per response (does `criteria` really work)?
+//   4. can the call be repeated from inside the page with another date?
 //
-// Uso: npx tsx scripts/recon-azul.ts [VCP] [REC] [2026-10-15]
+// Usage: npx tsx scripts/recon-azul.ts [VCP] [REC] [2026-10-15]
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const FIXTURES_DIR = path.join(__dirname, "..", "fixtures");
+const [origin = "VCP", destination = "REC", date = daysFromToday(60)] = process.argv.slice(2);
 
-const [origem = "VCP", destino = "REC", data = dataDaqui(60)] = process.argv.slice(2);
-
-function dataDaqui(dias: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + dias);
-  return d.toISOString().slice(0, 10);
+function daysFromToday(days: number): string {
+  const today = new Date();
+  today.setDate(today.getDate() + days);
+  return today.toISOString().slice(0, 10);
 }
 
-// O formato que o site usa na URL é M/D/AAAA, não ISO.
-function dataBarra(iso: string): string {
-  const [a, m, d] = iso.split("-").map(Number);
-  return `${m}/${d}/${a}`;
+// The site's URL uses M/D/YYYY, not ISO.
+function slashedDate(iso: string): string {
+  const [year, month, day] = iso.split("-").map(Number);
+  return `${month}/${day}/${year}`;
 }
 
 function deepLink(): string {
-  const p = new URLSearchParams({
-    "c[0].ds": origem.toUpperCase(),
-    "c[0].std": dataBarra(data),
-    "c[0].as": destino.toUpperCase(),
+  const query = new URLSearchParams({
+    "c[0].ds": origin.toUpperCase(),
+    "c[0].std": slashedDate(date),
+    "c[0].as": destination.toUpperCase(),
     "p[0].t": "ADT",
     "p[0].c": "1",
     "p[0].cp": "false",
@@ -58,194 +55,194 @@ function deepLink(): string {
     "f.dr": "3",
     cc: "PTS",
   });
-  return `https://www.voeazul.com.br/br/pt/home/selecao-voo?${p}`;
+  return `https://www.voeazul.com.br/br/pt/home/selecao-voo?${query}`;
 }
 
-// Cabeçalhos que carregam sessão. O VALOR nunca é impresso nem salvo: o que
-// interessa aqui é saber QUE eles existem e de onde vêm.
-const SIGILOSOS = ["authorization", "cookie", "ocp-apim-subscription-key", "x-csrf-token"];
+// Headers carrying the session. The VALUE is never printed or saved: what
+// matters here is knowing THAT they exist and where they come from.
+const SECRET_HEADERS = ["authorization", "cookie", "ocp-apim-subscription-key", "x-csrf-token"];
 
-function mascarar(nome: string, valor: string): string {
-  if (!SIGILOSOS.includes(nome.toLowerCase())) return valor;
-  return `<${valor.length} chars — não impresso>`;
+function mask(name: string, value: string): string {
+  if (!SECRET_HEADERS.includes(name.toLowerCase())) return value;
+  return `<${value.length} chars — não impresso>`;
 }
 
-type Captura = {
+type Capture = {
   url: string;
-  metodo: string;
+  method: string;
   headers: Record<string, string>;
-  corpoEnviado: string | null;
+  sentBody: string | null;
   status: number | null;
-  corpoRecebido: string | null;
+  receivedBody: string | null;
 };
 
 async function main() {
-  console.log(`\nRecon Azul — ${origem.toUpperCase()}→${destino.toUpperCase()} em ${data}`);
+  console.log(`\nRecon Azul — ${origin.toUpperCase()}→${destination.toUpperCase()} em ${date}`);
   console.log(`Deep link: ${deepLink()}\n`);
 
-  const sessao = await openChromeSession(false, "recon-azul");
-  const page = sessao.page;
-  const capturas: Captura[] = [];
+  const session = await openChromeSession(false, "recon-azul");
+  const page = session.page;
+  const captures: Capture[] = [];
 
-  const interessa = (u: string) => u.includes("b2c-api.voeazul.com.br") || u.includes("/availability");
+  const isRelevant = (url: string) => url.includes("b2c-api.voeazul.com.br") || url.includes("/availability");
 
-  page.on("request", (req) => {
-    if (!interessa(req.url())) return;
-    capturas.push({
-      url: req.url(),
-      metodo: req.method(),
-      headers: req.headers(),
-      corpoEnviado: req.postData(),
+  page.on("request", (request) => {
+    if (!isRelevant(request.url())) return;
+    captures.push({
+      url: request.url(),
+      method: request.method(),
+      headers: request.headers(),
+      sentBody: request.postData(),
       status: null,
-      corpoRecebido: null,
+      receivedBody: null,
     });
   });
 
-  page.on("response", async (res) => {
-    if (!interessa(res.url())) return;
-    const alvo = capturas.find((c) => c.url === res.url() && c.status === null);
-    if (!alvo) return;
-    alvo.status = res.status();
+  page.on("response", async (response) => {
+    if (!isRelevant(response.url())) return;
+    const capture = captures.find((candidate) => candidate.url === response.url() && candidate.status === null);
+    if (!capture) return;
+    capture.status = response.status();
     try {
-      alvo.corpoRecebido = await res.text();
-    } catch (erro) {
-      // Corpo já descartado pelo navegador: registra a falha em vez de fingir
-      // que a resposta veio vazia.
-      alvo.corpoRecebido = null;
-      console.log(`   (não deu pra ler o corpo de ${res.url()}: ${(erro as Error).message})`);
+      capture.receivedBody = await response.text();
+    } catch (error) {
+      // The browser already discarded the body: record the failure instead of
+      // pretending the response came back empty.
+      capture.receivedBody = null;
+      console.log(`   (não deu pra ler o corpo de ${response.url()}: ${(error as Error).message})`);
     }
   });
 
-  // Por que uma chamada falha "na rede" é a pergunta do degrau 4: o motivo do
-  // Chrome (CORS, bloqueio, DNS) só aparece nestes dois eventos.
-  page.on("requestfailed", (req) => {
-    if (!interessa(req.url())) return;
-    console.log(`   [rede] ${req.method()} ${req.url().slice(0, 90)} → ${req.failure()?.errorText}`);
+  // Why a call fails "on the network" is step 4's question: Chrome's reason
+  // (CORS, block, DNS) only shows in these two events.
+  page.on("requestfailed", (request) => {
+    if (!isRelevant(request.url())) return;
+    console.log(`   [rede] ${request.method()} ${request.url().slice(0, 90)} → ${request.failure()?.errorText}`);
   });
-  page.on("console", (msg) => {
-    const t = msg.text();
-    if (/CORS|Access-Control|blocked|preflight/i.test(t)) console.log(`   [console] ${t.slice(0, 300)}`);
+  page.on("console", (message) => {
+    const text = message.text();
+    if (/CORS|Access-Control|blocked|preflight/i.test(text)) console.log(`   [console] ${text.slice(0, 300)}`);
   });
 
   console.log("1. Abrindo o deep link (nada é clicado — nem o aviso de cookies)...");
   await page.goto(deepLink(), { waitUntil: "domcontentloaded", timeout: 90_000 });
 
-  // O resultado carrega por XHR depois da página; espera pela captura, não por
-  // um seletor de tela (a tela muda mais do que a rede).
-  const éBusca = (c: Captura) => c.metodo === "POST" && c.url.includes("/availability/") && c.url.endsWith("availability");
-  const limite = Date.now() + 60_000;
-  while (Date.now() < limite && !capturas.some((c) => éBusca(c) && c.status !== null)) {
+  // The result loads by XHR after the page; wait for the capture, not for a
+  // screen selector (the screen changes more than the network).
+  const isSearch = (capture: Capture) =>
+    capture.method === "POST" && capture.url.includes("/availability/") && capture.url.endsWith("availability");
+  const deadline = Date.now() + 60_000;
+  while (Date.now() < deadline && !captures.some((capture) => isSearch(capture) && capture.status !== null)) {
     await page.waitForTimeout(1000);
   }
 
   console.log(`\n2. Onde a página parou: ${page.url()}`);
   console.log(`   Título: ${await page.title()}`);
-  console.log(`   Chamadas à API capturadas: ${capturas.length}\n`);
+  console.log(`   Chamadas à API capturadas: ${captures.length}\n`);
 
-  if (capturas.length === 0) {
+  if (captures.length === 0) {
     console.log("❌ Nenhuma. O deep link não chegou ao resultado — ou a busca sai por outro host.");
-    await encerrar(page);
+    await finish(page);
     return;
   }
 
-  for (const c of capturas) {
-    console.log(`── ${c.metodo} ${c.url}`);
-    console.log(`   status: ${c.status ?? "sem resposta"} | corpo recebido: ${c.corpoRecebido?.length ?? 0} bytes`);
+  for (const capture of captures) {
+    console.log(`── ${capture.method} ${capture.url}`);
+    console.log(`   status: ${capture.status ?? "sem resposta"} | corpo recebido: ${capture.receivedBody?.length ?? 0} bytes`);
     console.log("   headers da requisição:");
-    for (const [nome, valor] of Object.entries(c.headers)) {
-      console.log(`     ${nome}: ${mascarar(nome, valor)}`);
+    for (const [name, value] of Object.entries(capture.headers)) {
+      console.log(`     ${name}: ${mask(name, value)}`);
     }
-    if (c.corpoEnviado) {
-      console.log(`   corpo enviado (${c.corpoEnviado.length} bytes):`);
-      console.log(`     ${c.corpoEnviado.slice(0, 1200)}`);
+    if (capture.sentBody) {
+      console.log(`   corpo enviado (${capture.sentBody.length} bytes):`);
+      console.log(`     ${capture.sentBody.slice(0, 1200)}`);
     }
     console.log();
   }
 
-  const boa = capturas.find((c) => éBusca(c) && c.status === 200 && c.corpoRecebido);
-  if (!boa || !boa.corpoRecebido) {
+  const good = captures.find((capture) => isSearch(capture) && capture.status === 200 && capture.receivedBody);
+  if (!good || !good.receivedBody) {
     console.log("❌ Nenhuma resposta 200 com corpo — nada salvo (fixture de erro não serve de schema).");
-    await encerrar(page);
+    await finish(page);
     return;
   }
 
   fs.mkdirSync(FIXTURES_DIR, { recursive: true });
-  const destinoArq = path.join(FIXTURES_DIR, "azul-real.json");
-  fs.writeFileSync(destinoArq, boa.corpoRecebido, "utf8");
-  console.log(`✅ Resposta crua salva em fixtures/azul-real.json (${boa.corpoRecebido.length} bytes).`);
+  fs.writeFileSync(path.join(FIXTURES_DIR, "azul-real.json"), good.receivedBody, "utf8");
+  console.log(`✅ Resposta crua salva em fixtures/azul-real.json (${good.receivedBody.length} bytes).`);
   console.log("   Só o corpo da resposta — nenhum header de sessão foi pro arquivo.\n");
 
-  // Quantas datas vieram? É o número que decide o custo de um ano.
+  // How many dates came back decides the cost of a year.
   try {
-    const j = JSON.parse(boa.corpoRecebido) as { data?: { trips?: { std?: string }[] } };
-    const trips = j.data?.trips ?? [];
-    const datas = [...new Set(trips.map((t) => (t.std ?? "").split("T")[0]).filter(Boolean))];
-    console.log(`3. Datas distintas nesta única resposta: ${datas.length}`);
-    console.log(`   ${datas.join(", ") || "(nenhuma)"}`);
-    console.log(`   → um ano por direção custaria ~${datas.length ? Math.ceil(365 / datas.length) : "?"} requisições.\n`);
+    const json = JSON.parse(good.receivedBody) as { data?: { trips?: { std?: string }[] } };
+    const trips = json.data?.trips ?? [];
+    const dates = [...new Set(trips.map((trip) => (trip.std ?? "").split("T")[0]).filter(Boolean))];
+    console.log(`3. Datas distintas nesta única resposta: ${dates.length}`);
+    console.log(`   ${dates.join(", ") || "(nenhuma)"}`);
+    console.log(`   → um ano por direção custaria ~${dates.length ? Math.ceil(365 / dates.length) : "?"} requisições.\n`);
   } catch {
     console.log("3. O corpo não é o JSON esperado — abra a fixture e olhe.\n");
   }
 
-  if (process.env.PULAR_DEGRAUS !== "true") {
+  if (process.env.SKIP_STEPS !== "true") {
     console.log("4. Repetindo a chamada de DENTRO da página, com outra data...");
-    await repetirDeDentro(page, boa);
+    await repeatFromInside(page, good);
   }
 
   console.log("\n5. Sequestrando a chamada do próprio site (troca só o corpo)...");
-  await sequestrar(page);
+  await hijackSiteCall(page);
 
-  await encerrar(page);
+  await finish(page);
 }
 
-// Degrau final e mais importante: nós conseguimos DIRIGIR a busca?
+// The last and most important step: can WE drive the search?
 //
-// A primeira tentativa (window.fetch, dentro da página) falhou com "Failed to
-// fetch", e o stack mostrou por quê: o site embrulha window.fetch num script de
-// anti-bot. Então aqui vai uma escada de transportes, do mais parecido com o
-// site pro menos, até um responder.
+// The first attempt (window.fetch inside the page) failed with "Failed to
+// fetch", and the stack showed why: the site wraps window.fetch in an anti-bot
+// script. So this is a ladder of transports, from most to least site-like,
+// until one answers.
 //
-// Depois disso, a pergunta de custo: o array `criteria` aceita várias datas de
-// uma vez? O site manda uma por chamada; o projeto antigo mandava seis. Se seis
-// funcionar, um ano custa ~61 requisições por direção em vez de 365.
-type Transporte = { nome: string; enviar: (corpo: unknown) => Promise<Resposta> };
-type Resposta = { status: number | string; tam: number; corpo: string };
+// Then the cost question: does `criteria` take several dates at once? The site
+// sends one per call; the old project sent six. If six work, a year costs ~61
+// requests per direction instead of 365.
+type Transport = { name: string; send: (body: unknown) => Promise<TransportResponse> };
+type TransportResponse = { status: number | string; size: number; body: string };
 
-function criterio(iso: string) {
-  const [a, m, d] = iso.split("-").map(Number);
+function criterion(iso: string) {
+  const [year, month, day] = iso.split("-").map(Number);
   return {
-    departureStation: origem.toUpperCase(),
-    arrivalStation: destino.toUpperCase(),
-    std: `${m}/${d}/${a}`,
+    departureStation: origin.toUpperCase(),
+    arrivalStation: destination.toUpperCase(),
+    std: `${month}/${day}/${year}`,
     departureDate: iso,
   };
 }
 
-function corpoBusca(quantasDatas: number) {
+function searchBody(dateCount: number) {
   return {
-    criteria: Array.from({ length: quantasDatas }, (_, k) => criterio(dataDaqui(90 + k * 7))),
+    criteria: Array.from({ length: dateCount }, (_, k) => criterion(daysFromToday(90 + k * 7))),
     passengers: [{ type: "ADT", count: "1", companionPass: false }],
     flexibleDays: { daysToLeft: "3", daysToRight: "3" },
     currencyCode: "BRL",
   };
 }
 
-function datasDe(corpo: string): string[] {
+function datesIn(body: string): string[] {
   try {
-    const j = JSON.parse(corpo) as { data?: { trips?: { std?: string }[] } };
-    return [...new Set((j.data?.trips ?? []).map((t) => (t.std ?? "").split("T")[0] ?? "").filter(Boolean))];
+    const json = JSON.parse(body) as { data?: { trips?: { std?: string }[] } };
+    return [...new Set((json.data?.trips ?? []).map((trip) => (trip.std ?? "").split("T")[0] ?? "").filter(Boolean))];
   } catch {
     return [];
   }
 }
 
-async function repetirDeDentro(page: import("playwright").Page, base: Captura) {
-  // Só os headers que a aplicação define. `referer`, `user-agent` e `sec-ch-*`
-  // são do navegador — o fetch os ignora, e mandá-los não muda nada.
-  const DA_APP = ["authorization", "ocp-apim-subscription-key", "device", "culture", "accept", "content-type"];
+async function repeatFromInside(page: Page, base: Capture) {
+  // Only the headers the application sets. `referer`, `user-agent` and
+  // `sec-ch-*` belong to the browser: fetch ignores them.
+  const APP_HEADERS = ["authorization", "ocp-apim-subscription-key", "device", "culture", "accept", "content-type"];
   const headers: Record<string, string> = {};
-  for (const [nome, valor] of Object.entries(base.headers)) {
-    if (DA_APP.includes(nome.toLowerCase())) headers[nome.toLowerCase()] = valor;
+  for (const [name, value] of Object.entries(base.headers)) {
+    if (APP_HEADERS.includes(name.toLowerCase())) headers[name.toLowerCase()] = value;
   }
   if (!headers.authorization) {
     console.log("   (a chamada capturada não tinha authorization — pulando)");
@@ -253,158 +250,154 @@ async function repetirDeDentro(page: import("playwright").Page, base: Captura) {
   }
   const url = base.url;
 
-  const transportes: Transporte[] = [
+  const transports: Transport[] = [
     {
-      nome: "fetch da página",
-      enviar: (b) =>
+      name: "fetch da página",
+      send: (body) =>
         page.evaluate(
-          async ({ u, h, b }) => {
+          async ({ url, headers, body }) => {
             try {
-              const res = await fetch(u, { method: "POST", headers: h as Record<string, string>, body: JSON.stringify(b) });
-              const t = await res.text();
-              return { status: res.status as number | string, tam: t.length, corpo: t };
-            } catch (erro) {
-              return { status: `falhou: ${(erro as Error).message}`, tam: 0, corpo: "" };
+              const response = await fetch(url, { method: "POST", headers: headers as Record<string, string>, body: JSON.stringify(body) });
+              const text = await response.text();
+              return { status: response.status as number | string, size: text.length, body: text };
+            } catch (error) {
+              return { status: `falhou: ${(error as Error).message}`, size: 0, body: "" };
             }
           },
-          { u: url, h: headers, b },
+          { url, headers, body },
         ),
     },
     {
-      nome: "XMLHttpRequest",
-      enviar: (b) =>
+      name: "XMLHttpRequest",
+      send: (body) =>
         page.evaluate(
-          ({ u, h, b }) =>
-            new Promise<{ status: number | string; tam: number; corpo: string }>((ok) => {
-              const x = new XMLHttpRequest();
-              x.open("POST", u, true);
-              for (const [n, v] of Object.entries(h as Record<string, string>)) x.setRequestHeader(n, v);
-              x.onload = () => ok({ status: x.status, tam: x.responseText.length, corpo: x.responseText });
-              x.onerror = () => ok({ status: "falhou: erro de rede", tam: 0, corpo: "" });
-              x.send(JSON.stringify(b));
+          ({ url, headers, body }) =>
+            new Promise<{ status: number | string; size: number; body: string }>((resolve) => {
+              const request = new XMLHttpRequest();
+              request.open("POST", url, true);
+              for (const [name, value] of Object.entries(headers as Record<string, string>)) request.setRequestHeader(name, value);
+              request.onload = () => resolve({ status: request.status, size: request.responseText.length, body: request.responseText });
+              request.onerror = () => resolve({ status: "falhou: erro de rede", size: 0, body: "" });
+              request.send(JSON.stringify(body));
             }),
-          { u: url, h: headers, b },
+          { url, headers, body },
         ),
     },
     {
-      nome: "fetch de iframe novo (sem o embrulho do anti-bot)",
-      enviar: (b) =>
+      name: "fetch de iframe novo (sem o embrulho do anti-bot)",
+      send: (body) =>
         page.evaluate(
-          async ({ u, h, b }) => {
-            const quadro = document.createElement("iframe");
-            quadro.style.display = "none";
-            document.body.appendChild(quadro);
+          async ({ url, headers, body }) => {
+            const frame = document.createElement("iframe");
+            frame.style.display = "none";
+            document.body.appendChild(frame);
             try {
-              const limpo = (quadro.contentWindow as Window & typeof globalThis).fetch;
-              const res = await limpo.call(quadro.contentWindow, u, {
+              const cleanFetch = (frame.contentWindow as Window & typeof globalThis).fetch;
+              const response = await cleanFetch.call(frame.contentWindow, url, {
                 method: "POST",
-                headers: h as Record<string, string>,
-                body: JSON.stringify(b),
+                headers: headers as Record<string, string>,
+                body: JSON.stringify(body),
               });
-              const t = await res.text();
-              return { status: res.status as number | string, tam: t.length, corpo: t };
-            } catch (erro) {
-              return { status: `falhou: ${(erro as Error).message}`, tam: 0, corpo: "" };
+              const text = await response.text();
+              return { status: response.status as number | string, size: text.length, body: text };
+            } catch (error) {
+              return { status: `falhou: ${(error as Error).message}`, size: 0, body: "" };
             } finally {
-              quadro.remove();
+              frame.remove();
             }
           },
-          { u: url, h: headers, b },
+          { url, headers, body },
         ),
     },
     {
-      nome: "requisição do Playwright (fora do JS da página)",
-      enviar: async (b) => {
+      name: "requisição do Playwright (fora do JS da página)",
+      send: async (body) => {
         try {
-          const res = await page.context().request.post(url, { headers, data: b as object });
-          const t = await res.text();
-          return { status: res.status(), tam: t.length, corpo: t };
-        } catch (erro) {
-          return { status: `falhou: ${(erro as Error).message}`, tam: 0, corpo: "" };
+          const response = await page.context().request.post(url, { headers, data: body as object });
+          const text = await response.text();
+          return { status: response.status(), size: text.length, body: text };
+        } catch (error) {
+          return { status: `falhou: ${(error as Error).message}`, size: 0, body: "" };
         }
       },
     },
   ];
 
-  let vencedor: Transporte | null = null;
-  for (const t of transportes) {
-    const r = await t.enviar(corpoBusca(1));
-    const datas = datasDe(r.corpo);
-    console.log(`   ${t.nome}: status ${r.status} | ${r.tam} bytes | ${datas.length} data(s)`);
-    if (r.status !== 200 && r.corpo) console.log(`      amostra: ${r.corpo.slice(0, 200)}`);
-    if (r.status === 200 && datas.length > 0) {
-      vencedor = t;
+  let winner: Transport | null = null;
+  for (const transport of transports) {
+    const response = await transport.send(searchBody(1));
+    const dates = datesIn(response.body);
+    console.log(`   ${transport.name}: status ${response.status} | ${response.size} bytes | ${dates.length} data(s)`);
+    if (response.status !== 200 && response.body) console.log(`      amostra: ${response.body.slice(0, 200)}`);
+    if (response.status === 200 && dates.length > 0) {
+      winner = transport;
       break;
     }
   }
 
-  if (!vencedor) {
+  if (!winner) {
     console.log("\n⚠️  Nenhum transporte disparou a busca. O módulo teria que navegar por deep link a cada data —");
     console.log("    funciona, mas custa um carregamento de página inteiro por consulta.");
     return;
   }
 
-  console.log(`\n✅ Dá pra dirigir a busca por: ${vencedor.nome}`);
+  console.log(`\n✅ Dá pra dirigir a busca por: ${winner.name}`);
   console.log("\n5. Quantas datas cabem numa chamada?");
-  for (const quantas of [3, 6, 12]) {
-    const r = await vencedor.enviar(corpoBusca(quantas));
-    const datas = datasDe(r.corpo);
-    console.log(`   criteria com ${quantas} → status ${r.status} | ${datas.length} data(s) na resposta | ${r.tam} bytes`);
-    if (r.status !== 200 && r.corpo) console.log(`      amostra: ${r.corpo.slice(0, 200)}`);
+  for (const count of [3, 6, 12]) {
+    const response = await winner.send(searchBody(count));
+    const dates = datesIn(response.body);
+    console.log(`   criteria com ${count} → status ${response.status} | ${dates.length} data(s) na resposta | ${response.size} bytes`);
+    if (response.status !== 200 && response.body) console.log(`      amostra: ${response.body.slice(0, 200)}`);
     await page.waitForTimeout(2000);
   }
 }
 
-// Se nenhuma chamada nossa passa, sobra deixar o SITE fazer a chamada dele — com
-// todos os cabeçalhos e cookies de anti-bot que só ele sabe montar — e trocar só
-// o corpo no caminho. Se o array `criteria` aceitar várias datas, uma navegação
-// rende várias datas.
-async function sequestrar(page: import("playwright").Page) {
-  // Quantas datas cabem numa chamada é o número que define o custo de um ano.
-  // Configurável porque a resposta se acha por tentativa: LOTES=6,8,10
-  const LOTES = (process.env.LOTES ?? "1,6,12").split(",").map(Number);
-  for (const quantas of LOTES) {
-    let trocou = false;
-    let resposta: { status: number; corpo: string } | null = null;
+// When none of our calls pass, what is left is letting the SITE make its own
+// call, with every anti-bot header and cookie only it knows how to build, and
+// swapping just the body on the way. If `criteria` takes several dates, one
+// navigation yields several dates.
+async function hijackSiteCall(page: Page) {
+  // How many dates fit one call defines the cost of a year; found by trying: BATCHES=6,8,10
+  const batchSizes = (process.env.BATCHES ?? "1,6,12").split(",").map(Number);
+  for (const count of batchSizes) {
+    let swapped = false;
+    let response: { status: number; body: string } | null = null;
 
-    await page.route("**/availability/v*/availability", async (rota) => {
-      if (trocou) return rota.continue();
-      trocou = true;
-      await rota.continue({ postData: JSON.stringify(corpoBusca(quantas)) });
+    await page.route("**/availability/v*/availability", async (route) => {
+      if (swapped) return route.continue();
+      swapped = true;
+      await route.continue({ postData: JSON.stringify(searchBody(count)) });
     });
 
-    const pegar = page.waitForResponse(
-      (r) => /availability\/v\d+\/availability$/.test(r.url()),
-      { timeout: 60_000 },
-    );
+    const nextResponse = page.waitForResponse((candidate) => /availability\/v\d+\/availability$/.test(candidate.url()), {
+      timeout: 60_000,
+    });
     await page.goto(deepLink(), { waitUntil: "domcontentloaded", timeout: 90_000 });
     try {
-      const r = await pegar;
-      resposta = { status: r.status(), corpo: await r.text() };
+      const result = await nextResponse;
+      response = { status: result.status(), body: await result.text() };
     } catch {
-      resposta = null;
+      response = null;
     }
     await page.unroute("**/availability/v*/availability");
 
-    if (!resposta) {
-      console.log(`   criteria com ${quantas} → nenhuma resposta em 60s`);
+    if (!response) {
+      console.log(`   criteria com ${count} → nenhuma resposta em 60s`);
       continue;
     }
-    const datas = datasDe(resposta.corpo);
-    console.log(
-      `   criteria com ${quantas} → status ${resposta.status} | ${resposta.corpo.length} bytes | ${datas.length} data(s) na resposta`,
-    );
-    if (datas.length) console.log(`     ${datas.join(", ")}`);
-    if (resposta.status !== 200) console.log(`     amostra: ${resposta.corpo.slice(0, 200)}`);
+    const dates = datesIn(response.body);
+    console.log(`   criteria com ${count} → status ${response.status} | ${response.body.length} bytes | ${dates.length} data(s) na resposta`);
+    if (dates.length) console.log(`     ${dates.join(", ")}`);
+    if (response.status !== 200) console.log(`     amostra: ${response.body.slice(0, 200)}`);
 
-    if (quantas === Math.max(...LOTES) && datas.length > 0) {
-      fs.writeFileSync(path.join(FIXTURES_DIR, "azul-real-multidata.json"), resposta.corpo, "utf8");
+    if (count === Math.max(...batchSizes) && dates.length > 0) {
+      fs.writeFileSync(path.join(FIXTURES_DIR, "azul-real-multidata.json"), response.body, "utf8");
       console.log("   ✅ fixture multi-data salva em fixtures/azul-real-multidata.json");
     }
   }
 }
 
-async function encerrar(page: import("playwright").Page) {
+async function finish(page: Page) {
   await page.close();
   process.exit(0);
 }

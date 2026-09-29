@@ -1,636 +1,611 @@
 import "dotenv/config";
 import fs from "node:fs";
 import path from "node:path";
+import type { Frame, Page, Request } from "playwright";
 import { openChromeSession } from "../src/core/chrome-session.ts";
 import { FIXTURES_DIR } from "../src/core/paths.ts";
 
-// FASE 0 do módulo Iberia.
+// PHASE 0 of the Iberia source.
 //
-// O projeto antigo (projetos/cheap-flights) atacava a API do APP iOS:
-// ibisservices.iberia.com/api/sse-rpa/rs/v1/availability, com token obtido por
-// login na conta Iberia Plus e cookies de Akamai colados à mão — inclusive um
-// `X-acf-sensor-data`, que é assinado pelo app nativo e não dá pra reproduzir.
-// Foi por isso que aquilo virou 403 e ficou.
+// The old project (projetos/cheap-flights) hit the iOS APP's API:
+// ibisservices.iberia.com/api/sse-rpa/rs/v1/availability, with a token from an
+// Iberia Plus login and Akamai cookies pasted by hand, including an
+// `X-acf-sensor-data` signed by the native app that cannot be reproduced. That
+// is why it turned into 403 and stayed there.
 //
-// A técnica que destravou a Azul não liga pra nada disso: quem monta a
-// requisição é o site, nós só trocamos o que pedimos. O primeiro olhar já
-// mostrou dois sinais bons:
-//   - a home chama `ibisauth.../openid-connect/token` sozinha, anônima;
-//   - ela usa o MESMO host `ibisservices.iberia.com` da API do app.
+// The technique that unlocked Azul ignores all of that: the site builds the
+// request and we only swap what we ask for. The first look showed two good signs:
+//   - the home page calls `ibisauth.../openid-connect/token` on its own, anonymously;
+//   - it uses the SAME `ibisservices.iberia.com` host as the app's API.
 //
-// Perguntas desta fase:
-//   1. a busca com "Pagar com Avios" abre sem login?
-//   2. qual endpoint traz a disponibilidade, e quantos dias por resposta?
-//   3. o resultado sai numa URL que dá pra repetir (deep link)?
+// Questions for this phase:
+//   1. does the "Pagar com Avios" search open without a login?
+//   2. which endpoint brings availability, and how many days per response?
+//   3. does the result land on a repeatable URL (deep link)?
 //
-// Uso: npx tsx scripts/recon-iberia.ts [GRU] [MAD] [2026-11-16]
+// Usage: npx tsx scripts/recon-iberia.ts [GRU] [MAD] [2026-11-16]
 
-const [origem = "GRU", destino = "MAD", data = dataDaqui(90)] = process.argv.slice(2);
+const [origin = "GRU", destination = "MAD", date = daysFromToday(90)] = process.argv.slice(2);
 
-function dataDaqui(dias: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + dias);
-  return d.toISOString().slice(0, 10);
+function daysFromToday(days: number): string {
+  const today = new Date();
+  today.setDate(today.getDate() + days);
+  return today.toISOString().slice(0, 10);
 }
-function dataBR(iso: string): string {
-  const [a, m, d] = iso.split("-");
-  return `${d}/${m}/${a}`;
+function brazilianDate(iso: string): string {
+  const [year, month, day] = iso.split("-");
+  return `${day}/${month}/${year}`;
+}
+function brazilianToIso(br: string): string {
+  const [day, month, year] = br.split("/");
+  return `${year}-${month}-${day}`;
 }
 
-// Quanto tempo o script espera você fazer o login na janela do bot. O login
-// fica salvo no perfil, então isso é uma vez só — não a cada busca.
-const ESPERA_LOGIN_MS = Number(process.env.IBERIA_ESPERA_LOGIN_MS) || 600_000;
+// How long the script waits for you to log in on the bot's window. The login
+// stays in the profile, so this happens once, not on every search.
+const LOGIN_WAIT_MS = Number(process.env.IBERIA_ESPERA_LOGIN_MS) || 600_000;
 
-const foto = (nome: string) => path.join(FIXTURES_DIR, `iberia-${nome}.png`);
+// Kept out of git (fixtures/*.png): logged-in screens show the holder's name and balance.
+const capturePath = (name: string) => path.join(FIXTURES_DIR, `iberia-${name}.png`);
 
-const SIGILOSOS = ["authorization", "cookie", "x-acf-sensor-data"];
-const mascarar = (n: string, v: string) =>
-  SIGILOSOS.includes(n.toLowerCase()) ? `<${v.length} chars — não impresso>` : v;
+const SECRET_HEADERS = ["authorization", "cookie", "x-acf-sensor-data"];
+const mask = (name: string, value: string) =>
+  SECRET_HEADERS.includes(name.toLowerCase()) ? `<${value.length} chars — não impresso>` : value;
 
-type Captura = {
+// Headers `fetch` does not let a page set: the browser puts its own.
+const FORBIDDEN_HEADERS = /^(host|cookie|connection|content-length|accept-encoding|user-agent|origin|referer|sec-)/i;
+
+type Capture = {
   url: string;
-  metodo: string;
+  method: string;
   headers: Record<string, string>;
-  corpoEnviado: string | null;
+  sentBody: string | null;
   status: number | null;
-  corpoRecebido: string | null;
+  receivedBody: string | null;
 };
 
-// Começou olhando só `ibisservices`/`ibisauth`, que são os hosts conhecidos —
-// mas se o preço em Avios vier de outra rota da casa, esse filtro o esconderia.
-// Agora pega qualquer host da iberia.com, menos estático e rastreador.
-// Largo o bastante pra achar uma rota de preço fora dos dois hosts conhecidos,
-// estreito o bastante pra não afogar o log nos beacons de Akamai (`sensor_data`)
-// e Dynatrace (`rb_*`), que a primeira versão larga trouxe às dezenas.
-const interessa = (u: string) => {
-  const host = new URL(u, "https://www.iberia.com").hostname;
+// It started watching only `ibisservices`/`ibisauth`, the known hosts, but a
+// price route elsewhere on the domain would have been hidden. Wide enough to
+// find it, narrow enough not to drown the log in Akamai (`sensor_data`) and
+// Dynatrace (`rb_*`) beacons, which the first wide version brought by the dozen.
+const isRelevant = (url: string) => {
+  const host = new URL(url, "https://www.iberia.com").hostname;
   if (!/(^|\.)iberia\.com$/.test(host)) return false;
-  if (/\.(js|css|png|jpe?g|svg|gif|woff2?|ico|mp4)(\?|$)/.test(u)) return false;
+  if (/\.(js|css|png|jpe?g|svg|gif|woff2?|ico|mp4)(\?|$)/.test(url)) return false;
   if (/ibisservices\.iberia\.com|ibisauth\.iberia\.com/.test(host)) return true;
-  return /\/api\//.test(new URL(u, "https://www.iberia.com").pathname);
+  return /\/api\//.test(new URL(url, "https://www.iberia.com").pathname);
 };
 
 async function main() {
-  console.log(`\nRecon Iberia — ${origem.toUpperCase()}→${destino.toUpperCase()} em ${data} (Avios)\n`);
+  console.log(`\nRecon Iberia — ${origin.toUpperCase()}→${destination.toUpperCase()} em ${date} (Avios)\n`);
 
-  const sessao = await openChromeSession(false, "recon-iberia");
-  const page = sessao.page;
-  const capturas: Captura[] = [];
+  const session = await openChromeSession(false, "recon-iberia");
+  const page = session.page;
+  const captures: Capture[] = [];
 
-  // Pareamento pela IDENTIDADE da requisição, não pela URL: a mesma rota de
-  // disponibilidade é chamada duas vezes (marketCode BR e US), e casar por
-  // string grudava a resposta de uma no pedido da outra — resultado errado com
-  // cara de certo, que é justamente o que o AGENTS.md manda não deixar acontecer.
-  const porRequisicao = new Map<import("playwright").Request, Captura>();
+  // Paired by the request's IDENTITY, not its URL: the same availability route
+  // is called twice (marketCode BR and US), and matching by string glued one's
+  // response onto the other's request, a wrong result that looks right.
+  const byRequest = new Map<Request, Capture>();
 
-  page.on("request", (req) => {
-    if (!interessa(req.url())) return;
-    const captura: Captura = {
-      url: req.url(),
-      metodo: req.method(),
-      headers: req.headers(),
-      corpoEnviado: req.postData(),
+  page.on("request", (request) => {
+    if (!isRelevant(request.url())) return;
+    const capture: Capture = {
+      url: request.url(),
+      method: request.method(),
+      headers: request.headers(),
+      sentBody: request.postData(),
       status: null,
-      corpoRecebido: null,
+      receivedBody: null,
     };
-    capturas.push(captura);
-    porRequisicao.set(req, captura);
+    captures.push(capture);
+    byRequest.set(request, capture);
   });
-  page.on("response", async (res) => {
-    const alvo = porRequisicao.get(res.request());
-    if (!alvo) return;
-    alvo.status = res.status();
-    alvo.corpoRecebido = await res.text().catch(() => null);
+  page.on("response", async (response) => {
+    const capture = byRequest.get(response.request());
+    if (!capture) return;
+    capture.status = response.status();
+    capture.receivedBody = await response.text().catch(() => null);
   });
 
   console.log("1. Abrindo a home...");
   await page.goto("https://www.iberia.com/br/", { waitUntil: "domcontentloaded", timeout: 90_000 });
   await page.waitForTimeout(5000);
 
-  // Aviso de cookies: recusar o que não é essencial. Nunca aceitar.
-  await recusarCookies(page);
-  await fecharPromocoes(page);
+  // Cookie notice: decline everything non-essential. Never accept.
+  await declineCookies(page);
+  await closePromotions(page);
 
   console.log("2. Preenchendo a busca com 'Pagar com Avios'...");
-  const preencheu = await preencherFormulario(page);
-  if (!preencheu) {
-    console.log("❌ Formulário não ficou como pedido. Foto em fixtures/iberia-erro.png");
-    await page.screenshot({ path: foto("erro") });
-    await encerrar(page);
+  if (!(await fillSearchForm(page))) {
+    console.log("❌ Formulário não ficou como pedido. Foto em fixtures/iberia-error.png");
+    await page.screenshot({ path: capturePath("error") });
+    await finish(page);
     return;
   }
 
   console.log("3. Esperando o resultado...");
-  const temBusca = () =>
-    capturas.some((c) => /availability|shopping|flights|fares/i.test(c.url) && (c.corpoRecebido?.length ?? 0) > 2000);
+  const hasSearch = () =>
+    captures.some(
+      (capture) => /availability|shopping|flights|fares/i.test(capture.url) && (capture.receivedBody?.length ?? 0) > 2000,
+    );
 
-  await esperarAte(page, 25_000, async () => temBusca() || (await pedindoLogin(page)) !== false);
+  await waitUntil(page, 25_000, async () => hasSearch() || (await askingForLogin(page)) !== false);
 
-  // Resultado na mão manda mais que qualquer pista de tela: numa execução com a
-  // sessão já válida, a caixa promocional "Acesso a Iberia Club" foi lida como
-  // pedido de login, o script saiu pra logar de novo e perdeu a busca que já
-  // tinha voltado 200. Se a disponibilidade chegou, não há login a fazer.
-  const comoPediuLogin = temBusca() ? false : await pedindoLogin(page);
-  if (comoPediuLogin) {
-    console.log(`   a Iberia pediu login (${comoPediuLogin === "url" ? "redirecionou" : "modal na própria página"}).`);
+  // A result in hand beats any screen hint: in one run with a valid session,
+  // the "Acesso a Iberia Club" promo box was read as a login prompt, the script
+  // went off to log in again and lost the search that had already returned 200.
+  // If availability came, there is no login to do.
+  const loginPrompt = hasSearch() ? false : await askingForLogin(page);
+  if (loginPrompt) {
+    console.log(`   a Iberia pediu login (${loginPrompt === "url" ? "redirecionou" : "modal na própria página"}).`);
 
-    // O modal sobe com o iframe `IDY_LoginIframeHeader`, que é só o cabeçalho da
-    // caixa — o formulário nunca carrega dentro dele (a primeira foto já mostrava
-    // o corpo em branco). Como a página de login inteira funciona, o atalho é ir
-    // direto nela em vez de esperar um campo que não vem.
-    if (comoPediuLogin === "modal") {
+    // The modal comes up with the `IDY_LoginIframeHeader` iframe, which is only
+    // the box's header: the form never loads inside it (the first capture showed
+    // a blank body). Since the full login page works, go straight to it instead
+    // of waiting for a field that never comes.
+    if (loginPrompt === "modal") {
       console.log("   o modal não traz formulário; indo direto pra página de login.");
       await page
         .goto("https://login.iberia.com/IDY_LoginPage?market=BRpt", { waitUntil: "domcontentloaded", timeout: 60_000 })
-        .catch((erro: Error) => console.log(`   (não consegui abrir a página de login: ${erro.message.slice(0, 80)})`));
+        .catch((error: Error) => console.log(`   (não consegui abrir a página de login: ${error.message.slice(0, 80)})`));
       await page.waitForTimeout(3000);
     }
-    if (!(await esperarLoginManual(page))) {
-      await encerrar(page);
+    if (!(await waitForManualLogin(page))) {
+      await finish(page);
       return;
     }
-    // Depois do login a Iberia volta pro fluxo de reserva sozinha; se não voltar,
-    // refaz a busca — agora com sessão.
-    await esperarAte(page, 30_000, temBusca);
-    if (!temBusca()) {
+    // After the login Iberia returns to the booking flow on its own; if it does
+    // not, redo the search, now with a session.
+    await waitUntil(page, 30_000, hasSearch);
+    if (!hasSearch()) {
       console.log("   a busca não refez sozinha depois do login — repetindo o formulário...");
       await page.goto("https://www.iberia.com/br/", { waitUntil: "domcontentloaded", timeout: 90_000 });
       await page.waitForTimeout(5000);
-      await recusarCookies(page);
-      if (await preencherFormulario(page)) await esperarAte(page, 40_000, temBusca);
+      await declineCookies(page);
+      if (await fillSearchForm(page)) await waitUntil(page, 40_000, hasSearch);
     }
   }
 
   console.log(`\n   URL final: ${page.url()}`);
   console.log(`   Título: ${await page.title()}`);
-  const texto = (await page.evaluate("document.body ? document.body.innerText : ''") as string).replace(/\s+/g, " ");
-  console.log(`   Texto (300): ${texto.slice(0, 300)}\n`);
+  const text = ((await page.evaluate("document.body ? document.body.innerText : ''")) as string).replace(/\s+/g, " ");
+  console.log(`   Texto (300): ${text.slice(0, 300)}\n`);
 
-  // A listagem antes vinha com meia dúzia de chamadas em "status ?": o script
-  // fechava a página enquanto elas ainda estavam no ar. O que vem DEPOIS da
-  // disponibilidade é justamente onde o preço pode estar.
-  if (temBusca()) {
-    const antes = capturas.length;
+  // The listing used to show half a dozen calls as "status ?": the script
+  // closed the page while they were still in flight. What comes AFTER the
+  // availability is exactly where the price may be.
+  if (hasSearch()) {
+    const before = captures.length;
     console.log("   (deixando a página assentar 15s pra ver o que vem depois da disponibilidade)");
     await page.waitForTimeout(15_000);
-    if (capturas.length > antes) console.log(`   +${capturas.length - antes} chamada(s) depois da busca.`);
+    if (captures.length > before) console.log(`   +${captures.length - before} chamada(s) depois da busca.`);
   }
 
-  console.log(`4. Chamadas à API da Iberia: ${capturas.length}\n`);
-  for (const c of capturas) {
-    console.log(`── ${c.metodo} ${c.url.slice(0, 120)}`);
-    console.log(`   status ${c.status ?? "?"} | ${c.corpoRecebido?.length ?? 0} bytes`);
-    if (c.corpoEnviado) console.log(`   enviou: ${c.corpoEnviado.slice(0, 400)}`);
+  console.log(`4. Chamadas à API da Iberia: ${captures.length}\n`);
+  for (const capture of captures) {
+    console.log(`── ${capture.method} ${capture.url.slice(0, 120)}`);
+    console.log(`   status ${capture.status ?? "?"} | ${capture.receivedBody?.length ?? 0} bytes`);
+    if (capture.sentBody) console.log(`   enviou: ${capture.sentBody.slice(0, 400)}`);
   }
 
-  const busca = capturas.find(
-    (c) => /availability|shopping|flights|fares/i.test(c.url) && c.status === 200 && (c.corpoRecebido?.length ?? 0) > 2000,
+  const search = captures.find(
+    (capture) =>
+      /availability|shopping|flights|fares/i.test(capture.url) && capture.status === 200 && (capture.receivedBody?.length ?? 0) > 2000,
   );
-  if (!busca || !busca.corpoRecebido) {
+  if (!search || !search.receivedBody) {
     console.log("\n⚠️  Nenhuma resposta grande de disponibilidade. Ou exige login, ou sai por outro caminho.");
-    await page.screenshot({ path: foto("resultado") });
-    await diagnosticarLogin(page);
-    await encerrar(page);
+    await page.screenshot({ path: capturePath("result") });
+    await diagnoseLogin(page);
+    await finish(page);
     return;
   }
 
-  console.log(`\n5. Endpoint de disponibilidade: ${busca.metodo} ${busca.url}`);
+  console.log(`\n5. Endpoint de disponibilidade: ${search.method} ${search.url}`);
   console.log("   headers da aplicação:");
-  for (const [n, v] of Object.entries(busca.headers)) {
-    if (/^(authorization|x-|content-type|accept|market|culture|device)/i.test(n)) console.log(`     ${n}: ${mascarar(n, v)}`);
+  for (const [name, value] of Object.entries(search.headers)) {
+    if (/^(authorization|x-|content-type|accept|market|culture|device)/i.test(name)) console.log(`     ${name}: ${mask(name, value)}`);
   }
 
   fs.mkdirSync(FIXTURES_DIR, { recursive: true });
-  fs.writeFileSync(path.join(FIXTURES_DIR, "iberia-real.json"), busca.corpoRecebido, "utf8");
-  console.log(`\n✅ Resposta crua salva em fixtures/iberia-real.json (${busca.corpoRecebido.length} bytes).`);
+  fs.writeFileSync(path.join(FIXTURES_DIR, "iberia-real.json"), search.receivedBody, "utf8");
+  console.log(`\n✅ Resposta crua salva em fixtures/iberia-real.json (${search.receivedBody.length} bytes).`);
 
-  await mostrarAviosNaTela(page);
-  mostrarClaimsDoBearer(busca);
-  await sondarRepeticao(page, busca);
-  await sondarCalendario(page, capturas);
-  await sondarSelecaoDeVoo(page, capturas);
+  await showAviosOnScreen(page);
+  showBearerClaims(search);
+  await probeRepetition(page, search);
+  await probeCalendar(page, captures);
+  await probeFlightSelection(page, captures);
 
-  await encerrar(page);
+  await finish(page);
 }
 
-// A disponibilidade não traz preço, e nenhuma chamada capturada até agora traz.
-// Antes de concluir que o número não existe, olha o que está NA TELA: se a
-// página mostra "34.000 Avios", ele sai de algum lugar — outra rota, ou conta
-// feita no cliente (a Iberia resgata por tabela de distância).
-async function mostrarAviosNaTela(page: import("playwright").Page) {
-  const achados = (await page
+// Availability has no price, and no captured call so far does. Before
+// concluding the number does not exist, look at what is ON SCREEN: if the page
+// shows "34.000 Avios", it comes from somewhere, another route or a client-side
+// calculation (Iberia redeems by a distance chart).
+async function showAviosOnScreen(page: Page) {
+  const found = (await page
     .evaluate(`(() => {
-      const texto = document.body ? document.body.innerText : "";
-      const casos = texto.match(/[\\d][\\d.,]*\\s*[Aa]vios/g) || [];
-      return { unicos: [...new Set(casos)].slice(0, 20), temPalavra: /avios/i.test(texto) };
+      const text = document.body ? document.body.innerText : "";
+      const matches = text.match(/[\\d][\\d.,]*\\s*[Aa]vios/g) || [];
+      return { unique: [...new Set(matches)].slice(0, 20), hasWord: /avios/i.test(text) };
     })()`)
-    .catch(() => null)) as { unicos: string[]; temPalavra: boolean } | null;
+    .catch(() => null)) as { unique: string[]; hasWord: boolean } | null;
 
-  if (!achados) return console.log("\\n   (não consegui ler a tela)");
-  if (achados.unicos.length === 0) {
-    console.log(
-      `\\n   valores em Avios na tela: NENHUM (a palavra "avios" ${achados.temPalavra ? "aparece" : "não aparece"} na página)`,
-    );
+  if (!found) return console.log("\n   (não consegui ler a tela)");
+  if (found.unique.length === 0) {
+    console.log(`\n   valores em Avios na tela: NENHUM (a palavra "avios" ${found.hasWord ? "aparece" : "não aparece"} na página)`);
     return;
   }
-  console.log("\\n   valores em Avios renderizados na tela:");
-  for (const v of achados.unicos) console.log(`     ${v}`);
+  console.log("\n   valores em Avios renderizados na tela:");
+  for (const value of found.unique) console.log(`     ${value}`);
 }
 
-// A disponibilidade não traz preço nenhum, e o corpo enviado não tem marca de
-// Avios — então ou o contexto de resgate viaja no bearer (emitido depois do
-// login), ou esta é a busca em dinheiro e a de Avios é outra. O token é
-// credencial: aqui só saem os NOMES das claims, e o valor de um punhado que
-// não identifica ninguém. Nada disso vai pra disco.
-function mostrarClaimsDoBearer(busca: Captura) {
-  const bruto = Object.entries(busca.headers).find(([n]) => n.toLowerCase() === "authorization")?.[1];
-  if (!bruto) return console.log("\n   (a chamada de disponibilidade não levou Authorization)");
+// Availability carries no price and the sent body has no Avios mark, so either
+// the redemption context travels in the bearer (issued after login) or this is
+// the cash search and the Avios one is another. The token is a credential: only
+// the claim NAMES come out, plus the value of a handful that identify nobody.
+// None of it goes to disk.
+function showBearerClaims(search: Capture) {
+  const raw = Object.entries(search.headers).find(([name]) => name.toLowerCase() === "authorization")?.[1];
+  if (!raw) return console.log("\n   (a chamada de disponibilidade não levou Authorization)");
 
-  const partes = bruto.replace(/^Bearer\s+/i, "").split(".");
-  if (partes.length !== 3) return console.log("\n   (o Authorization não é JWT — nada a decodificar)");
+  const parts = raw.replace(/^Bearer\s+/i, "").split(".");
+  if (parts.length !== 3) return console.log("\n   (o Authorization não é JWT — nada a decodificar)");
 
   let payload: Record<string, unknown>;
   try {
-    payload = JSON.parse(Buffer.from(partes[1]!, "base64url").toString("utf8"));
-  } catch (erro) {
-    return console.log(`\n   (não consegui ler o payload do bearer: ${(erro as Error).message})`);
+    payload = JSON.parse(Buffer.from(parts[1]!, "base64url").toString("utf8"));
+  } catch (error) {
+    return console.log(`\n   (não consegui ler o payload do bearer: ${(error as Error).message})`);
   }
 
-  const DIVULGAVEIS = /^(scope|typ|type|realm|market|azp|aud|iss|avios|redemption|loyalty|client_id|grant)/i;
+  const SHAREABLE = /^(scope|typ|type|realm|market|azp|aud|iss|avios|redemption|loyalty|client_id|grant)/i;
   console.log("\n   claims do bearer da disponibilidade:");
-  for (const [nome, valor] of Object.entries(payload)) {
-    const curto = typeof valor === "string" || typeof valor === "number";
-    console.log(`     ${nome}${DIVULGAVEIS.test(nome) && curto ? ` = ${String(valor).slice(0, 60)}` : ""}`);
+  for (const [name, value] of Object.entries(payload)) {
+    const short = typeof value === "string" || typeof value === "number";
+    console.log(`     ${name}${SHAREABLE.test(name) && short ? ` = ${String(value).slice(0, 60)}` : ""}`);
   }
 }
 
-// A tela de disponibilidade não mostra Avios (só o saldo "0 Avios" do cabeçalho)
-// e nenhuma das 13 rotas de API traz preço. Resta o passo seguinte do fluxo:
-// escolher um voo. Esta sonda clica no primeiro e mostra o que aparece de novo —
-// é o que decide se a fonte consegue produzir `valorK` por dia.
-async function sondarSelecaoDeVoo(page: import("playwright").Page, capturas: Captura[]) {
+// The availability screen shows no Avios (only the header's "0 Avios" balance)
+// and none of the 13 API routes has a price. What is left is the next step of
+// the flow, picking a flight: this probe reads the selection screen, which
+// decides whether the source can produce a value per day.
+async function probeFlightSelection(page: Page, captures: Capture[]) {
   console.log("\n8. Lendo a tela de seleção de voos...");
 
-  // A foto anterior mostrou os cartões mas cortou o rodapé, onde o preço deve
-  // estar — e a busca por "N Avios" só achou o saldo do cabeçalho. Em vez de
-  // adivinhar rótulo de botão, despeja o texto da tela e olha o que tem lá.
-  await page.screenshot({ path: foto("selecao"), fullPage: true }).catch(() => {});
-  const texto = (await page.evaluate("document.body ? document.body.innerText : ''").catch(() => "")) as string;
-  const linhas = texto.split("\n").map((l) => l.trim()).filter(Boolean);
-  console.log(`   texto da tela (${linhas.length} linhas), primeiras 45:`);
-  for (const l of linhas.slice(0, 45)) console.log(`     ${l.slice(0, 100)}`);
+  // The previous capture showed the cards but cut the footer where the price
+  // should be, and searching for "N Avios" only found the header's balance.
+  // Instead of guessing button labels, dump the screen text and look.
+  await page.screenshot({ path: capturePath("selection"), fullPage: true }).catch(() => {});
+  const text = (await page.evaluate("document.body ? document.body.innerText : ''").catch(() => "")) as string;
+  const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
+  console.log(`   texto da tela (${lines.length} linhas), primeiras 45:`);
+  for (const line of lines.slice(0, 45)) console.log(`     ${line.slice(0, 100)}`);
 
-  const comNumero = linhas.filter((l) => /\d{1,3}[.,]\d{3}|\bavios\b/i.test(l));
-  if (comNumero.length) {
+  const withNumbers = lines.filter((line) => /\d{1,3}[.,]\d{3}|\bavios\b/i.test(line));
+  if (withNumbers.length) {
     console.log("   linhas com número grande ou 'avios':");
-    for (const l of [...new Set(comNumero)].slice(0, 20)) console.log(`     ${l.slice(0, 100)}`);
+    for (const line of [...new Set(withNumbers)].slice(0, 20)) console.log(`     ${line.slice(0, 100)}`);
   }
 
-  // "Vista mensal de voos" apareceu na tela — é candidato direto a resposta da
-  // pergunta que o /calendar deixou em aberto (faixa de datas numa chamada só).
-  const antes = capturas.length;
-  const mensal = page.locator('a:has-text("Vista mensal"), button:has-text("Vista mensal")').first();
-  if (await mensal.isVisible().catch(() => false)) {
+  // "Vista mensal de voos" showed up on screen: a direct candidate for the
+  // question /calendar left open (a date range in a single call).
+  const before = captures.length;
+  const monthly = page.locator('a:has-text("Vista mensal"), button:has-text("Vista mensal")').first();
+  if (await monthly.isVisible().catch(() => false)) {
     console.log("\n   clicando em 'Vista mensal de voos'...");
-    await mensal.click({ timeout: 8000 }).catch(() => {});
+    await monthly.click({ timeout: 8000 }).catch(() => {});
     await page.waitForTimeout(10_000);
-    const novas = capturas.slice(antes);
-    console.log(`   ${novas.length} chamada(s) nova(s):`);
-    for (const c of novas) {
-      console.log(`     ${c.metodo} ${c.url.slice(0, 110)} → ${c.status ?? "?"} | ${c.corpoRecebido?.length ?? 0} bytes`);
-      // Sem o corpo enviado não dá pra repetir a chamada — e repetir é o
-      // objetivo. Ele entra no log e no disco junto da resposta.
-      if (c.corpoEnviado) console.log(`       enviou: ${c.corpoEnviado.slice(0, 500)}`);
-      if ((c.corpoRecebido?.length ?? 0) > 500) {
-        const nome = `iberia-mensal-${novas.indexOf(c)}.json`;
-        fs.writeFileSync(path.join(FIXTURES_DIR, nome), c.corpoRecebido!, "utf8");
-        console.log(`       salvo em fixtures/${nome}`);
+    const newCaptures = captures.slice(before);
+    console.log(`   ${newCaptures.length} chamada(s) nova(s):`);
+    for (const capture of newCaptures) {
+      console.log(`     ${capture.method} ${capture.url.slice(0, 110)} → ${capture.status ?? "?"} | ${capture.receivedBody?.length ?? 0} bytes`);
+      // Without the sent body the call cannot be repeated, and repeating is the
+      // goal: it goes to the log and to disk next to the response.
+      if (capture.sentBody) console.log(`       enviou: ${capture.sentBody.slice(0, 500)}`);
+      if ((capture.receivedBody?.length ?? 0) > 500) {
+        const name = `iberia-monthly-${newCaptures.indexOf(capture)}.json`;
+        fs.writeFileSync(path.join(FIXTURES_DIR, name), capture.receivedBody!, "utf8");
+        console.log(`       salvo em fixtures/${name}`);
       }
     }
-    await page.screenshot({ path: foto("mensal"), fullPage: true }).catch(() => {});
-    await mostrarAviosNaTela(page);
-    await sondarGrid(page, capturas);
+    await page.screenshot({ path: capturePath("monthly"), fullPage: true }).catch(() => {});
+    await showAviosOnScreen(page);
+    await probeGrid(page, captures);
   } else {
     console.log("   (link 'Vista mensal de voos' não estava visível)");
   }
 }
 
-// O `/calendar/grid` devolveu 191 dias pedindo `maxSearchTime: 359`, e começou
-// HOJE em vez da data pedida. Antes de desenhar a fonte em cima disso, três
-// perguntas: a janela é fixa? a data do corpo move o começo? dá pra cobrir um
-// ano? Cada resposta aqui vira (ou não) uma chamada a menos por busca.
-async function sondarGrid(page: import("playwright").Page, capturas: Captura[]) {
-  const grid = capturas.find((c) => /\/calendar\/grid$/.test(c.url) && c.corpoEnviado);
+// `/calendar/grid` returned 191 days for `maxSearchTime: 359` and started TODAY
+// instead of the requested date. Before designing the source on top of it,
+// three questions: is the window fixed? does the body's date move the start?
+// can a year be covered? Each answer here is (or is not) one call less per search.
+async function probeGrid(page: Page, captures: Capture[]) {
+  const grid = captures.find((capture) => /\/calendar\/grid$/.test(capture.url) && capture.sentBody);
   if (!grid) return console.log("\n9. (nenhuma chamada de calendar/grid capturada)");
 
   console.log("\n9. Sondando os limites do /calendar/grid...");
-  const PROIBIDOS = /^(host|cookie|connection|content-length|accept-encoding|user-agent|origin|referer|sec-)/i;
-  const headers = Object.fromEntries(Object.entries(grid.headers).filter(([n]) => !PROIBIDOS.test(n)));
+  const headers = Object.fromEntries(Object.entries(grid.headers).filter(([name]) => !FORBIDDEN_HEADERS.test(name)));
 
-  const daqui = (dias: number) => {
-    const d = new Date();
-    d.setDate(d.getDate() + dias);
-    return d.toISOString().slice(0, 10);
-  };
-
-  const casos: { nome: string; corpo: string }[] = [
-    { nome: "data +200 dias", corpo: grid.corpoEnviado!.replace(/"date":"[^"]*"/, `"date":"${daqui(200)}"`) },
-    { nome: "maxSearchTime=720", corpo: grid.corpoEnviado!.replace(/"maxSearchTime":\s*\d+/, '"maxSearchTime":720') },
+  const cases: { name: string; body: string }[] = [
+    { name: "data +200 dias", body: grid.sentBody!.replace(/"date":"[^"]*"/, `"date":"${daysFromToday(200)}"`) },
+    { name: "maxSearchTime=720", body: grid.sentBody!.replace(/"maxSearchTime":\s*\d+/, '"maxSearchTime":720') },
     {
-      nome: "data +200 e maxSearchTime=720",
-      corpo: grid
-        .corpoEnviado!.replace(/"date":"[^"]*"/, `"date":"${daqui(200)}"`)
+      name: "data +200 e maxSearchTime=720",
+      body: grid
+        .sentBody!.replace(/"date":"[^"]*"/, `"date":"${daysFromToday(200)}"`)
         .replace(/"maxSearchTime":\s*\d+/, '"maxSearchTime":720'),
     },
   ];
 
-  for (const caso of casos) {
-    const r = (await page.evaluate(
-      `((url, headers, corpo) => fetch(url, { method: "POST", headers, body: corpo, credentials: "include" })
-        .then(async (x) => ({ status: x.status, texto: await x.text() }))
-        .catch((e) => ({ status: -1, texto: String(e) })))(${JSON.stringify(grid.url)}, ${JSON.stringify(headers)}, ${JSON.stringify(caso.corpo)})`,
-    )) as { status: number; texto: string };
+  for (const probe of cases) {
+    const response = (await page.evaluate(
+      `((url, headers, body) => fetch(url, { method: "POST", headers, body, credentials: "include" })
+        .then(async (result) => ({ status: result.status, text: await result.text() }))
+        .catch((error) => ({ status: -1, text: String(error) })))(${JSON.stringify(grid.url)}, ${JSON.stringify(headers)}, ${JSON.stringify(probe.body)})`,
+    )) as { status: number; text: string };
 
-    if (r.status !== 200) {
-      console.log(`   ${caso.nome}: status ${r.status} — ${r.texto.slice(0, 120)}`);
+    if (response.status !== 200) {
+      console.log(`   ${probe.name}: status ${response.status} — ${response.text.slice(0, 120)}`);
       continue;
     }
     try {
-      const j = JSON.parse(r.texto) as {
+      const json = JSON.parse(response.text) as {
         outbound?: { availabilityCalendar?: { date: string; avios?: number; lock?: boolean }[] };
       };
-      const cal = j.outbound?.availabilityCalendar;
-      if (!cal?.length) {
-        console.log(`   ${caso.nome}: 200, mas sem availabilityCalendar no corpo.`);
+      const calendar = json.outbound?.availabilityCalendar;
+      if (!calendar?.length) {
+        console.log(`   ${probe.name}: 200, mas sem availabilityCalendar no corpo.`);
         continue;
       }
-      const comAvios = cal.filter((d) => d.avios !== undefined);
-      const travados = cal.filter((d) => d.lock === true).length;
+      const priced = calendar.filter((day) => day.avios !== undefined);
+      const locked = calendar.filter((day) => day.lock === true).length;
       console.log(
-        `   ${caso.nome}: ${cal.length} dias (${cal[0]!.date} → ${cal[cal.length - 1]!.date}), ` +
-          `${comAvios.length} com avios, ${travados} com lock=true`,
+        `   ${probe.name}: ${calendar.length} dias (${calendar[0]!.date} → ${calendar[calendar.length - 1]!.date}), ` +
+          `${priced.length} com avios, ${locked} com lock=true`,
       );
-    } catch (erro) {
-      console.log(`   ${caso.nome}: 200, mas não consegui ler o JSON (${(erro as Error).message.slice(0, 60)})`);
+    } catch (error) {
+      console.log(`   ${probe.name}: 200, mas não consegui ler o JSON (${(error as Error).message.slice(0, 60)})`);
     }
   }
 }
 
-// O calendário decide o custo de varrer um ano: um dia por chamada (359 buscas)
-// ou uma faixa por chamada. Ele voltou 404 com marketCode BR, o que cheira a
-// rota trocada ou mercado sem o recurso — não a "não existe". Tenta os mercados
-// que o próprio site usa antes de a fase seguinte desenhar em cima do dia a dia.
-async function sondarCalendario(page: import("playwright").Page, capturas: Captura[]) {
-  const calendario = capturas.find((c) => /\/calendar$/.test(c.url) && c.corpoEnviado);
-  if (!calendario) return console.log("\n7. (nenhuma chamada de calendário foi capturada)");
+// The calendar decides the cost of sweeping a year: one day per call (359
+// searches) or a range per call. It came back 404 with marketCode BR, which
+// smells of a swapped route or a market without the feature, not "does not
+// exist". Try the markets the site itself uses before the next phase builds on day-by-day.
+async function probeCalendar(page: Page, captures: Capture[]) {
+  const calendar = captures.find((capture) => /\/calendar$/.test(capture.url) && capture.sentBody);
+  if (!calendar) return console.log("\n7. (nenhuma chamada de calendário foi capturada)");
 
   console.log("\n7. Testando o calendário por mercado...");
-  const PROIBIDOS = /^(host|cookie|connection|content-length|accept-encoding|user-agent|origin|referer|sec-)/i;
-  const headers = Object.fromEntries(Object.entries(calendario.headers).filter(([n]) => !PROIBIDOS.test(n)));
+  const headers = Object.fromEntries(Object.entries(calendar.headers).filter(([name]) => !FORBIDDEN_HEADERS.test(name)));
 
-  for (const mercado of ["BR", "US", "ES", "GB"]) {
-    const corpo = calendario.corpoEnviado!.replace(/"marketCode"\s*:\s*"[^"]*"/, `"marketCode":"${mercado}"`);
-    const r = (await page.evaluate(
-      `((url, headers, corpo) => fetch(url, { method: "POST", headers, body: corpo, credentials: "include" })
-        .then(async (r) => ({ status: r.status, texto: await r.text() }))
-        .catch((e) => ({ status: -1, texto: String(e) })))(${JSON.stringify(calendario.url)}, ${JSON.stringify(headers)}, ${JSON.stringify(corpo)})`,
-    )) as { status: number; texto: string };
+  for (const market of ["BR", "US", "ES", "GB"]) {
+    const body = calendar.sentBody!.replace(/"marketCode"\s*:\s*"[^"]*"/, `"marketCode":"${market}"`);
+    const response = (await page.evaluate(
+      `((url, headers, body) => fetch(url, { method: "POST", headers, body, credentials: "include" })
+        .then(async (result) => ({ status: result.status, text: await result.text() }))
+        .catch((error) => ({ status: -1, text: String(error) })))(${JSON.stringify(calendar.url)}, ${JSON.stringify(headers)}, ${JSON.stringify(body)})`,
+    )) as { status: number; text: string };
 
-    console.log(`   marketCode=${mercado}: status ${r.status} | ${r.texto.length} bytes`);
-    if (r.status === 200 && r.texto.length > 500) {
-      const arquivo = path.join(FIXTURES_DIR, `iberia-calendario-${mercado}.json`);
-      fs.writeFileSync(arquivo, r.texto, "utf8");
-      console.log(`   ✅ salvo em fixtures/${path.basename(arquivo)}`);
-    } else if (r.status !== 200) {
-      console.log(`      resposta: ${r.texto.slice(0, 160)}`);
+    console.log(`   marketCode=${market}: status ${response.status} | ${response.text.length} bytes`);
+    if (response.status === 200 && response.text.length > 500) {
+      const file = path.join(FIXTURES_DIR, `iberia-calendar-${market}.json`);
+      fs.writeFileSync(file, response.text, "utf8");
+      console.log(`   ✅ salvo em fixtures/${path.basename(file)}`);
+    } else if (response.status !== 200) {
+      console.log(`      resposta: ${response.text.slice(0, 160)}`);
     }
   }
 }
 
-// Pergunta 2 da seção 6 das notas — quantos dias vêm por resposta — é o número
-// que decide o custo de varrer um ano. Em vez de supor o corpo, esta sonda
-// REPETE a requisição que o site acabou de fazer, trocando só a data, e dispara
-// de DENTRO da página: quem assina o TLS e manda o cookie é o navegador, que é
-// exatamente o que destravou a AA e a Azul (e o que faltou no cheap-flights).
-//
-// De quebra responde a pergunta 4: se a segunda chamada volta 200, a sessão
-// aguenta mais de uma busca.
-async function sondarRepeticao(page: import("playwright").Page, busca: Captura) {
+// How many days come per response decides the cost of sweeping a year. Instead
+// of guessing the body, this probe REPEATS the request the site just made,
+// swapping only the date, and fires it from INSIDE the page: the browser signs
+// the TLS and sends the cookie, exactly what unlocked AA and Azul (and what
+// cheap-flights lacked). It also answers whether the session takes more than one search.
+async function probeRepetition(page: Page, search: Capture) {
   console.log("\n6. Repetindo a mesma chamada com outra data (de dentro da página)...");
 
-  const alvo = `${busca.url}\n${busca.corpoEnviado ?? ""}`;
-  const isoNoPedido = alvo.match(/\d{4}-\d{2}-\d{2}/)?.[0] ?? null;
-  const brNoPedido = alvo.match(/\d{2}\/\d{2}\/\d{4}/)?.[0] ?? null;
-  if (!isoNoPedido && !brNoPedido) {
+  const target = `${search.url}\n${search.sentBody ?? ""}`;
+  const isoInRequest = target.match(/\d{4}-\d{2}-\d{2}/)?.[0] ?? null;
+  const brInRequest = target.match(/\d{2}\/\d{2}\/\d{4}/)?.[0] ?? null;
+  if (!isoInRequest && !brInRequest) {
     console.log("   ⚠️  a data não aparece literal na URL nem no corpo — a repetição precisa ser lida à mão.");
     return;
   }
 
-  // Cabeçalhos que o `fetch` não deixa definir: o navegador põe os dele.
-  const PROIBIDOS = /^(host|cookie|connection|content-length|accept-encoding|user-agent|origin|referer|sec-)/i;
-  const headers = Object.fromEntries(Object.entries(busca.headers).filter(([n]) => !PROIBIDOS.test(n)));
+  const headers = Object.fromEntries(Object.entries(search.headers).filter(([name]) => !FORBIDDEN_HEADERS.test(name)));
 
-  for (const deslocamento of [1, 30]) {
-    const base = isoNoPedido ?? dataBR_para_iso(brNoPedido!);
-    const nova = new Date(base);
-    nova.setDate(nova.getDate() + deslocamento);
-    const novaIso = nova.toISOString().slice(0, 10);
+  for (const offset of [1, 30]) {
+    const shifted = new Date(isoInRequest ?? brazilianToIso(brInRequest!));
+    shifted.setDate(shifted.getDate() + offset);
+    const shiftedIso = shifted.toISOString().slice(0, 10);
 
-    let url = busca.url;
-    let corpo = busca.corpoEnviado;
-    if (isoNoPedido) {
-      url = url.replaceAll(isoNoPedido, novaIso);
-      corpo = corpo?.replaceAll(isoNoPedido, novaIso) ?? null;
+    let url = search.url;
+    let body = search.sentBody;
+    if (isoInRequest) {
+      url = url.replaceAll(isoInRequest, shiftedIso);
+      body = body?.replaceAll(isoInRequest, shiftedIso) ?? null;
     }
-    if (brNoPedido) {
-      const novaBr = dataBR(novaIso);
-      url = url.replaceAll(brNoPedido, novaBr);
-      corpo = corpo?.replaceAll(brNoPedido, novaBr) ?? null;
+    if (brInRequest) {
+      const shiftedBr = brazilianDate(shiftedIso);
+      url = url.replaceAll(brInRequest, shiftedBr);
+      body = body?.replaceAll(brInRequest, shiftedBr) ?? null;
     }
 
-    const resultado = (await page.evaluate(
-      `((url, metodo, headers, corpo) => fetch(url, {
-        method: metodo,
+    const response = (await page.evaluate(
+      `((url, method, headers, body) => fetch(url, {
+        method,
         headers,
-        body: metodo === "GET" || metodo === "HEAD" ? undefined : corpo,
+        body: method === "GET" || method === "HEAD" ? undefined : body,
         credentials: "include",
-      }).then(async (r) => ({ status: r.status, texto: await r.text() }))
-        .catch((e) => ({ status: -1, texto: String(e) })))(${JSON.stringify(url)}, ${JSON.stringify(busca.metodo)}, ${JSON.stringify(headers)}, ${JSON.stringify(corpo)})`,
-    )) as { status: number; texto: string };
+      }).then(async (result) => ({ status: result.status, text: await result.text() }))
+        .catch((error) => ({ status: -1, text: String(error) })))(${JSON.stringify(url)}, ${JSON.stringify(search.method)}, ${JSON.stringify(headers)}, ${JSON.stringify(body)})`,
+    )) as { status: number; text: string };
 
-    console.log(`   +${deslocamento} dia(s) (${novaIso}): status ${resultado.status} | ${resultado.texto.length} bytes`);
-    if (resultado.status === 200 && resultado.texto.length > 2000) {
-      const arquivo = path.join(FIXTURES_DIR, `iberia-real-mais${deslocamento}.json`);
-      fs.writeFileSync(arquivo, resultado.texto, "utf8");
-      console.log(`   salvo em fixtures/${path.basename(arquivo)}`);
-    } else if (resultado.status !== 200) {
-      console.log(`   ⚠️  repetição não voltou 200 — início da resposta: ${resultado.texto.slice(0, 200)}`);
+    console.log(`   +${offset} dia(s) (${shiftedIso}): status ${response.status} | ${response.text.length} bytes`);
+    if (response.status === 200 && response.text.length > 2000) {
+      const file = path.join(FIXTURES_DIR, `iberia-real-plus${offset}.json`);
+      fs.writeFileSync(file, response.text, "utf8");
+      console.log(`   salvo em fixtures/${path.basename(file)}`);
+    } else if (response.status !== 200) {
+      console.log(`   ⚠️  repetição não voltou 200 — início da resposta: ${response.text.slice(0, 200)}`);
     }
   }
 }
 
-function dataBR_para_iso(br: string): string {
-  const [d, m, a] = br.split("/");
-  return `${a}-${m}-${d}`;
-}
-
-// Em 2026-08 a busca com Avios redirecionava pro `login.iberia.com`. Em
-// 2026-09 ela passou a abrir um MODAL na própria home ("Acesso a Iberia Club"),
-// sem trocar de URL — foi o que fez o recon desistir achando que não tinha
-// pedido login. Agora olha os dois caminhos, e diz por qual reconheceu.
-async function pedindoLogin(page: import("playwright").Page): Promise<false | "url" | "modal"> {
+// In 2026-08 the Avios search redirected to `login.iberia.com`. In 2026-09 it
+// started opening a MODAL on the home page itself ("Acesso a Iberia Club")
+// without changing the URL, which made the recon give up thinking no login was
+// asked. Both paths are checked now, and it says which one it recognized.
+async function askingForLogin(page: Page): Promise<false | "url" | "modal"> {
   if (/login\.iberia\.com/.test(page.url())) return "url";
-  if (page.frames().some((f) => /login\.iberia|ibisauth\.iberia/.test(f.url()))) return "modal";
-  const temModal = await page
+  if (page.frames().some((frame) => /login\.iberia|ibisauth\.iberia/.test(frame.url()))) return "modal";
+  const hasModal = await page
     .evaluate(`(() => {
-      const marcas = ["acesso a iberia club", "inicie sessão", "iniciar sessão"];
-      const grande = (e) => { const r = e.getBoundingClientRect(); return r.width > 200 && r.height > 150; };
+      const marks = ["acesso a iberia club", "inicie sessão", "iniciar sessão"];
+      const large = (element) => { const rect = element.getBoundingClientRect(); return rect.width > 200 && rect.height > 150; };
       return [...document.querySelectorAll("dialog,[role=dialog],div,section")].some(
-        (e) => grande(e)
-          && marcas.some((m) => (e.innerText || "").toLowerCase().includes(m))
-          && (e.querySelector("input") || e.querySelector("iframe")),
+        (element) => large(element)
+          && marks.some((mark) => (element.innerText || "").toLowerCase().includes(mark))
+          && (element.querySelector("input") || element.querySelector("iframe")),
       );
     })()`)
     .catch(() => false);
-  return temModal ? "modal" : false;
+  return hasModal ? "modal" : false;
 }
 
-// Quando o recon não acha disponibilidade, o que decide o próximo passo é o que
-// está na tela — então despeja em vez de adivinhar: frames, e o HTML do que
-// parece caixa de login. É daqui que saem os seletores da próxima fase.
-async function diagnosticarLogin(page: import("playwright").Page) {
+// When the recon finds no availability, what is on screen decides the next
+// step, so dump it instead of guessing: frames and the HTML of what looks like
+// a login box. The next phase's selectors come from here.
+async function diagnoseLogin(page: Page) {
   console.log("\n   diagnóstico da tela:");
-  for (const f of page.frames()) {
-    if (f === page.mainFrame()) continue;
-    console.log(`     frame: ${f.url().slice(0, 140)}`);
+  for (const frame of page.frames()) {
+    if (frame === page.mainFrame()) continue;
+    console.log(`     frame: ${frame.url().slice(0, 140)}`);
   }
-  const caixa = (await page
+  const box = (await page
     .evaluate(`(() => {
-      const marcas = ["acesso a iberia club", "inicie sessão", "iniciar sessão"];
-      const grande = (e) => { const r = e.getBoundingClientRect(); return r.width > 200 && r.height > 150; };
-      const alvo = [...document.querySelectorAll("dialog,[role=dialog],div,section")].find(
-        (e) => grande(e)
-          && marcas.some((m) => (e.innerText || "").toLowerCase().includes(m))
-          && (e.querySelector("input") || e.querySelector("iframe")),
+      const marks = ["acesso a iberia club", "inicie sessão", "iniciar sessão"];
+      const large = (element) => { const rect = element.getBoundingClientRect(); return rect.width > 200 && rect.height > 150; };
+      const target = [...document.querySelectorAll("dialog,[role=dialog],div,section")].find(
+        (element) => large(element)
+          && marks.some((mark) => (element.innerText || "").toLowerCase().includes(mark))
+          && (element.querySelector("input") || element.querySelector("iframe")),
       );
-      if (!alvo) return null;
+      if (!target) return null;
       return {
-        tag: alvo.tagName,
-        classe: alvo.className,
-        html: alvo.outerHTML.slice(0, 3000),
-        campos: [...alvo.querySelectorAll("input,button,iframe")].map(
-          (e) => e.tagName + " type=" + e.getAttribute("type") + " name=" + e.getAttribute("name")
-            + " id=" + e.id + " src=" + (e.getAttribute("src") || "").slice(0, 80),
+        tag: target.tagName,
+        className: target.className,
+        html: target.outerHTML.slice(0, 3000),
+        fields: [...target.querySelectorAll("input,button,iframe")].map(
+          (element) => element.tagName + " type=" + element.getAttribute("type") + " name=" + element.getAttribute("name")
+            + " id=" + element.id + " src=" + (element.getAttribute("src") || "").slice(0, 80),
         ),
       };
     })()`)
-    .catch(() => null)) as { tag: string; classe: string; html: string; campos: string[] } | null;
+    .catch(() => null)) as { tag: string; className: string; html: string; fields: string[] } | null;
 
-  if (!caixa) {
+  if (!box) {
     console.log("     (nenhuma caixa de login reconhecida na tela)");
     return;
   }
-  console.log(`     caixa: <${caixa.tag} class="${String(caixa.classe).slice(0, 80)}">`);
-  for (const c of caixa.campos) console.log(`       ${c}`);
-  const arquivo = path.join(FIXTURES_DIR, "iberia-login-modal.html");
-  fs.writeFileSync(arquivo, caixa.html, "utf8");
-  console.log(`     HTML do modal salvo em fixtures/${path.basename(arquivo)}`);
+  console.log(`     caixa: <${box.tag} class="${String(box.className).slice(0, 80)}">`);
+  for (const field of box.fields) console.log(`       ${field}`);
+  const file = path.join(FIXTURES_DIR, "iberia-login-modal.html");
+  fs.writeFileSync(file, box.html, "utf8");
+  console.log(`     HTML do modal salvo em fixtures/${path.basename(file)}`);
 }
 
-// Mesmo acordo do módulo da LATAM (`fillCredentials` em latam.scraper.ts): se
-// IBERIA_EMAIL e IBERIA_SENHA estiverem no .env, o script adianta a digitação.
-// Ele **não confirma o login** — o clique em "Fazer login" fica com você, que é
-// onde entram 2FA, captcha e qualquer coisa que a Iberia resolva pedir.
-//
-// As credenciais moram só no seu .env (que está no .gitignore). Nada é impresso
-// no terminal nem guardado em outro lugar.
-type ContextoLogin = import("playwright").Page | import("playwright").Frame;
+// Same deal as the LATAM scraper (`fillCredentials` in latam.scraper.ts): with
+// IBERIA_EMAIL and IBERIA_SENHA in .env the script types ahead. It does not
+// **confirm** the login when a step is left: 2FA, captcha and anything else
+// Iberia decides to ask stay with you. Credentials live only in your .env
+// (gitignored); nothing is printed or stored elsewhere.
+type LoginContext = Page | Frame;
 
-async function preencherCredenciais(
-  page: import("playwright").Page,
-): Promise<"enviado" | "parcial" | "ausente"> {
+async function fillCredentials(page: Page): Promise<"sent" | "partial" | "missing"> {
   const email = process.env.IBERIA_EMAIL;
-  const senha = process.env.IBERIA_SENHA;
-  if (!email || !senha) {
+  const password = process.env.IBERIA_SENHA;
+  if (!email || !password) {
     console.log("   (sem IBERIA_EMAIL/IBERIA_SENHA no .env — o login é todo na mão, na janela do bot)");
-    return "ausente";
+    return "missing";
   }
 
   try {
-    // O aviso de cookies cobre esta página também, e o filtro dele engole cliques.
-    await recusarCookies(page);
+    // The cookie notice covers this page too, and its filter swallows clicks.
+    await declineCookies(page);
 
-    // O login sai por dois caminhos: redirecionamento pro `login.iberia.com` ou
-    // modal na própria home. No modal o formulário vive num iframe de
-    // `www.iberia.com/integration/ibplus/login/` (aparece no `redirect_uri` das
-    // capturas) — filtrar frames por "login.iberia" excluía justamente esse, e
-    // o script ficava dez minutos esperando um preenchimento manual.
-    // Agora procura em TODOS os frames, e espera o iframe carregar.
-    const SELETOR_EMAIL =
-      'input[name="loginPage:theForm:loginEmailInput"], input[type="email"], input[name*="mail" i]';
+    // The login comes two ways: a redirect to `login.iberia.com` or a modal on
+    // the home page. In the modal the form lives in an iframe on
+    // `www.iberia.com/integration/ibplus/login/` (it shows in the captures'
+    // `redirect_uri`); filtering frames by "login.iberia" excluded exactly that
+    // one, and the script waited ten minutes for a manual fill. So look in ALL
+    // frames and wait for the iframe to load.
+    const EMAIL_SELECTOR = 'input[name="loginPage:theForm:loginEmailInput"], input[type="email"], input[name*="mail" i]';
 
-    let onde: ContextoLogin | null = null;
-    const limite = Date.now() + 25_000;
-    while (!onde && Date.now() < limite) {
-      for (const ctx of [page, ...page.frames()]) {
-        const visivel = await ctx
-          .locator(SELETOR_EMAIL)
-          .first()
-          .isVisible()
-          .catch(() => false);
-        if (visivel) {
-          onde = ctx;
+    let form: LoginContext | null = null;
+    const deadline = Date.now() + 25_000;
+    while (!form && Date.now() < deadline) {
+      for (const context of [page, ...page.frames()]) {
+        if (await context.locator(EMAIL_SELECTOR).first().isVisible().catch(() => false)) {
+          form = context;
           break;
         }
       }
-      if (!onde) await page.waitForTimeout(1500);
+      if (!form) await page.waitForTimeout(1500);
     }
 
-    if (!onde) {
-      const frames = page.frames().map((f) => f.url().slice(0, 90) || "(sem url)");
+    if (!form) {
+      const frames = page.frames().map((frame) => frame.url().slice(0, 90) || "(sem url)");
       console.log("   não achei o campo de e-mail em nenhum frame — siga na mão na janela do bot.");
       console.log(`   frames na página: ${JSON.stringify(frames)}`);
-      return "parcial";
+      return "partial";
     }
-    if (onde !== page) console.log(`   formulário de login está no iframe ${onde.url().slice(0, 90)}`);
+    if (form !== page) console.log(`   formulário de login está no iframe ${form.url().slice(0, 90)}`);
 
-    const campoEmail = onde.locator(SELETOR_EMAIL).first();
-    const campoSenha = onde.locator('input[type="password"]').first();
+    const emailField = form.locator(EMAIL_SELECTOR).first();
+    const passwordField = form.locator('input[type="password"]').first();
 
-    await campoEmail.waitFor({ state: "visible", timeout: 20_000 });
-    await campoEmail.fill(email);
+    await emailField.waitFor({ state: "visible", timeout: 20_000 });
+    await emailField.fill(email);
 
-    // Login em duas etapas: se a senha ainda não está na tela, o "continuar"
-    // é que a traz. Uma rodada de submit só pra isso, depois a de verdade.
-    if (!(await campoSenha.isVisible().catch(() => false))) {
+    // Two-step login: if the password is not on screen yet, "continue" brings it.
+    if (!(await passwordField.isVisible().catch(() => false))) {
       console.log("   campo de senha fora da tela — enviando o e-mail primeiro.");
-      await enviarFormulario(onde);
-      await campoSenha.waitFor({ state: "visible", timeout: 15_000 }).catch(() => {});
+      await submitForm(form);
+      await passwordField.waitFor({ state: "visible", timeout: 15_000 }).catch(() => {});
     }
 
-    if (!(await campoSenha.isVisible().catch(() => false))) {
+    if (!(await passwordField.isVisible().catch(() => false))) {
       console.log("   a senha não apareceu — siga na janela do bot.");
-      return "parcial";
+      return "partial";
     }
 
-    await campoSenha.fill(senha);
-    if (!(await enviarFormulario(onde))) {
+    await passwordField.fill(password);
+    if (!(await submitForm(form))) {
       console.log("   campos preenchidos, mas não achei o botão de enviar — o clique é seu, na janela do bot.");
-      return "parcial";
+      return "partial";
     }
-    return "enviado";
-  } catch (erro) {
-    const motivo = erro instanceof Error ? erro.message.split("\n")[0] : String(erro);
-    console.log(`   não consegui preencher o login (${motivo}) — siga na mão na janela do bot.`);
-    return "parcial";
+    return "sent";
+  } catch (error) {
+    const reason = error instanceof Error ? error.message.split("\n")[0] : String(error);
+    console.log(`   não consegui preencher o login (${reason}) — siga na mão na janela do bot.`);
+    return "partial";
   }
 }
 
-// O seletor das notas é o do Salesforce Identity; o modal pode usar outro, então
-// cai pro primeiro botão com cara de enviar. Diz qual pegou — se a Iberia mudar
-// de novo, o log já entrega o que quebrou.
-async function enviarFormulario(onde: ContextoLogin): Promise<boolean> {
-  const candidatos = [
+// The notes' selector is Salesforce Identity's; the modal may use another, so
+// it falls back to the first submit-looking button and says which one it took:
+// if Iberia changes again, the log already tells what broke.
+async function submitForm(form: LoginContext): Promise<boolean> {
+  const candidates = [
     'input[name="loginPage:theForm:loginSubmit"]',
     'button[type="submit"]',
     'input[type="submit"]',
@@ -639,278 +614,260 @@ async function enviarFormulario(onde: ContextoLogin): Promise<boolean> {
     'button:has-text("Entrar")',
     'button:has-text("Continuar")',
   ];
-  for (const seletor of candidatos) {
-    const botao = onde.locator(seletor).first();
-    if (!(await botao.isVisible().catch(() => false))) continue;
-    await botao.click({ timeout: 10_000 }).catch(() => {});
-    console.log(`   enviei o formulário de login (${seletor}).`);
+  for (const selector of candidates) {
+    const button = form.locator(selector).first();
+    if (!(await button.isVisible().catch(() => false))) continue;
+    await button.click({ timeout: 10_000 }).catch(() => {});
+    console.log(`   enviei o formulário de login (${selector}).`);
     return true;
   }
   return false;
 }
 
-// A busca com Avios não chama disponibilidade nenhuma sem conta: ela redireciona
-// pro login. Então o script para aqui e devolve o volante — a senha é sua e não
-// passa por este processo.
-async function esperarLoginManual(page: import("playwright").Page): Promise<boolean> {
+// The Avios search calls no availability without an account: it redirects to
+// the login. So the script stops here and hands over the wheel; the password is
+// yours and never passes through this process.
+async function waitForManualLogin(page: Page): Promise<boolean> {
   await page.bringToFront().catch(() => {});
-  const tentativa = await preencherCredenciais(page);
-  const minutos = Math.round(ESPERA_LOGIN_MS / 60000);
+  const attempt = await fillCredentials(page);
+  const minutes = Math.round(LOGIN_WAIT_MS / 60000);
 
-  // Com credencial no .env o script entra sozinho; o aviso abaixo só faz
-  // sentido quando sobrou passo pra pessoa (2FA, captcha, seletor que mudou).
-  if (tentativa === "enviado") {
-    console.log(`   login enviado a partir do .env — esperando a sessão abrir (até ${minutos} min).`);
+  // With credentials in .env the script logs in alone; the box below only makes
+  // sense when a step is left for the person (2FA, captcha, a changed selector).
+  if (attempt === "sent") {
+    console.log(`   login enviado a partir do .env — esperando a sessão abrir (até ${minutes} min).`);
     console.log("   se a Iberia pedir 2FA ou captcha, a janela do bot está aberta pra você concluir.");
   } else {
-  console.log("");
-  console.log("   ┌──────────────────────────────────────────────────────────────┐");
-  console.log("   │  A Iberia pediu login pra buscar com Avios.                  │");
-  console.log("   │                                                              │");
-  console.log("   │  Na janela do Chrome que está aberta (é a do bot): confira     │");
-  console.log("   │  os campos e clique em \"Fazer login\". Assim que a sessão      │");
-  console.log("   │  abrir, o recon continua sozinho.                            │");
-  console.log("   │                                                              │");
-  console.log(`   │  Espero até ${String(minutos).padStart(2)} min. Nada do que você digitar passa por      │`);
-  console.log("   │  aqui — o login fica salvo no perfil do Chrome do bot.        │");
-  console.log("   └──────────────────────────────────────────────────────────────┘");
-  console.log("");
+    console.log("");
+    console.log("   ┌──────────────────────────────────────────────────────────────┐");
+    console.log("   │  A Iberia pediu login pra buscar com Avios.                  │");
+    console.log("   │                                                              │");
+    console.log("   │  Na janela do Chrome que está aberta (é a do bot): confira     │");
+    console.log("   │  os campos e clique em \"Fazer login\". Assim que a sessão      │");
+    console.log("   │  abrir, o recon continua sozinho.                            │");
+    console.log("   │                                                              │");
+    console.log(`   │  Espero até ${String(minutes).padStart(2)} min. Nada do que você digitar passa por      │`);
+    console.log("   │  aqui — o login fica salvo no perfil do Chrome do bot.        │");
+    console.log("   └──────────────────────────────────────────────────────────────┘");
+    console.log("");
   }
 
-  const limite = Date.now() + ESPERA_LOGIN_MS;
-  let ultimo = "";
-  while (Date.now() < limite) {
+  const deadline = Date.now() + LOGIN_WAIT_MS;
+  let lastMark = "";
+  while (Date.now() < deadline) {
     await page.waitForTimeout(3000);
-    if (!(await pedindoLogin(page))) {
+    if (!(await askingForLogin(page))) {
       console.log(`   ✅ login concluído — a tela saiu do login (${page.url().slice(0, 80)})`);
       return true;
     }
-    const faltam = Math.round((limite - Date.now()) / 60000);
-    const marca = `${faltam}`;
-    if (marca !== ultimo) {
-      console.log(`   ...esperando o login (${faltam} min restantes)`);
-      ultimo = marca;
+    const minutesLeft = Math.round((deadline - Date.now()) / 60000);
+    if (`${minutesLeft}` !== lastMark) {
+      console.log(`   ...esperando o login (${minutesLeft} min restantes)`);
+      lastMark = `${minutesLeft}`;
     }
   }
-  console.log(`   ⏱️  passaram ${minutos} min sem login. Rode de novo quando puder — o que já foi descoberto está nas notas.`);
+  console.log(`   ⏱️  passaram ${minutes} min sem login. Rode de novo quando puder — o que já foi descoberto está nas notas.`);
   return false;
 }
 
-// O aviso de cookies da Iberia oferece só "Aceitar todos" e "Definições" — não
-// tem botão de recusar. **Não aceitamos nada**: o que ele faz é cobrir a página
-// com um filtro escuro (`onetrust-pc-dark-filter`) que intercepta todo clique,
-// e era isso que estava travando o formulário. Tirar a cobertura do caminho não
-// dá consentimento nenhum: o banner segue sem resposta.
-// Além do aviso de cookies, a home sobe promoções que cobrem o formulário — uma
-// delas ("Esperar ou explorar? Últimos dias...") engoliu o clique em Pesquisar e
-// a busca não saiu da home. Fecha só o que é promoção, pelo botão da própria
-// caixa; nada de aceitar nem consentir coisa alguma.
-async function fecharPromocoes(page: import("playwright").Page) {
-  const fechados = await page.evaluate(`(() => {
-    const rotulos = ["fechar", "cerrar", "close", "×", "x"];
-    const visivel = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
-    let n = 0;
-    for (const e of document.querySelectorAll("button,[role=button],a")) {
-      const t = (e.innerText || e.getAttribute("aria-label") || "").trim().toLowerCase();
-      if (!visivel(e) || !rotulos.includes(t)) continue;
-      // Só fecha o que está numa camada sobreposta: fixed/absolute com z-index.
-      const caixa = e.closest("[class*=modal],[class*=popup],[class*=overlay],[class*=banner],[role=dialog]");
-      if (!caixa) continue;
-      e.click();
-      n++;
+// Besides the cookie notice, the home page raises promotions over the form; one
+// ("Esperar ou explorar? Últimos dias...") swallowed the click on Pesquisar and
+// the search never left the home page. Only promotions are closed, through the
+// box's own button; nothing is accepted or consented to.
+async function closePromotions(page: Page) {
+  const closed = await page.evaluate(`(() => {
+    const labels = ["fechar", "cerrar", "close", "×", "x"];
+    const visible = (element) => { const rect = element.getBoundingClientRect(); return rect.width > 0 && rect.height > 0; };
+    let count = 0;
+    for (const element of document.querySelectorAll("button,[role=button],a")) {
+      const text = (element.innerText || element.getAttribute("aria-label") || "").trim().toLowerCase();
+      if (!visible(element) || !labels.includes(text)) continue;
+      // Only what sits on an overlay layer.
+      const box = element.closest("[class*=modal],[class*=popup],[class*=overlay],[class*=banner],[role=dialog]");
+      if (!box) continue;
+      element.click();
+      count++;
     }
-    return n;
+    return count;
   })()`);
-  if ((fechados as number) > 0) {
-    console.log(`   (fechei ${fechados} promoção(ões) que cobriam o formulário)`);
+  if ((closed as number) > 0) {
+    console.log(`   (fechei ${closed} promoção(ões) que cobriam o formulário)`);
     await page.waitForTimeout(1200);
   }
 }
 
-async function recusarCookies(page: import("playwright").Page) {
-  const recusar = page.locator("#onetrust-reject-all-handler").first();
-  if (await recusar.count().then((n) => n > 0).catch(() => false)) {
-    await recusar.click({ timeout: 5000 }).catch(() => {});
+// Iberia's cookie notice offers only "Aceitar todos" and "Definições", with no
+// decline button. **Nothing is accepted**: what it does is cover the page with a
+// dark filter (`onetrust-pc-dark-filter`) that intercepts every click, which was
+// blocking the form. Moving the cover out of the way gives no consent at all:
+// the banner stays unanswered.
+async function declineCookies(page: Page) {
+  const decline = page.locator("#onetrust-reject-all-handler").first();
+  if (await decline.count().then((count) => count > 0).catch(() => false)) {
+    await decline.click({ timeout: 5000 }).catch(() => {});
     console.log("   (aviso de cookies: recusei os não essenciais)");
     await page.waitForTimeout(1500);
     return;
   }
 
-  const removidos = await page.evaluate(`(() => {
-    const alvos = [...document.querySelectorAll(".onetrust-pc-dark-filter, .ot-fade-in")];
-    for (const e of alvos) e.remove();
-    return alvos.length;
+  const removed = await page.evaluate(`(() => {
+    const targets = [...document.querySelectorAll(".onetrust-pc-dark-filter, .ot-fade-in")];
+    for (const element of targets) element.remove();
+    return targets.length;
   })()`);
-  console.log(`   (aviso de cookies: sem botão de recusar — nada foi aceito; só tirei a cobertura que bloqueava os cliques, ${removidos} elemento(s))`);
+  console.log(`   (aviso de cookies: sem botão de recusar — nada foi aceito; só tirei a cobertura que bloqueava os cliques, ${removed} elemento(s))`);
   await page.waitForTimeout(800);
 }
 
-// Digitar "MAD" lista Madrid E Madison — o `ArrowDown + Enter` às cegas pegava
-// o primeiro da lista, que numa das execuções foi Madison (MSN). Aqui a opção é
-// escolhida pelo CÓDIGO: só cai no comportamento antigo se não achar nada com
-// ele, e sempre diz no log o que ficou no campo.
-async function escolherAeroporto(
-  page: import("playwright").Page,
-  seletor: string,
-  codigo: string,
-  rotulo: string,
-): Promise<boolean> {
-  // A lista de sugestões responde ao teclado mas NÃO aparece no DOM que dá pra
-  // varrer (nem por tag, nem por classe, nem por texto — a varredura genérica
-  // voltou vazia). Então em vez de tentar ler a lista, usa o que funciona e
-  // confere o resultado: desce uma posição por vez e só aceita quando o campo
-  // ficar com o código pedido. Digitar "MAD" oferece Madrid E Madison, e a
-  // ordem muda entre execuções — foi assim que uma busca inteira saiu pra
-  // Madison sem ninguém perceber.
-  const MAX_POSICOES = 8;
-  for (let descidas = 1; descidas <= MAX_POSICOES; descidas++) {
-    await page.fill(seletor, "");
+// The suggestion list reacts to the keyboard but does NOT show up in any DOM
+// that can be scanned (by tag, class or text: the generic scan came back
+// empty). So instead of reading the list, use what works and check the result:
+// go down one position at a time and only accept when the field holds the
+// requested code. Typing "MAD" offers Madrid AND Madison, in an order that
+// changes between runs: that is how a whole search went to Madison unnoticed.
+async function pickAirport(page: Page, selector: string, code: string, label: string): Promise<boolean> {
+  const MAX_POSITIONS = 8;
+  for (let downs = 1; downs <= MAX_POSITIONS; downs++) {
+    await page.fill(selector, "");
     await page.waitForTimeout(300);
-    await page.type(seletor, codigo, { delay: 120 });
+    await page.type(selector, code, { delay: 120 });
     await page.waitForTimeout(2000);
 
-    for (let i = 0; i < descidas; i++) await page.keyboard.press("ArrowDown");
+    for (let i = 0; i < downs; i++) await page.keyboard.press("ArrowDown");
     await page.keyboard.press("Enter");
     await page.waitForTimeout(900);
 
-    const valor = await page.inputValue(seletor).catch(() => "");
-    if (valor.includes(`(${codigo})`)) {
-      console.log(`   ${rotulo} ${codigo}: "${valor}" (${descidas}ª opção da lista)`);
+    const value = await page.inputValue(selector).catch(() => "");
+    if (value.includes(`(${code})`)) {
+      console.log(`   ${label} ${code}: "${value}" (${downs}ª opção da lista)`);
       return true;
     }
-    if (descidas === 1) console.log(`   ${rotulo} ${codigo}: 1ª opção era "${valor}" — procurando o código na lista...`);
+    if (downs === 1) console.log(`   ${label} ${code}: 1ª opção era "${value}" — procurando o código na lista...`);
   }
 
-  const valor = await page.inputValue(seletor).catch(() => "");
-  console.log(`   ❌ ${rotulo}: não achei ${codigo} nas ${MAX_POSICOES} primeiras opções; campo ficou com "${valor}".`);
+  const value = await page.inputValue(selector).catch(() => "");
+  console.log(`   ❌ ${label}: não achei ${code} nas ${MAX_POSITIONS} primeiras opções; campo ficou com "${value}".`);
   return false;
 }
 
-// Seletores conferidos na página (o botão visível é uma lupa; o `Pesquisar` de
-// verdade é #buttonSubmit1, e o checkbox de Avios só reage pelo rótulo).
-async function preencherFormulario(page: import("playwright").Page): Promise<boolean> {
+// Selectors checked on the page (the visible button is a magnifier; the real
+// `Pesquisar` is #buttonSubmit1, and the Avios checkbox only reacts through its label).
+async function fillSearchForm(page: Page): Promise<boolean> {
   try {
-    const achouOrigem = await escolherAeroporto(page, "#flight_origin1", origem.toUpperCase(), "origem");
-    const achouDestino = await escolherAeroporto(page, "#flight_destiny1", destino.toUpperCase(), "destino");
-    if (!achouOrigem || !achouDestino) return false;
+    const originFound = await pickAirport(page, "#flight_origin1", origin.toUpperCase(), "origem");
+    const destinationFound = await pickAirport(page, "#flight_destiny1", destination.toUpperCase(), "destino");
+    if (!originFound || !destinationFound) return false;
 
-    // "Só ida": uma perna por busca, como nas outras fontes. O select é
-    // controlado por JS, então o evento precisa ir junto.
+    // One way: one leg per search, like the other sources. The select is
+    // JS-controlled, so the event must go along.
     await page.evaluate(`(() => {
-      const s = document.querySelector("#ticketops-seeker");
-      if (s) { s.value = "Só ida"; s.dispatchEvent(new Event("change", { bubbles: true })); }
+      const select = document.querySelector("#ticketops-seeker");
+      if (select) { select.value = "Só ida"; select.dispatchEvent(new Event("change", { bubbles: true })); }
     })()`);
     await page.waitForTimeout(1200);
 
-    // Avios: o input não responde a clique direto; quem responde é o rótulo.
-    // Controle: a mesma busca SEM Avios. Se ela chegar no resultado, o que
-    // barra não é a automação — é o Avios.
-    const semAvios = process.env.SEM_AVIOS === "true";
-    if (semAvios) console.log("   (controle: buscando em dinheiro, sem marcar Avios)");
+    // Control run: the same search WITHOUT Avios. If it reaches the result,
+    // what blocks is not the automation but Avios.
+    const withoutAvios = process.env.WITHOUT_AVIOS === "true";
+    if (withoutAvios) console.log("   (controle: buscando em dinheiro, sem marcar Avios)");
 
-    const estado = async () =>
+    const aviosState = async () =>
       (await page.evaluate(`(() => {
-        const e = document.querySelector("#paywithAvios");
-        return e ? { marcado: e.checked, desabilitado: e.disabled } : null;
-      })()`)) as { marcado: boolean; desabilitado: boolean } | null;
+        const input = document.querySelector("#paywithAvios");
+        return input ? { checked: input.checked, disabled: input.disabled } : null;
+      })()`)) as { checked: boolean; disabled: boolean } | null;
 
-    // O perfil guarda o estado do formulário entre execuções, então o controle
-    // precisa DESMARCAR na marra — senão ele repete a busca com Avios e mente.
+    // The profile keeps the form state between runs, so the control must
+    // UNCHECK by force, or it repeats the Avios search and lies.
     await page.evaluate(
-      `((ligar) => {
-        const e = document.querySelector("#paywithAvios");
-        if (!e || e.checked === ligar) return;
-        e.checked = ligar;
-        e.dispatchEvent(new Event("click", { bubbles: true }));
-        e.dispatchEvent(new Event("change", { bubbles: true }));
-      })(${semAvios ? "false" : "true"})`,
+      `((turnOn) => {
+        const input = document.querySelector("#paywithAvios");
+        if (!input || input.checked === turnOn) return;
+        input.checked = turnOn;
+        input.dispatchEvent(new Event("click", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      })(${withoutAvios ? "false" : "true"})`,
     );
     await page.waitForTimeout(1200);
 
-    if (!semAvios) {
+    if (!withoutAvios) {
       await page.locator("label[for='paywithAvios']").first().click({ timeout: 5000 }).catch(() => {});
       await page.waitForTimeout(800);
     }
 
-    if (!semAvios && (await estado())?.marcado !== true) {
+    if (!withoutAvios && (await aviosState())?.checked !== true) {
       console.log("   rótulo não marcou; tentando pelo próprio input...");
       await page.evaluate(`(() => {
-        const e = document.querySelector("#paywithAvios");
-        if (e) { e.checked = true; e.dispatchEvent(new Event("click", { bubbles: true })); e.dispatchEvent(new Event("change", { bubbles: true })); }
+        const input = document.querySelector("#paywithAvios");
+        if (input) { input.checked = true; input.dispatchEvent(new Event("click", { bubbles: true })); input.dispatchEvent(new Event("change", { bubbles: true })); }
       })()`);
       await page.waitForTimeout(1500);
     }
 
-    const st = await estado();
-    console.log(`   'Pagar com Avios': marcado=${st?.marcado} desabilitado=${st?.desabilitado}`);
-    if (!semAvios && st?.marcado !== true) {
+    const state = await aviosState();
+    console.log(`   'Pagar com Avios': marcado=${state?.checked} desabilitado=${state?.disabled}`);
+    if (!withoutAvios && state?.checked !== true) {
       console.log("   ❌ sem Avios a busca vira dinheiro — parando aqui.");
-      await page.screenshot({ path: foto("avios") });
+      await page.screenshot({ path: capturePath("avios") });
       return false;
     }
 
-    // O campo de data é um datepicker: `fill` não fixa o valor. O que pega é
-    // escrever e avisar a página, como no checkbox. Ida e volta porque o
-    // seletor de "Só ida" é um dropdown próprio — a perna extra não atrapalha
-    // o recon, que é descobrir o endpoint.
-    const volta = new Date(data);
-    volta.setDate(volta.getDate() + 7);
-    const dataVolta = dataBR(volta.toISOString().slice(0, 10));
+    // The date field is a datepicker: `fill` does not stick. What works is
+    // writing and notifying the page, as with the checkbox. Round trip because
+    // the one-way selector is its own dropdown; the extra leg does not hurt the
+    // recon, whose goal is finding the endpoint.
+    const returnDate = new Date(date);
+    returnDate.setDate(returnDate.getDate() + 7);
     await page.evaluate(
-      `((ida, volta) => {
-        const por = (sel, v) => {
-          const e = document.querySelector(sel);
-          if (!e) return null;
-          e.value = v;
-          for (const nome of ["input", "change", "blur"]) e.dispatchEvent(new Event(nome, { bubbles: true }));
-          return e.value;
+      `((outbound, inbound) => {
+        const set = (selector, value) => {
+          const element = document.querySelector(selector);
+          if (!element) return null;
+          element.value = value;
+          for (const name of ["input", "change", "blur"]) element.dispatchEvent(new Event(name, { bubbles: true }));
+          return element.value;
         };
-        return [por("#flight_round_date1", ida), por("#flight_return_date1", volta)];
-      })(${JSON.stringify(dataBR(data))}, ${JSON.stringify(dataVolta)})`,
+        return [set("#flight_round_date1", outbound), set("#flight_return_date1", inbound)];
+      })(${JSON.stringify(brazilianDate(date))}, ${JSON.stringify(brazilianDate(returnDate.toISOString().slice(0, 10)))})`,
     );
     await page.waitForTimeout(1200);
-    const datas = await page.evaluate(`(() => {
-      const v = (s) => { const e = document.querySelector(s); return e ? e.value : null; };
-      return [v("#flight_round_date1"), v("#flight_return_date1")];
+    const formDates = await page.evaluate(`(() => {
+      const value = (selector) => { const element = document.querySelector(selector); return element ? element.value : null; };
+      return [value("#flight_round_date1"), value("#flight_return_date1")];
     })()`);
-    console.log(`   datas no formulário: ${JSON.stringify(datas)}`);
+    console.log(`   datas no formulário: ${JSON.stringify(formDates)}`);
 
-    await fecharPromocoes(page);
+    await closePromotions(page);
     await page.locator("#buttonSubmit1").first().click({ timeout: 10_000, force: true });
 
-    // Conferência que faltava: a URL do resultado carrega os códigos escolhidos.
-    // Sem isso, uma busca pro aeroporto errado volta "não encontramos assentos"
-    // e passa por resposta legítima — foi o que aconteceu com MAD virando MSN.
+    // The result URL carries the chosen codes. Without this check, a search for
+    // the wrong airport returns "no seats found" and passes for a legitimate
+    // answer, which is what happened when MAD became MSN.
     await page.waitForTimeout(6000);
     const url = page.url();
-    const pedido = { BEGIN_CITY_01: origem.toUpperCase(), END_CITY_01: destino.toUpperCase() };
-    for (const [campo, esperado] of Object.entries(pedido)) {
-      const obtido = new RegExp(`${campo}=([A-Z]{3})`).exec(url)?.[1];
-      if (obtido && obtido !== esperado) {
-        console.log(`   ❌ o site buscou ${campo}=${obtido}, e não ${esperado} — o autocomplete pegou outro aeroporto.`);
+    const requested = { BEGIN_CITY_01: origin.toUpperCase(), END_CITY_01: destination.toUpperCase() };
+    for (const [field, expected] of Object.entries(requested)) {
+      const actual = new RegExp(`${field}=([A-Z]{3})`).exec(url)?.[1];
+      if (actual && actual !== expected) {
+        console.log(`   ❌ o site buscou ${field}=${actual}, e não ${expected} — o autocomplete pegou outro aeroporto.`);
         console.log("      resultado descartado: buscar destino errado devolve 'sem assentos' e parece resposta boa.");
         return false;
       }
     }
     return true;
-  } catch (erro) {
-    console.log(`   (falhou: ${(erro as Error).message.slice(0, 200)})`);
+  } catch (error) {
+    console.log(`   (falhou: ${(error as Error).message.slice(0, 200)})`);
     return false;
   }
 }
 
-// Espera por uma condição em vez de por um tempo fixo: o que interessa é a
-// captura chegar, não o relógio.
-async function esperarAte(
-  page: import("playwright").Page,
-  limiteMs: number,
-  pronto: () => boolean | Promise<boolean>,
-) {
-  const fim = Date.now() + limiteMs;
-  while (Date.now() < fim && !(await pronto())) await page.waitForTimeout(1000);
+// Waits for a condition instead of a fixed time: what matters is the capture arriving, not the clock.
+async function waitUntil(page: Page, timeoutMs: number, ready: () => boolean | Promise<boolean>) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline && !(await ready())) await page.waitForTimeout(1000);
 }
 
-async function encerrar(page: import("playwright").Page) {
+async function finish(page: Page) {
   await page.close();
   process.exit(0);
 }

@@ -93,7 +93,7 @@ export async function startLatamSession(headless = false): Promise<LatamSession>
   if (/challenge|denied|acesso negado/i.test(await session.page.title())) {
     throw new Error(
       "A LATAM bloqueou o acesso. Rode `npm run chrome` e, se persistir, " +
-        "`bash scripts/importar-cookies.sh latamairlines.com` antes de tentar de novo.",
+        "`bash scripts/import-cookies.sh latamairlines.com` antes de tentar de novo.",
     );
   }
 
@@ -276,7 +276,7 @@ export function buildLatamReport(days: LatamDay[], ceilings: LatamCeilings = {})
 // Miles confirmation. The calendar only exists in reais, so a day's price in
 // miles only comes from searching that day. Requires a logged-in session
 // (anonymously, LATAM sends miles mode to the login page):
-// `bash scripts/importar-cookies.sh latamairlines.com`.
+// `bash scripts/import-cookies.sh latamairlines.com`.
 
 type RawOffer = {
   content?: {

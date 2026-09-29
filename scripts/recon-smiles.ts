@@ -1,168 +1,156 @@
 import "dotenv/config";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { openChromeSession } from "../src/core/chrome-session.ts";
+import { FIXTURES_DIR } from "../src/core/paths.ts";
 
-// FASE 0 do módulo Smiles: descobrir POR ONDE a chamada passa hoje, antes de
-// escrever qualquer linha de parsing.
+// PHASE 0 of the Smiles source: find out WHICH WAY the call passes today,
+// before writing a single parsing line.
 //
-// O que se sabe do projeto antigo (projetos/cheap-flights, parado desde
-// mai/2025, ver ANALISE.md lá):
-// - endpoint de busca: /v1/airlines/search, um GET por data;
-// - ele existe em três ambientes (prd, green, blue) e o código antigo usava o
-//   `green` — cheiro de ambiente com proteção mais fraca que o de produção;
-// - as chamadas imitavam o APP iOS (não o site), com x-api-key próprio. API de
-//   app costuma ser menos protegida, e é isso que este recon quer confirmar.
+// What was known from the old project (projetos/cheap-flights, stopped since
+// May 2025, see its ANALISE.md):
+// - search endpoint: /v1/airlines/search, one GET per date;
+// - it exists in three environments (prd, green, blue) and the old code used
+//   `green`, a smell of an environment with weaker protection than production;
+// - the calls impersonated the iOS APP (not the site) with its own x-api-key.
+//   App APIs tend to be less protected, which this recon wants to confirm.
 //
-// A escada, do mais barato pro mais caro:
-//   1. fetch do Node, com os headers do app        (sem navegador nenhum)
-//   2. fetch de DENTRO da página, no Chrome do bot (o que funciona na AA)
+// The ladder, cheapest first:
+//   1. a Node fetch with the app's headers         (no browser at all)
+//   2. a fetch from INSIDE the page in the bot's Chrome (what works for AA)
 //
-// Nada é processado: a primeira resposta 200 é salva crua.
+// Nothing is processed: the first 200 response is saved raw.
 //
-// Uso: npx tsx scripts/recon-smiles.ts [GRU] [MIA] [2026-10-15]
+// Usage: npx tsx scripts/recon-smiles.ts [GRU] [MIA] [2026-10-15]
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const FIXTURES_DIR = path.join(__dirname, "..", "fixtures");
+const [origin = "GRU", destination = "MIA", date = daysFromToday(60)] = process.argv.slice(2);
 
-const [origem = "GRU", destino = "MIA", data = dataDaqui(60)] = process.argv.slice(2);
-
-function dataDaqui(dias: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + dias);
-  return d.toISOString().slice(0, 10);
+function daysFromToday(days: number): string {
+  const today = new Date();
+  today.setDate(today.getDate() + days);
+  return today.toISOString().slice(0, 10);
 }
 
-function urlBusca(ambiente: string): string {
+function searchUrl(environment: string): string {
   const params = new URLSearchParams({
-    originAirportCode: origem.toUpperCase(),
-    destinationAirportCode: destino.toUpperCase(),
-    departureDate: data,
+    originAirportCode: origin.toUpperCase(),
+    destinationAirportCode: destination.toUpperCase(),
+    departureDate: date,
     adults: "1",
     children: "0",
     infants: "0",
     forceCongener: "false",
   });
-  return `https://api-air-flightsearch-${ambiente}.smiles.com.br/v1/airlines/search?${params}`;
+  return `https://api-air-flightsearch-${environment}.smiles.com.br/v1/airlines/search?${params}`;
 }
 
-// Chave de cliente do app (vinha no código antigo). É identificador público de
-// aplicativo, não credencial de conta — nenhum dado de login entra aqui.
-// `channel: WEB` desde 2026-09-15: com `APP` a borda responde 403 com página de
-// bloqueio, e sem `channel` nenhum a resposta vem sem calendário. Ver
-// contexto/notas-bloqueio-smiles.md.
-const HEADERS_APP: Record<string, string> = {
+// The app's client key (from the old code): a public app identifier, not an
+// account credential; no login data goes in here. `channel: WEB` since
+// 2026-09-15: with `APP` the edge answers 403 with a block page, and without any
+// `channel` the response has no calendar. See docs/recon/smiles-blocking.md.
+const APP_HEADERS: Record<string, string> = {
   "x-api-key": "aJqPU7xNHl9qN3NVZnPaJ208aPo2Bh2p2ZV844tw",
   channel: "WEB",
   accept: "application/json, text/plain, */*",
   "accept-language": "pt-BR,pt;q=0.9",
 };
 
-type Resultado = { degrau: string; status: number | string; tamanho: number; amostra: string; corpo?: string };
+type StepResult = { step: string; status: number | string; size: number; sample: string; body?: string };
 
-function resumo(texto: string): string {
-  return texto.replace(/\s+/g, " ").slice(0, 220);
+function summarize(text: string): string {
+  return text.replace(/\s+/g, " ").slice(0, 220);
 }
 
-async function degrauNode(ambiente: string): Promise<Resultado> {
-  const degrau = `node/${ambiente}`;
+async function nodeStep(environment: string): Promise<StepResult> {
+  const step = `node/${environment}`;
   try {
-    const res = await fetch(urlBusca(ambiente), { headers: HEADERS_APP });
-    const texto = await res.text();
-    return { degrau, status: res.status, tamanho: texto.length, amostra: resumo(texto), corpo: texto };
+    const response = await fetch(searchUrl(environment), { headers: APP_HEADERS });
+    const text = await response.text();
+    return { step, status: response.status, size: text.length, sample: summarize(text), body: text };
   } catch (err) {
-    return { degrau, status: "falhou", tamanho: 0, amostra: err instanceof Error ? err.message : String(err) };
+    return { step, status: "falhou", size: 0, sample: err instanceof Error ? err.message : String(err) };
   }
 }
 
-// Duas formas de sair de dentro do navegador, porque elas falham por motivos
-// diferentes:
+// Two ways out of the browser, because they fail for different reasons:
 //
-// (a) navegação direta na URL da API — o Chrome vai à API como se fosse uma
-//     página; sem CORS no caminho, e é o teste mais limpo de "a API aceita um
-//     cliente com cara de navegador?";
-// (b) fetch same-origin — abre a raiz do host da API e chama de lá de dentro.
-//     Um fetch a partir de www.smiles.com.br não serve: a API está em outro
-//     subdomínio, então o navegador exige CORS e a leitura é barrada mesmo se
-//     a resposta chegar.
-async function degrauNavegador(ambiente: string, modo: "navegar" | "fetch"): Promise<Resultado> {
-  const degrau = `navegador-${modo}/${ambiente}`;
-  const sessao = await openChromeSession(false, "Smiles");
+// (a) navigating straight to the API URL: Chrome goes to the API as if it were
+//     a page, with no CORS in the way; the cleanest test of "does the API accept
+//     a browser-looking client?";
+// (b) a same-origin fetch: open the API host's root and call from inside it. A
+//     fetch from www.smiles.com.br does not work: the API is on another
+//     subdomain, so the browser enforces CORS and blocks the read even if the
+//     response arrives.
+async function browserStep(environment: string, mode: "navigate" | "fetch"): Promise<StepResult> {
+  const step = `navegador-${mode}/${environment}`;
+  const session = await openChromeSession(false, "Smiles");
   try {
-    const url = urlBusca(ambiente);
+    const url = searchUrl(environment);
 
-    if (modo === "navegar") {
-      const resposta = await sessao.page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
-      const texto = await sessao.page.evaluate(() => document.body.innerText);
-      return {
-        degrau,
-        status: resposta?.status() ?? "sem resposta",
-        tamanho: texto.length,
-        amostra: resumo(texto),
-        corpo: texto,
-      };
+    if (mode === "navigate") {
+      const response = await session.page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
+      const text = await session.page.evaluate(() => document.body.innerText);
+      return { step, status: response?.status() ?? "sem resposta", size: text.length, sample: summarize(text), body: text };
     }
 
-    const raiz = `https://api-air-flightsearch-${ambiente}.smiles.com.br/`;
-    await sessao.page.goto(raiz, { waitUntil: "domcontentloaded", timeout: 60000 }).catch(() => {});
-    await sessao.page.waitForTimeout(3000);
-    const r = await sessao.page.evaluate(
+    const root = `https://api-air-flightsearch-${environment}.smiles.com.br/`;
+    await session.page.goto(root, { waitUntil: "domcontentloaded", timeout: 60000 }).catch(() => {});
+    await session.page.waitForTimeout(3000);
+    const result = await session.page.evaluate(
       async ({ url, headers }) => {
-        const res = await fetch(url, { headers });
-        return { status: res.status, texto: await res.text() };
+        const response = await fetch(url, { headers });
+        return { status: response.status, text: await response.text() };
       },
-      { url, headers: HEADERS_APP },
+      { url, headers: APP_HEADERS },
     );
-    return { degrau, status: r.status, tamanho: r.texto.length, amostra: resumo(r.texto), corpo: r.texto };
+    return { step, status: result.status, size: result.text.length, sample: summarize(result.text), body: result.text };
   } catch (err) {
-    return { degrau, status: "falhou", tamanho: 0, amostra: err instanceof Error ? (err.message.split("\n")[0] ?? "") : String(err) };
+    return { step, status: "falhou", size: 0, sample: err instanceof Error ? (err.message.split("\n")[0] ?? "") : String(err) };
   } finally {
-    await sessao.page.close().catch(() => {});
+    await session.page.close().catch(() => {});
   }
 }
 
-function salvar(r: Resultado) {
-  if (!r.corpo) return;
+function save(result: StepResult) {
+  if (!result.body) return;
   fs.mkdirSync(FIXTURES_DIR, { recursive: true });
-  const destinoArq = path.join(FIXTURES_DIR, "smiles-real.json");
-  fs.writeFileSync(destinoArq, r.corpo, "utf8");
-  console.log(`\n✅ Resposta crua salva em fixtures/smiles-real.json (${r.corpo.length} bytes, degrau ${r.degrau}).`);
+  fs.writeFileSync(path.join(FIXTURES_DIR, "smiles-real.json"), result.body, "utf8");
+  console.log(`\n✅ Resposta crua salva em fixtures/smiles-real.json (${result.body.length} bytes, degrau ${result.step}).`);
 }
 
 async function main() {
-  console.log(`\nRecon Smiles — ${origem.toUpperCase()} → ${destino.toUpperCase()} em ${data}\n`);
+  console.log(`\nRecon Smiles — ${origin.toUpperCase()} → ${destination.toUpperCase()} em ${date}\n`);
 
-  const resultados: Resultado[] = [];
+  const results: StepResult[] = [];
 
-  for (const ambiente of ["prd", "green", "blue"]) {
-    const r = await degrauNode(ambiente);
-    resultados.push(r);
-    console.log(`[${r.degrau}] status ${r.status} · ${r.tamanho} bytes\n    ${r.amostra}\n`);
-    await new Promise((ok) => setTimeout(ok, 3000));
+  for (const environment of ["prd", "green", "blue"]) {
+    const result = await nodeStep(environment);
+    results.push(result);
+    console.log(`[${result.step}] status ${result.status} · ${result.size} bytes\n    ${result.sample}\n`);
+    await new Promise((resolve) => setTimeout(resolve, 3000));
   }
 
-  let vencedor = resultados.find((r) => r.status === 200 && r.tamanho > 0);
+  let winner = results.find((result) => result.status === 200 && result.size > 0);
 
-  if (!vencedor) {
+  if (!winner) {
     console.log("Nenhum degrau de rede pura passou — subindo pro navegador.\n");
-    for (const modo of ["navegar", "fetch"] as const) {
-      const r = await degrauNavegador("prd", modo);
-      resultados.push(r);
-      console.log(`[${r.degrau}] status ${r.status} · ${r.tamanho} bytes\n    ${r.amostra}\n`);
-      if (r.status === 200 && r.tamanho > 0) {
-        vencedor = r;
+    for (const mode of ["navigate", "fetch"] as const) {
+      const result = await browserStep("prd", mode);
+      results.push(result);
+      console.log(`[${result.step}] status ${result.status} · ${result.size} bytes\n    ${result.sample}\n`);
+      if (result.status === 200 && result.size > 0) {
+        winner = result;
         break;
       }
-      await new Promise((ok) => setTimeout(ok, 3000));
+      await new Promise((resolve) => setTimeout(resolve, 3000));
     }
   }
 
   console.log("─".repeat(60));
-  for (const r of resultados) console.log(`${r.degrau.padEnd(20)} ${r.status}`);
+  for (const result of results) console.log(`${result.step.padEnd(20)} ${result.status}`);
   console.log("─".repeat(60));
 
-  if (vencedor) salvar(vencedor);
+  if (winner) save(winner);
   else console.log("\n❌ Nenhum degrau devolveu 200 — nada salvo (fixture de erro não serve de schema).");
 
   process.exit(0);
