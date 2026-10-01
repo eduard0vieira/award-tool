@@ -529,8 +529,21 @@ export async function confirmPairInMiles(
       options,
       image,
     };
+  } catch (err) {
+    if (err instanceof LatamFlowError) await captureFailure(page, screenshotPath, onLog);
+    throw err;
   } finally {
     page.off("response", capture);
+  }
+}
+
+async function captureFailure(page: Page, screenshotPath: string, onLog: OnLog): Promise<void> {
+  const failurePath = screenshotPath.replace(/\.png$/, "-failure.png");
+  try {
+    await page.screenshot({ path: failurePath, fullPage: true });
+    onLog(`Print da tela onde o par parou: ${failurePath}`);
+  } catch (err) {
+    onLog(`O print da falha também falhou: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 
