@@ -6,12 +6,14 @@ import {
   buildLatamReport,
   confirmPairInMiles,
   filterByCeilings,
+  LatamFlowError,
   pickBestPairs,
   searchLatamYear,
   type LatamCeilings,
   type LatamDay,
   type LatamSession,
   type PairConfirmation,
+  type PairToConfirm,
 } from "../../../scrapers/latam/latam.scraper.ts";
 import { formatDatesByMonth } from "../../../core/common.ts";
 import { ALERTS_DIR } from "../../../core/paths.ts";
@@ -25,6 +27,8 @@ import { recordSearch, type Leg } from "../record-search.ts";
 import { LatamSearchDto } from "./latam-search.dto.ts";
 
 export const LATAM_POOL = Symbol("LATAM_POOL");
+
+const PAIR_ATTEMPTS = 2;
 
 type Confirmation = { confirmation?: { pairs: PairConfirmation[] }; notice?: string };
 
@@ -136,20 +140,13 @@ export class LatamSource implements SearchSource<LatamSearchDto> {
           job.notice(`Confirmando par ${index + 1}/${pairs.length}. ${pair.outbound.date} → ${pair.inbound.date}...`);
           const file = `par-${index + 1}.png`;
           try {
-            const offer = await confirmPairInMiles(
-              page,
-              {
-                origin: search.origin,
-                destination: search.destination,
-                outboundDate: pair.outbound.date,
-                returnDate: pair.inbound.date,
-                screenshotPath: path.join(ALERTS_DIR, folder, file),
-              },
-              job.log,
-              // A login prompt becomes a notice: it is the only way the user learns
-              // the search is waiting for them in the bot's window.
-              job.notice,
-            );
+            const offer = await this.confirmWithRetry(page, job, {
+              origin: search.origin,
+              destination: search.destination,
+              outboundDate: pair.outbound.date,
+              returnDate: pair.inbound.date,
+              screenshotPath: path.join(ALERTS_DIR, folder, file),
+            });
             if (offer) {
               confirmed.push({
                 ...offer,
@@ -187,5 +184,20 @@ export class LatamSource implements SearchSource<LatamSearchDto> {
     }
     job.notice("");
     return result;
+  }
+
+  // Only a step the site did not complete is tried again; a login or format
+  // error would fail the same way twice.
+  private async confirmWithRetry(page: Page, job: JobCallbacks, pair: PairToConfirm): Promise<PairConfirmation | null> {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        // A login prompt becomes a notice: it is the only way the user learns
+        // the search is waiting for them in the bot's window.
+        return await confirmPairInMiles(page, pair, job.log, job.notice);
+      } catch (err) {
+        if (!(err instanceof LatamFlowError) || attempt >= PAIR_ATTEMPTS) throw err;
+        job.log(`Par ${pair.outboundDate} → ${pair.returnDate} falhou (${err.message}). Tentando de novo.`);
+      }
+    }
   }
 }
