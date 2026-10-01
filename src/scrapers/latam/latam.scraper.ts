@@ -487,10 +487,6 @@ export async function confirmPairInMiles(
       onLog(`Sem voo em milhas na volta de ${returnDate}.`);
       return null;
     }
-    if (optionsResponse.status() !== 200) {
-      throw new LatamFlowError(`A LATAM respondeu ${optionsResponse.status()} ao calcular as combinações de milhas+dinheiro.`);
-    }
-
     const { feeReais, options } = readRedemptionOptions(await optionsResponse.json());
 
     let image = "";
@@ -616,12 +612,12 @@ async function pickFirstFlight(
     throw new LatamFlowError(`O painel de tarifas não abriu na ${leg} depois de clicar no voo.`);
   }
 
+  let response: Response;
   try {
-    const [response] = await Promise.all([
+    [response] = await Promise.all([
       page.waitForResponse(isNextStep, { timeout: STEP_TIMEOUT_MS }),
       fareButton.click({ timeout: 10_000 }),
     ]);
-    return response;
   } catch (err) {
     if (!(err instanceof errors.TimeoutError)) throw err;
     throw new LatamFlowError(
@@ -630,6 +626,11 @@ async function pickFirstFlight(
         : "As combinações de milhas+dinheiro não chegaram depois de escolher a tarifa da volta.",
     );
   }
+  // A refused request here would otherwise surface as "no flight in miles" on the next leg.
+  if (response.status() !== 200) {
+    throw new LatamFlowError(`A LATAM respondeu ${response.status()} depois de escolher a tarifa da ${leg}.`);
+  }
+  return response;
 }
 
 // From the calendar days, picks outbound/return pairs within "lowest + margin",
