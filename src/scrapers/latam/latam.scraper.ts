@@ -462,7 +462,9 @@ export async function confirmPairInMiles(
         trip: "RT",
         cabin: "Economy",
         redemption: "true",
-        sort: "RECOMMENDED",
+        // The site's "Mais baratos": both legs come sorted by miles, so the
+        // first card is the cheapest flight. "RECOMMENDED" put pricier ones first.
+        sort: "PRICE,asc",
       }).toString();
 
     onLog(`Confirmando o par em milhas: ${origin} ⇄ ${destination} · ${outboundDate} → ${returnDate}...`);
