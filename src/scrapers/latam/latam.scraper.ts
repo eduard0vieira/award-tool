@@ -1,5 +1,5 @@
 import "dotenv/config";
-import type { Page, Response } from "playwright";
+import { errors, type Page, type Response } from "playwright";
 import { openChromeSession, type ChromeSession } from "../../core/chrome-session.ts";
 import {
   formatDatesByMonth,
@@ -305,6 +305,15 @@ export class LatamFieldError extends Error {
   }
 }
 
+// A step of the pair flow that did not happen on the site. Kept apart from
+// login and format errors because only this one is worth trying again.
+export class LatamFlowError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "LatamFlowError";
+  }
+}
+
 function requireNumber(value: unknown, field: string): number {
   if (typeof value !== "number" || !Number.isFinite(value)) throw new LatamFieldError(field);
   return value;
@@ -422,23 +431,16 @@ export async function confirmPairInMiles(
 ): Promise<PairConfirmation | null> {
   const { origin, destination, outboundDate, returnDate, screenshotPath } = pair;
 
-  let rawOptions: unknown;
   let outboundSearch: RawOffer | undefined;
   let returnSearch: RawOffer | undefined;
 
   const capture = async (response: Response) => {
     const url = response.url();
-    if (response.status() !== 200) return;
+    if (response.status() !== 200 || !url.includes("/offers/search/redemption")) return;
     try {
-      if (url.includes("/offers/redemption-options")) {
-        rawOptions = await response.json();
-      } else if (url.includes("/offers/search/redemption")) {
-        // The second search carries `outOfferId`: it is the return, already
-        // priced against the chosen outbound.
-        const body = (await response.json()) as RawOffer;
-        if (url.includes("outOfferId=") && !url.includes("outOfferId=null")) returnSearch = body;
-        else outboundSearch = body;
-      }
+      const body = (await response.json()) as RawOffer;
+      if (isReturnSearch(response)) returnSearch = body;
+      else outboundSearch = body;
     } catch {
       // Non-JSON response: the required fields catch it later.
     }
@@ -474,25 +476,20 @@ export async function confirmPairInMiles(
       }
     }
 
-    if (!(await pickFirstFlight(page, "ida", onLog))) {
+    if (!(await pickFirstFlight(page, "ida", isReturnSearch, onLog))) {
       onLog(`Sem voo em milhas na ida de ${outboundDate}.`);
       return null;
     }
-    if (!(await pickFirstFlight(page, "volta", onLog))) {
+    const optionsResponse = await pickFirstFlight(page, "volta", isRedemptionOptions, onLog);
+    if (!optionsResponse) {
       onLog(`Sem voo em milhas na volta de ${returnDate}.`);
       return null;
     }
-
-    // The combinations screen loads after the second pick.
-    await waitUntil(() => rawOptions !== undefined, 30_000, page);
-    if (rawOptions === undefined) {
-      throw new Error(
-        "Fluxo concluído sem as combinações de milhas+dinheiro na resposta da LATAM. " +
-          "Rode `npm run recon:latam` para inspecionar onde o fluxo parou.",
-      );
+    if (optionsResponse.status() !== 200) {
+      throw new LatamFlowError(`A LATAM respondeu ${optionsResponse.status()} ao calcular as combinações de milhas+dinheiro.`);
     }
 
-    const { feeReais, options } = readRedemptionOptions(rawOptions);
+    const { feeReais, options } = readRedemptionOptions(await optionsResponse.json());
 
     let image = "";
     const originalViewport = page.viewportSize();
@@ -557,42 +554,67 @@ function describeFirstFlight(search: RawOffer | undefined, from: string, to: str
   );
 }
 
+// The second search carries `outOfferId`: it is the return, already priced
+// against the chosen outbound.
+function isReturnSearch(response: Response): boolean {
+  const url = response.url();
+  return url.includes("/offers/search/redemption") && url.includes("outOfferId=") && !url.includes("outOfferId=null");
+}
+
+function isRedemptionOptions(response: Response): boolean {
+  return response.url().includes("/offers/redemption-options");
+}
+
+const FLIGHT_LIST_TIMEOUT_MS = 60_000;
+const STEP_TIMEOUT_MS = 45_000;
+
 // Each leg takes two picks: the flight and, in the panel that opens next, the
 // fare (Light/Plus/Top). Always the first of both: the fare does not change the
 // miles ladder, which is what matters here.
-async function pickFirstFlight(page: Page, leg: string, onLog: OnLog): Promise<boolean> {
-  const card = page.locator('[data-testid^="wrapper-card-flight-"]').first();
+//
+// Returns the response that proves the leg was taken (the return list after the
+// outbound, the combinations after the return), or null when no flight shows up.
+async function pickFirstFlight(
+  page: Page,
+  leg: "ida" | "volta",
+  isNextStep: (response: Response) => boolean,
+  onLog: OnLog,
+): Promise<Response | null> {
+  const card = page.locator('[data-testid="wrapper-card-flight-0"]');
   try {
-    await card.waitFor({ timeout: 60_000 });
-  } catch {
+    await card.waitFor({ state: "visible", timeout: FLIGHT_LIST_TIMEOUT_MS });
+  } catch (err) {
+    if (!(err instanceof errors.TimeoutError)) throw err;
     onLog(`  (nenhum voo apareceu na ${leg})`);
-    return false;
+    return null;
   }
-  await page.waitForTimeout(2000);
   await card.click({ timeout: 15_000 });
-  await page.waitForTimeout(2500);
 
-  const selectors = [
-    '[data-testid*="fare-selection"] button',
-    'button[data-testid*="select"]',
-    "button:has-text('Escolher')",
-    "button:has-text('Selecionar')",
-  ];
-  for (const selector of selectors) {
-    const button = page.locator(selector).first();
-    if ((await button.count()) > 0 && (await button.isVisible().catch(() => false))) {
-      await button.click({ timeout: 10_000 }).catch(() => {});
-      await page.waitForTimeout(2500);
-      return true;
-    }
+  // The panel only renders after /brand-bundle-details answers, measured at
+  // 1.7–3.2s. A fixed 2.5s wait used to miss it, assume there was no panel and
+  // move on without choosing the leg.
+  const fareButton = page.locator('[data-testid="bundle-detail-0-flight-select"]');
+  try {
+    await fareButton.waitFor({ state: "visible", timeout: STEP_TIMEOUT_MS });
+  } catch (err) {
+    if (!(err instanceof errors.TimeoutError)) throw err;
+    throw new LatamFlowError(`O painel de tarifas não abriu na ${leg} depois de clicar no voo.`);
   }
-  // Without a fare panel, clicking the card is enough.
-  return true;
-}
 
-async function waitUntil(ready: () => boolean, timeoutMs: number, page: Page) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline && !ready()) await page.waitForTimeout(500);
+  try {
+    const [response] = await Promise.all([
+      page.waitForResponse(isNextStep, { timeout: STEP_TIMEOUT_MS }),
+      fareButton.click({ timeout: 10_000 }),
+    ]);
+    return response;
+  } catch (err) {
+    if (!(err instanceof errors.TimeoutError)) throw err;
+    throw new LatamFlowError(
+      leg === "ida"
+        ? "A lista de voos da volta não carregou depois de escolher a tarifa da ida."
+        : "As combinações de milhas+dinheiro não chegaram depois de escolher a tarifa da volta.",
+    );
+  }
 }
 
 // From the calendar days, picks outbound/return pairs within "lowest + margin",
