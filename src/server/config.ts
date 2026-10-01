@@ -26,7 +26,7 @@ export const config = {
   idleMinutes: readIdleMinutes(),
   // An unanswered question holds a browser slot, so it gives up and stops the search.
   answerTimeoutMs: Number(process.env.ANSWER_TIMEOUT_MS) || 15 * 60_000,
-  latamPairs: Number(process.env.LATAM_PAIRS) || 3,
+  latamPairs: Number(process.env.LATAM_PAIRS) || 5,
   concurrency: {
     awardtool: Number(process.env.AWARDTOOL_CONCURRENCY) || 3,
     seatspy: Number(process.env.SEATSPY_CONCURRENCY) || 3,

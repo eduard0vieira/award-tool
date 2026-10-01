@@ -139,7 +139,7 @@ Another finding along the way: the return search shows up again as
 already priced based on the chosen outbound.
 
 **Cost:** each pair is a full flow (deep link → choose outbound → choose
-return). `LATAM_PAIRS` controls how many (default 3).
+return). `LATAM_PAIRS` controls how many (default 5).
 
 Fixture: `fixtures/latam-redemption-options-real.json`.
 Recon: `npm run recon:latam GRU JNB <outbound> <return>` (needs a logged-in
@@ -147,7 +147,7 @@ session).
 
 ## How the test pair is chosen (2026-09-15)
 
-The miles confirmation runs on 3 date pairs. It is not a sweep: it is a
+The miles confirmation runs on 5 date pairs (`LATAM_PAIRS`). It is not a sweep: it is a
 **simulation of a search from the group**, made to see whether the price in
 points changes throughout the year. Hence the rules:
 
