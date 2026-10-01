@@ -168,3 +168,30 @@ points changes throughout the year. Hence the rules:
 If nothing satisfies the rules, the confirmation does not run and the notice
 says why. That is better than returning a screenshot that does not match the
 result.
+
+## Why pairs failed intermittently, and the sort (2026-10-01)
+
+Symptom: "Fluxo concluído sem as combinações de milhas+dinheiro" on some pairs
+of almost every search, with no pattern of route or date.
+
+Measured in the bot's window on GRU⇄SCL:
+
+- After clicking a flight card, the fare panel only renders once
+  `POST /offers/brand-bundle-details` answers: **1.7–3.2s** after the click.
+  The bot waited a fixed 2.5s, and when the panel was not there yet it assumed
+  "no fare panel" and moved on without choosing the leg. The return pick then
+  clicked the outbound card again and the combinations never came.
+- The fare button is `[data-testid="bundle-detail-0-flight-select"]` on both
+  legs. Choosing it removes every card; the next leg's list arrives 10–13s later.
+- Card `wrapper-card-flight-N` is item N of the `/offers/search/redemption`
+  response, in the same order.
+
+The flow now waits for the panel and for the response of the next step (the
+return list, then `/offers/redemption-options`) instead of sleeping.
+
+**Sort.** The "Ordenar por" menu has `RECOMMENDED`, `PRICE,asc`,
+`FLIGHT_DURATION,asc`, `DEPARTURE_DATE,asc|desc`, `ARRIVAL_DATE,asc|desc` (the
+`data-testid` of each item). `sort=PRICE,asc` in the deep link sorts **both**
+legs by miles, so the first card is the cheapest flight. Trade-off seen on the
+first run: the cheapest is sometimes a connection (01/01 → 11/01: 70,691 direct
+under RECOMMENDED, 61,570 with one stop each way and a higher fee).
