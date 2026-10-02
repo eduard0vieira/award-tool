@@ -164,6 +164,11 @@ points changes throughout the year. Hence the rules:
    (`LATAM_PAIR_DISTANCE`). When the result does not have that reach, the second
    pass always takes the date furthest from those already chosen instead of the
    cheapest ones; three days in a row would return the same number three times.
+4. **Price band first, then the cheapest returns.** Pairs first use returns up
+   to `lowest + R$ 300`. When that leaves slots empty, the cheapest returns on
+   the card fill them (2026-10-02). On POA⇄AMS the band held only 23/11 and
+   March returns, with no outbound in March, so a single pair came out of 5.
+   When even that is not enough, the notice says how many pairs fit.
 
 If nothing satisfies the rules, the confirmation does not run and the notice
 says why. That is better than returning a screenshot that does not match the
