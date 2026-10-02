@@ -507,6 +507,9 @@ function createJobCard(queueEl, routeTitle) {
 
   card.copyOutboundButton.addEventListener("click", () => copyLeg(card, 0, card.copyOutboundButton, "Copiar ida"));
   card.copyReturnButton.addEventListener("click", () => copyLeg(card, 1, card.copyReturnButton, "Copiar volta"));
+  // An alert generated before the edit still shows the old dates; it must not
+  // look like the one to forward.
+  root.addEventListener("alert-dates-changed", () => markAlertsOutdated(card));
 
   card.minimized = false;
   card.minimizeButton.addEventListener("click", () => {
@@ -559,9 +562,53 @@ function recordLegForCopy(card, sections) {
 // "Mmm YYYY: DD, DD", what the alert generator expects pasted in its date
 // fields. With more than one cabin each block is labeled so they never mix.
 function legText(sections) {
-  if (!sections || sections.length === 0) return "";
-  if (sections.length === 1) return sections[0].text;
-  return sections.map((section) => `${section.label}\n${section.text}`).join("\n\n");
+  const kept = (sections || []).map(keptSection).filter(hasDays);
+  if (kept.length === 0) return "";
+  if (kept.length === 1) return kept[0].text;
+  return kept.map((section) => `${section.label}\n${section.text}`).join("\n\n");
+}
+
+// Keyed by the `days` array, not the section: AA renders a spread copy
+// ({ ...section, colorClass }) but hands the original to the alert, and both
+// share the same array.
+const excludedDates = new WeakMap();
+
+function excludedOf(section) {
+  return (section && excludedDates.get(section.days)) || new Set();
+}
+
+// Same output as formatDatesByMonth on the server, seats suffix included.
+function daysText(days) {
+  return groupByMonth(days)
+    .map((group) => `${group.title}: ${group.items.map(dayToken).join(", ")}`)
+    .join("\n");
+}
+
+function dayToken(day) {
+  const dayOfMonth = day.date.split("-")[2];
+  return day.seats > 0 ? `${dayOfMonth} (${day.seats})` : dayOfMonth;
+}
+
+// Editing rebuilds the text on the front; if the rebuild does not reproduce the
+// server's text, an edited alert would go out in a different format.
+function canEditDates(section) {
+  return daysText(section.days) === section.text;
+}
+
+// What the alert and the copy buttons use: the section minus the days taken out
+// on screen. With nothing taken out it is the server's object, text untouched.
+function keptSection(section) {
+  const excluded = excludedOf(section);
+  if (excluded.size === 0) return section;
+  const days = section.days.filter((day) => !excluded.has(day.date));
+  const values = days.map((day) => day.valueK).filter((value) => value != null);
+  return {
+    ...section,
+    days,
+    text: daysText(days),
+    min: values.length ? Math.min(...values) : null,
+    max: values.length ? Math.max(...values) : null,
+  };
 }
 
 async function copyLeg(card, index, button, originalLabel) {
@@ -978,10 +1025,12 @@ function renderColumn(columnEl, section, colorClass) {
   const summaryEl = columnEl.querySelector(".column-summary");
   const chipsEl = columnEl.querySelector(".date-chips");
   const copyButton = columnEl.querySelector(".copy-button");
+  const editButton = columnEl.querySelector(".edit-dates-button");
 
   if (!section.days || section.days.length === 0) {
     summaryEl.textContent = "Sem disponibilidade nesse período.";
     copyButton.hidden = true;
+    editButton.hidden = true;
     columnEl.open = false;
     return;
   }
@@ -990,10 +1039,15 @@ function renderColumn(columnEl, section, colorClass) {
   // Miles sources show "123K"; LATAM sends unit "BRL" and becomes "R$ 909". When
   // SeatSpy marks a day available without a price, min/max are null.
   const format = (value) => (section.unit === "BRL" ? `R$ ${value.toLocaleString("pt-BR")}` : `${value}K`);
-  summaryEl.textContent =
-    section.min != null
-      ? `${format(section.min)}–${format(section.max)} · ${section.days.length} dia(s)`
-      : `Preço não informado · ${section.days.length} dia(s)`;
+  const renderSummary = () => {
+    const kept = keptSection(section);
+    const removed = section.days.length - kept.days.length;
+    const range = kept.min != null ? `${format(kept.min)}–${format(kept.max)}` : "Preço não informado";
+    summaryEl.textContent =
+      `${range} · ${kept.days.length} dia(s)` + (removed > 0 ? ` · ${removed} fora do alerta` : "");
+    copyButton.disabled = kept.days.length === 0;
+  };
+  renderSummary();
 
   chipsEl.innerHTML = "";
   for (const group of groupByMonth(section.days)) {
@@ -1008,6 +1062,8 @@ function renderColumn(columnEl, section, colorClass) {
       // With a link the day becomes a real anchor (opens in a new tab, the address can be copied).
       const chip = document.createElement(link ? "a" : "span");
       chip.className = `date-chip ${colorClass}${link ? " date-chip-link" : ""}`;
+      chip.dataset.date = date;
+      if (excludedOf(section).has(date)) chip.classList.add("date-chip-excluded");
       chip.textContent = date.split("-")[2];
       if (link) {
         chip.href = link;
@@ -1031,9 +1087,43 @@ function renderColumn(columnEl, section, colorClass) {
   copyButton.onclick = (event) => {
     event.preventDefault();
     event.stopPropagation();
-    navigator.clipboard.writeText(section.text);
+    navigator.clipboard.writeText(keptSection(section).text);
     copyButton.textContent = "Copiado!";
     setTimeout(() => (copyButton.textContent = "Copiar"), 1500);
+  };
+
+  editButton.hidden = false;
+  if (!canEditDates(section)) {
+    editButton.disabled = true;
+    editButton.title = "Edição indisponível: as datas dessa cabine não batem com o texto do alerta.";
+    return;
+  }
+  editButton.onclick = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const editing = columnEl.classList.toggle("editing-dates");
+    if (editing) columnEl.open = true;
+    editButton.textContent = editing ? "✓ Pronto" : "✏️";
+    editButton.setAttribute("aria-pressed", String(editing));
+  };
+
+  // In edit mode a click takes the day out of (or back into) the alert, and a
+  // chip with a booking link must not open the site.
+  chipsEl.onclick = (event) => {
+    if (!columnEl.classList.contains("editing-dates")) return;
+    const chip = event.target.closest(".date-chip");
+    if (!chip) return;
+    event.preventDefault();
+
+    if (!excludedDates.has(section.days)) excludedDates.set(section.days, new Set());
+    const excluded = excludedDates.get(section.days);
+    const { date } = chip.dataset;
+    if (excluded.has(date)) excluded.delete(date);
+    else excluded.add(date);
+    chip.classList.toggle("date-chip-excluded", excluded.has(date));
+
+    renderSummary();
+    columnEl.dispatchEvent(new CustomEvent("alert-dates-changed", { bubbles: true }));
   };
 }
 
@@ -1066,6 +1156,7 @@ function renderLegSections(targetEl, label, sections) {
       <summary class="column-header">
         <span class="chevron" aria-hidden="true">›</span>
         <h3></h3>
+        <button type="button" class="edit-dates-button" title="Tirar datas do alerta" aria-pressed="false">✏️</button>
         <button type="button" class="copy-button">Copiar</button>
       </summary>
       <p class="column-summary"></p>
@@ -1347,14 +1438,19 @@ function showAlertButtons(card, source, origin, destination, options) {
       button.disabled = true;
       button.textContent = "⏳ Gerando...";
       try {
+        const outbound = keptSection(option.outbound);
+        const inbound = keptSection(option.inbound);
+        if (!hasDays(outbound) && !hasDays(inbound)) {
+          throw new Error(`Todas as datas de ${option.cabinClass} foram tiradas do alerta.`);
+        }
         const alert = await requestAlert({
           source,
           origin,
           destination,
           cabinClass: option.cabinClass,
-          ...milesRange(option.outbound, option.inbound),
-          outboundText: hasDays(option.outbound) ? option.outbound.text : "",
-          returnText: hasDays(option.inbound) ? option.inbound.text : "",
+          ...milesRange(outbound, inbound),
+          outboundText: hasDays(outbound) ? outbound.text : "",
+          returnText: hasDays(inbound) ? inbound.text : "",
         });
         showGeneratedAlert(card, alert);
         button.textContent = `✓ ${option.cabinClass}`;
@@ -1365,6 +1461,10 @@ function showAlertButtons(card, source, origin, destination, options) {
       } finally {
         button.disabled = false;
       }
+    });
+    // The alert already on screen no longer matches the dates: back to 📢 so it gets generated again.
+    card.root.addEventListener("alert-dates-changed", () => {
+      if (!button.disabled) button.textContent = `📢 ${option.cabinClass}`;
     });
     bar.appendChild(button);
   }
@@ -1425,6 +1525,16 @@ function showGeneratedAlert(card, { images, caption, comboImage, comboCaption })
   const hasCombo = Boolean(comboImage);
   insertAfterAlert(card, alertBlock(hasCombo ? "Alerta principal" : "", images, caption));
   if (hasCombo) insertAfterAlert(card, alertBlock("Combinações ida + volta", [comboImage], comboCaption || ""));
+}
+
+function markAlertsOutdated(card) {
+  for (const block of card.root.querySelectorAll(":scope > .alert-result:not(.alert-outdated)")) {
+    block.classList.add("alert-outdated");
+    const warning = document.createElement("p");
+    warning.className = "alert-outdated-warning";
+    warning.textContent = "Desatualizado: as datas mudaram depois deste alerta. Gere de novo.";
+    block.prepend(warning);
+  }
 }
 
 // Stacks generated blocks in order right under the bar that produced them, never
@@ -1616,6 +1726,13 @@ function pairRow(pair) {
   return row;
 }
 
+// The alert card is PER LEG: one price on the outbound card and one on the
+// return. The pair's total put the whole trip's price on both cards, doubling
+// the value in the reader's eyes.
+function milesOf(pairs) {
+  return pairs.flatMap((pair) => [pair.outboundMiles, pair.returnMiles]).filter((value) => typeof value === "number");
+}
+
 // The LATAM alert carries ALL calendar dates; the confirmed pairs only bring the
 // price. "These are the dates with availability" is what the client wants, not
 // "these three pairs I checked". Without a confirmation there is no button: a
@@ -1625,17 +1742,10 @@ function showLatamAlertButton(card, origin, destination, legs, confirmation) {
   if (pairs.length === 0) return;
 
   const economyOf = (leg) => leg?.sections?.find((section) => section.label === "Econômica");
-  const outbound = economyOf(legs[0]);
-  const inbound = economyOf(legs[1]);
-  if (!hasDays(outbound) && !hasDays(inbound)) return;
-
-  // The alert card is PER LEG: one price on the outbound card and one on the
-  // return. The pair's total put the whole trip's price on both cards, doubling
-  // the value in the reader's eyes.
-  const perLeg = pairs.flatMap((pair) => [pair.outboundMiles, pair.returnMiles]).filter((value) => typeof value === "number");
-  if (perLeg.length === 0) return;
-  const minK = Math.min(...perLeg) / 1000;
-  const maxK = Math.max(...perLeg) / 1000;
+  const outboundSection = economyOf(legs[0]);
+  const inboundSection = economyOf(legs[1]);
+  if (!hasDays(outboundSection) && !hasDays(inboundSection)) return;
+  if (milesOf(pairs).length === 0) return;
 
   const bar = document.createElement("div");
   bar.className = "alert-actions";
@@ -1653,13 +1763,27 @@ function showLatamAlertButton(card, origin, destination, legs, confirmation) {
     button.disabled = true;
     button.textContent = "⏳ Gerando...";
     try {
+      const outbound = keptSection(outboundSection);
+      const inbound = keptSection(inboundSection);
+      if (!hasDays(outbound) && !hasDays(inbound)) {
+        throw new Error("Todas as datas da Econômica foram tiradas do alerta.");
+      }
+      // A pair whose date was taken out cannot lend its price: the card would
+      // announce points for a day that is no longer in it.
+      const keptPairs = pairs.filter(
+        (pair) => !excludedOf(outboundSection).has(pair.outboundDate) && !excludedOf(inboundSection).has(pair.returnDate),
+      );
+      const perLeg = milesOf(keptPairs);
+      if (perLeg.length === 0) {
+        throw new Error("As datas dos pares conferidos em pontos foram tiradas do alerta, então o card ficaria sem preço.");
+      }
       const alert = await requestAlert({
         source: "LATAM",
         origin,
         destination,
         cabinClass: "Econômica",
-        minK,
-        maxK,
+        minK: Math.min(...perLeg) / 1000,
+        maxK: Math.max(...perLeg) / 1000,
         outboundText: hasDays(outbound) ? outbound.text : "",
         returnText: hasDays(inbound) ? inbound.text : "",
       });
@@ -1672,6 +1796,9 @@ function showLatamAlertButton(card, origin, destination, legs, confirmation) {
     } finally {
       button.disabled = false;
     }
+  });
+  card.root.addEventListener("alert-dates-changed", () => {
+    if (!button.disabled) button.textContent = "📢 Econômica";
   });
   bar.appendChild(button);
   card.root.querySelector(".job-header").after(bar);

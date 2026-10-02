@@ -586,6 +586,7 @@ button:disabled {
 
 .action-button,
 .copy-button,
+.edit-dates-button,
 .alert-button,
 .clear-button,
 .repeat-search-button,
@@ -608,6 +609,7 @@ button:disabled {
 
 .action-button:hover:not(:disabled),
 .copy-button:hover:not(:disabled),
+.edit-dates-button:hover:not(:disabled),
 .alert-button:hover:not(:disabled),
 .clear-button:hover:not(:disabled),
 .repeat-search-button:hover:not(:disabled) {
@@ -773,8 +775,43 @@ button:disabled {
 }
 
 .column-header .copy-button,
-.column-header .upgrade-title {
+.column-header .upgrade-title,
+.column-header .edit-dates-button {
   margin-left: auto;
+}
+
+.column-header .edit-dates-button:not([hidden]) + .copy-button {
+  margin-left: 0;
+}
+
+.edit-dates-button[aria-pressed="true"] {
+  border-color: var(--brand);
+  color: var(--brand);
+}
+
+.editing-dates .date-chip {
+  cursor: pointer;
+}
+
+.editing-dates .date-chip:hover {
+  border-color: var(--brand);
+}
+
+.alert-outdated .alert-gallery,
+.alert-outdated .alert-caption {
+  opacity: 0.35;
+}
+
+.alert-outdated-warning {
+  margin: 0 0 var(--e2);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--brand);
+}
+
+.date-chip.date-chip-excluded {
+  opacity: 0.35;
+  text-decoration: line-through;
 }
 
 .column-business {
