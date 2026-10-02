@@ -41,4 +41,22 @@ describe("LATAM", () => {
   test("picks the cheapest round-trip pair within the price band", () => {
     assert.deepEqual(pickBestPairs(outbound, inbound, 3, 100, 300), [{ outbound: outbound[0], inbound: inbound[0] }]);
   });
+
+  test("fills the missing pairs with the cheapest returns outside the band", () => {
+    const outboundDays = [
+      { date: "2026-10-03", price: 2000, lowestFare: true },
+      { date: "2026-11-11", price: 2000, lowestFare: true },
+    ];
+    const inboundDays = [
+      { date: "2026-10-06", price: 2900, lowestFare: true },
+      { date: "2026-10-08", price: 2800, lowestFare: true },
+      { date: "2026-11-23", price: 2400, lowestFare: true },
+      { date: "2027-03-17", price: 2650, lowestFare: true },
+    ];
+
+    assert.deepEqual(pickBestPairs(outboundDays, inboundDays, 3, 100, 300), [
+      { outbound: outboundDays[0], inbound: inboundDays[1] },
+      { outbound: outboundDays[1], inbound: inboundDays[2] },
+    ]);
+  });
 });

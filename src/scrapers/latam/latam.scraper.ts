@@ -680,13 +680,13 @@ export function pickBestPairs(
   };
 
   const outboundCandidates = withinBand(outbound, outboundMarginReais);
-  const inboundCandidates = withinBand(inbound, inboundMarginReais);
 
   const pairs: DatePair[] = [];
   const usedReturns = new Set<string>();
+  const isPaired = (candidate: LatamDay) => pairs.some((pair) => pair.outbound.date === candidate.date);
 
-  const tryPair = (candidate: LatamDay): boolean => {
-    const back = inboundCandidates.find((day) => {
+  const tryPair = (candidate: LatamDay, returns: LatamDay[]): boolean => {
+    const back = returns.find((day) => {
       if (usedReturns.has(day.date) || day.date <= candidate.date) return false;
       const stay = daysBetween(candidate.date, day.date);
       return stay >= minStayDays && stay <= maxStayDays;
@@ -697,33 +697,41 @@ export function pickBestPairs(
     return true;
   };
 
-  // First pass: only dates far enough from those already chosen.
-  for (const candidate of outboundCandidates) {
-    if (pairs.length >= count) break;
-    const farEnough = pairs.every((pair) => daysBetween(pair.outbound.date, candidate.date) >= minSpacingDays);
-    if (farEnough) tryPair(candidate);
-  }
+  const fill = (returns: LatamDay[]) => {
+    // First pass: only dates far enough from those already chosen.
+    for (const candidate of outboundCandidates) {
+      if (pairs.length >= count) break;
+      const farEnough = pairs.every((pair) => daysBetween(pair.outbound.date, candidate.date) >= minSpacingDays);
+      if (farEnough && !isPaired(candidate)) tryPair(candidate, returns);
+    }
 
-  // Second pass: when the period is not spread out enough, fill with what is
-  // left; fewer pairs because of spacing would be worse than close pairs. Still
-  // spread within the little there is: the three cheapest of a one-month result
-  // are three days in a row giving the same number three times. So the pick is
-  // always the date FARTHEST from those chosen, and price only breaks ties.
-  const remaining = outboundCandidates.filter((candidate) => !pairs.some((pair) => pair.outbound.date === candidate.date));
-  while (pairs.length < count && remaining.length > 0) {
-    const [chosen] = remaining
-      .map((candidate) => ({
-        candidate,
-        distance: pairs.length === 0 ? 0 : Math.min(...pairs.map((pair) => daysBetween(pair.outbound.date, candidate.date))),
-      }))
-      .sort(
-        (a, b) =>
-          b.distance - a.distance || a.candidate.price - b.candidate.price || a.candidate.date.localeCompare(b.candidate.date),
-      );
-    if (!chosen) break;
-    remaining.splice(remaining.indexOf(chosen.candidate), 1);
-    tryPair(chosen.candidate);
-  }
+    // Second pass: when the period is not spread out enough, fill with what is
+    // left; fewer pairs because of spacing would be worse than close pairs. Still
+    // spread within the little there is: the three cheapest of a one-month result
+    // are three days in a row giving the same number three times. So the pick is
+    // always the date FARTHEST from those chosen, and price only breaks ties.
+    const remaining = outboundCandidates.filter((candidate) => !isPaired(candidate));
+    while (pairs.length < count && remaining.length > 0) {
+      const [chosen] = remaining
+        .map((candidate) => ({
+          candidate,
+          distance: pairs.length === 0 ? 0 : Math.min(...pairs.map((pair) => daysBetween(pair.outbound.date, candidate.date))),
+        }))
+        .sort(
+          (a, b) =>
+            b.distance - a.distance || a.candidate.price - b.candidate.price || a.candidate.date.localeCompare(b.candidate.date),
+        );
+      if (!chosen) break;
+      remaining.splice(remaining.indexOf(chosen.candidate), 1);
+      tryPair(chosen.candidate, returns);
+    }
+  };
+
+  fill(withinBand(inbound, inboundMarginReais));
+  // The band alone can leave a single pair: on POA⇄AMS every cheap return but
+  // one fell in March, a month with no outbound. The remaining slots take the
+  // cheapest returns the card shows.
+  fill(withinBand(inbound, Infinity));
 
   return pairs.sort((a, b) => a.outbound.date.localeCompare(b.outbound.date));
 }
