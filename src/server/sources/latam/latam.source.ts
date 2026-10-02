@@ -128,7 +128,7 @@ export class LatamSource implements SearchSource<LatamSearchDto> {
       );
       if (pairs.length === 0) {
         result.notice =
-          "Nenhum par de ida e volta no resultado com 3 a 14 dias de viagem dentro da faixa de preço. " +
+          "Nenhum par de ida e volta no resultado com 3 a 14 dias de viagem. " +
           "Confirmação em milhas não executada.";
       } else {
         const folder = `latam-${search.origin}-${search.destination}-${Date.now()}`;
@@ -173,6 +173,10 @@ export class LatamSource implements SearchSource<LatamSearchDto> {
           }
         } else {
           result.notice = `Confirmação em milhas sem resultado em nenhum dos ${pairs.length} pares: ${failures.join(" · ")}`;
+        }
+        if (pairs.length < config.latamPairs) {
+          const shortage = `Só ${pairs.length} de ${config.latamPairs} pares de ida e volta com 3 a 14 dias de viagem no resultado.`;
+          result.notice = [shortage, result.notice].filter(Boolean).join(" ");
         }
       }
     } catch (err) {
