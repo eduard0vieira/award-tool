@@ -717,7 +717,12 @@ export async function searchSmilesYear(
       onProgress(0.6 * ((i + 1) / samples.length));
     }
 
-    if (calendar.size === 0) {
+    if (days.length === 0) {
+      // An empty calendar only means "no calendar" when some probe answered.
+      // With none, it is just the failure again, and filling day by day would
+      // spend requests on that false evidence.
+      onLog("Nenhuma sondagem respondeu, então não há como saber se a rota tem calendário. Nada mais foi consultado.");
+    } else if (calendar.size === 0) {
       // A route without a calendar (usually partner-only): no cheap probe says
       // which days are worth it, so fill the gaps between samples day by day up
       // to the limit, and say out loud what was left out.
