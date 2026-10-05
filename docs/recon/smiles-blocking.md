@@ -104,3 +104,29 @@ GRU→MRU answers `resultType: "congener"`, every flight `AMADEUS`, and
 `calendarDayList` comes back empty. `forceCongener=true` changes nothing, and
 `flightList` only brings the requested day (`fixtures/smiles-real-congener.json`).
 On these routes each day costs one query: ~330 per leg to cover the whole window.
+
+## 452 wrapping a 503: a stuck load-balancer cookie (measured on 2026-10-05)
+
+Every route, GOL domestic included, started answering
+`452 {"error":"AxiosError: Request failed with status code 503"}`. It was not an
+outage:
+
+| test | result |
+|---|---|
+| bot profile, `prd` | 452/503 |
+| bot profile, `blue` | 452/503 |
+| bot profile, `green` | 200 |
+| fresh browser, `prd` | 200 |
+| bot profile, `prd`, after clearing only `akaalb_prod_flightsearch` | 200 |
+
+`akaalb_*` is the affinity cookie of Akamai's load balancer. It is a session
+cookie, and the bot's window stays open for days, so it never expires and kept
+pinning every call to an origin that was failing.
+
+In the code: a 503 inside a 452 is `SmilesUpstreamError`. The scraper clears the
+`akaalb_*` cookies, replants the session and retries that day once. A second 503
+is `SmilesUpstreamDownError`, which stops the sweep like a block.
+
+The same log showed the sweep concluding "this route has no calendar" after no
+probe had answered and filling 25 days on that. An empty calendar now only
+counts when at least one probe came back.
