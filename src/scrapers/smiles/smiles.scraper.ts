@@ -383,11 +383,35 @@ export class SmilesOutOfSaleWindowError extends Error {
   }
 }
 
-// 452 is their own code with two meanings, and only the body tells them apart
-// (measured on 2026-09-29, fixtures/smiles-452-*.json):
+// The search backend behind the API answered 503 and Smiles wrapped it in a
+// 452. Measured on 2026-10-05: it was not an outage. The `akaalb_*` cookie from
+// Akamai's load balancer had pinned the bot's long-lived window to a broken
+// origin; a fresh browser got 200 on the same request, and so did the bot once
+// that cookie alone was cleared.
+export class SmilesUpstreamError extends Error {
+  constructor(date: string) {
+    super(`O servidor de busca do Smiles respondeu 503 para ${date}.`);
+  }
+}
+
+// Still 503 after moving to another origin: every following day would fail the
+// same way, so the sweep stops instead of logging each one.
+export class SmilesUpstreamDownError extends SmilesBlockedError {
+  constructor() {
+    super(
+      "O servidor de busca do Smiles está respondendo 503, mesmo depois de trocar de servidor. " +
+        "Não é bloqueio do IP: o problema é do lado deles. Tente de novo mais tarde.",
+      "o servidor de busca do Smiles passou a responder 503; o resto do período não chegou a ser consultado",
+    );
+  }
+}
+
+// 452 is their own code with several meanings, and only the body tells them
+// apart (fixtures/smiles-452-*.json):
 //
 //   {"errorMessage":"data não permitida"}                       → date not on sale
 //   {"error":"Error: Falha ao obter os dados do aeroporto: XQZ"} → unknown airport code
+//   {"error":"AxiosError: Request failed with status code 503"}  → their backend failed
 //
 // Treating every 452 as an airport error made a GRU→MRU sweep blame the codes
 // for dates that simply were not on sale yet.
@@ -401,6 +425,7 @@ export function error452(text: string, route: SmilesRoute, date: string): Error 
   }
 
   if (body.errorMessage === "data não permitida") return new SmilesOutOfSaleWindowError(date);
+  if (typeof body.error === "string" && body.error.includes("status code 503")) return new SmilesUpstreamError(date);
   if (typeof body.error === "string" && body.error.includes("Falha ao obter os dados do aeroporto")) {
     return new Error(
       `O Smiles não reconheceu um dos aeroportos de ${route.origin.toUpperCase()} → ${route.destination.toUpperCase()}. ` +
@@ -479,6 +504,10 @@ export function readSmilesResponse(text: string, date: string, onLog: OnLog = ()
   return { date, flights, calendar };
 }
 
+function isUpstream503(result: { status: number; text: string }, route: SmilesRoute, date: string): boolean {
+  return result.status === 452 && error452(result.text, route, date) instanceof SmilesUpstreamError;
+}
+
 export async function fetchSmilesDay(
   page: Page,
   route: SmilesRoute,
@@ -491,7 +520,14 @@ export async function fetchSmilesDay(
     return cached;
   }
 
-  const result = await callApi(page, route, date);
+  let result = await callApi(page, route, date);
+  if (isUpstream503(result, route, date)) {
+    onLog(`O Smiles respondeu 503 para ${date}. Trocando de servidor e tentando de novo.`);
+    await page.context().clearCookies({ name: /^akaalb_/ });
+    await refreshSmilesSession(page);
+    result = await callApi(page, route, date);
+    if (isUpstream503(result, route, date)) throw new SmilesUpstreamDownError();
+  }
 
   if (result.status === 406) throw new SmilesBudgetError();
   if (result.status === 403) throw new SmilesAccessDeniedError(akamaiReference(result.text));

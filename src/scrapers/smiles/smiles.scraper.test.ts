@@ -3,7 +3,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, test } from "node:test";
 import { FIXTURES_DIR } from "../../core/paths.ts";
-import { buildSmilesReport, error452, readSmilesResponse, SmilesOutOfSaleWindowError } from "./smiles.scraper.ts";
+import {
+  buildSmilesReport,
+  error452,
+  readSmilesResponse,
+  SmilesOutOfSaleWindowError,
+  SmilesUpstreamError,
+} from "./smiles.scraper.ts";
 
 const fixture = (name: string) => fs.readFileSync(path.join(FIXTURES_DIR, name), "utf8");
 
@@ -56,6 +62,7 @@ describe("Smiles response parser", () => {
     const route = { origin: "gru", destination: "xqz" };
     assert.ok(error452(fixture("smiles-452-date.json"), route, "2027-09-01") instanceof SmilesOutOfSaleWindowError);
     assert.match(error452(fixture("smiles-452-airport.json"), route, "2027-09-01").message, /GRU → XQZ/);
+    assert.ok(error452(fixture("smiles-452-upstream-503.json"), route, "2026-10-06") instanceof SmilesUpstreamError);
   });
 
   test("builds one section per cabin with seats in the copied text", () => {

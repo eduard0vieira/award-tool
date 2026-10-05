@@ -12,6 +12,7 @@ the 406 in `docs/CONTEXT.md`).
 | `smiles-real-congener.json` | Smiles, a day that also brings congener airlines | saved by hand from a real response |
 | `smiles-452-date.json` | Smiles, 452 for a date outside the sale window | saved by hand from a real response |
 | `smiles-452-airport.json` | Smiles, 452 for an unknown airport | saved by hand from a real response |
+| `smiles-452-upstream-503.json` | Smiles, 452 wrapping a 503 from its search backend | saved by hand from a real response |
 | `azul-real.json` | Azul, one date, called by the site itself | `npx tsx scripts/recon-azul.ts` |
 | `azul-real-multidata.json` | Azul, six dates, hijacked call | `BATCHES=6 npx tsx scripts/recon-azul.ts` |
 | `iberia-real.json` | Iberia, day availability | `npm run recon:iberia` (logged-in session) |
