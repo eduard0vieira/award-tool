@@ -129,6 +129,17 @@ describe("server without auth", () => {
     assert.equal((await post(`${url}/api/searches/${jobId}/answer`, { proceed: true })).status, 409);
   });
 
+  test("counts the searches still in progress", async () => {
+    const active = () => fetch(`${url}/api/searches/active`).then((r) => r.json());
+    const { body } = await post(`${url}/api/searches`, { source: "fake", origin: "GRU", destination: "SCL" });
+    const events = readEvents(`${url}/api/searches/${body.jobId}/events`);
+    await nextEvent(events, "progress");
+    assert.deepEqual(await active(), { active: 1 });
+    fake.release();
+    await nextEvent(events, "done");
+    assert.deepEqual(await active(), { active: 0 });
+  });
+
   test("replays the whole finished result to a late subscriber", async () => {
     const { body } = await post(`${url}/api/searches`, { source: "fake", origin: "GRU", destination: "LIS" });
     const live = readEvents(`${url}/api/searches/${body.jobId}/events`);

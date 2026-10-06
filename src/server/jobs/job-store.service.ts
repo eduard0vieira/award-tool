@@ -81,6 +81,12 @@ export class JobStore {
     job.answer(proceed);
   }
 
+  activeCount(): number {
+    let active = 0;
+    for (const job of this.jobs.values()) if (job.status === "queued" || job.status === "running") active++;
+    return active;
+  }
+
   state(jobId: string) {
     const job = this.get(jobId);
     return { status: job.status, progress: job.progress };
