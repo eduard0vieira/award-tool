@@ -322,16 +322,14 @@ export class SmilesBlockedError extends Error {
 
 // 406 is NOT an expired cookie. Measured: the block lasts over 20 min and
 // replanting cookies does not recover it. It is a per-IP request budget over a
-// moving window (the probes spent ~99 and the next one blocked on its 40th).
-// So there is no retry: insisting burns more budget. Stop the sweep at once,
-// return what came and say how long to wait.
+// moving window. Hammering burns more budget, so the sweep waits it out with
+// sparse rechecks; this error is what it throws once the wait limit runs out.
 export class SmilesBudgetError extends SmilesBlockedError {
   constructor() {
     super(
-      "Smiles bloqueou temporariamente as consultas deste IP (406). Repetir agora não recupera o acesso: " +
-        "o bloqueio expira sozinho, mas leva mais de 20 minutos. Aguarde e refaça a busca, de preferência " +
-        "com menos dias por busca (SMILES_MAX_DETAILS) ou uma perna de cada vez.",
-      "aguarde cerca de 30 min para completar",
+      "Smiles bloqueou as consultas deste IP (406) e o bloqueio não passou dentro do tempo de espera " +
+        "(SMILES_MAX_BLOCK_WAIT_MS). Ele vale para o IP inteiro e só passa com o tempo. O que já veio está no resultado.",
+      "o bloqueio por IP do Smiles não passou dentro do tempo de espera",
     );
   }
 }
@@ -603,6 +601,11 @@ const SAMPLING_STEP_DAYS = 7; // the calendar covers ±3 days
 // what protects the search is asking for LESS, not asking slower. With 52
 // calendar probes + 25 details a leg stays at ~77, leaving room for the second leg.
 const MAX_DETAILED_DAYS = Number(process.env.SMILES_MAX_DETAILS) || 25;
+// Measured on 2026-10-06: the 406 is keyed on the IP alone. prd, green, blue, a
+// fresh load-balancer cookie and a fresh browser all got it at the same moment,
+// so only time recovers it. One call per recheck costs almost nothing.
+const BLOCK_RECHECK_MS = Number(process.env.SMILES_BLOCK_RECHECK_MS) || 10 * 60_000;
+const MAX_BLOCK_WAIT_MS = Number(process.env.SMILES_MAX_BLOCK_WAIT_MS) || 3 * 60 * 60_000;
 const MAX_CONSECUTIVE_FAILURES = 3;
 
 function addDays(date: string, days: number): string {
@@ -613,6 +616,14 @@ function addDays(date: string, days: number): string {
 
 function todayPlus(days: number): string {
   return addDays(new Date().toISOString().slice(0, 10), days);
+}
+
+async function waitUnlessStopped(ms: number, shouldStop: ShouldStop): Promise<number> {
+  const started = Date.now();
+  while (Date.now() - started < ms && !shouldStop()) {
+    await new Promise((resolve) => setTimeout(resolve, Math.min(5000, ms - (Date.now() - started))));
+  }
+  return Date.now() - started;
 }
 
 function highestCeiling(ceilings: SmilesCeilings): number | null {
@@ -657,12 +668,33 @@ export async function searchSmilesYear(
   // First date rejected as off sale; nothing from there on is queried.
   const saleWindow: { rejectedFrom: string | null } = { rejectedFrom: null };
   const withinSaleWindow = (date: string) => saleWindow.rejectedFrom == null || date < saleWindow.rejectedFrom;
+  let blockedMs = 0;
+
+  const fetchWaitingOutBlocks = async (date: string): Promise<SmilesDayResponse> => {
+    for (;;) {
+      try {
+        return await fetchSmilesDay(page, route, date, onLog);
+      } catch (err) {
+        if (!(err instanceof SmilesBudgetError) || blockedMs >= MAX_BLOCK_WAIT_MS) throw err;
+        onLog(
+          `O Smiles bloqueou as consultas deste IP (406). Esperando ${Math.round(BLOCK_RECHECK_MS / 60000)} min ` +
+            `para tentar ${date} de novo (${Math.round(blockedMs / 60000)} de no máximo ` +
+            `${Math.round(MAX_BLOCK_WAIT_MS / 60000)} min de espera até agora).`,
+        );
+        blockedMs += await waitUnlessStopped(BLOCK_RECHECK_MS, shouldStop);
+        if (shouldStop()) {
+          onLog("Busca cancelada durante a espera do bloqueio.");
+          throw err;
+        }
+      }
+    }
+  };
 
   const fetchDay = async (date: string): Promise<SmilesDayResponse | null> => {
     if (fetched.has(date)) return null;
     fetched.add(date);
     try {
-      const response = await fetchSmilesDay(page, route, date, onLog);
+      const response = await fetchWaitingOutBlocks(date);
       days.push(response);
       for (const day of response.calendar) {
         // A day without a fare stays out: it is no candidate, and as zero it
