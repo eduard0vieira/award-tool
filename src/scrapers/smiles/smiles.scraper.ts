@@ -666,18 +666,22 @@ export async function searchSmilesYear(
   // First date rejected as off sale; nothing from there on is queried.
   const saleWindow: { rejectedFrom: string | null } = { rejectedFrom: null };
   const withinSaleWindow = (date: string) => saleWindow.rejectedFrom == null || date < saleWindow.rejectedFrom;
+  // Per block, not per sweep: a partner route needs several block cycles to
+  // cover the window, and a cumulative limit would end it partial for nothing.
   let blockedMs = 0;
 
   const fetchWaitingOutBlocks = async (date: string): Promise<SmilesDayResponse> => {
     for (;;) {
       try {
-        return await fetchSmilesDay(page, route, date, onLog);
+        const response = await fetchSmilesDay(page, route, date, onLog);
+        blockedMs = 0;
+        return response;
       } catch (err) {
         if (!(err instanceof SmilesBudgetError) || blockedMs >= MAX_BLOCK_WAIT_MS) throw err;
         onLog(
           `O Smiles bloqueou as consultas deste IP (406). Esperando ${Math.round(BLOCK_RECHECK_MS / 60000)} min ` +
             `para tentar ${date} de novo (${Math.round(blockedMs / 60000)} de no máximo ` +
-            `${Math.round(MAX_BLOCK_WAIT_MS / 60000)} min de espera até agora).`,
+            `${Math.round(MAX_BLOCK_WAIT_MS / 60000)} min de espera neste bloqueio).`,
         );
         blockedMs += await waitUnlessStopped(BLOCK_RECHECK_MS, shouldStop);
         if (shouldStop()) {
