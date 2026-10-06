@@ -597,10 +597,9 @@ export function periodBounds(period: SmilesPeriod = {}): { start: string; end: s
 }
 
 const SAMPLING_STEP_DAYS = 7; // the calendar covers ±3 days
-// The per-IP budget is the scarce resource (~100–150 requests per window), so
-// what protects the search is asking for LESS, not asking slower. With 52
-// calendar probes + 25 details a leg stays at ~77, leaving room for the second leg.
-const MAX_DETAILED_DAYS = Number(process.env.SMILES_MAX_DETAILS) || 25;
+// No cap by default: a 406 now pauses the sweep instead of ending it, so every
+// day in the window can be queried. The env var stays as an opt-in cap.
+const MAX_DETAILED_DAYS = Number(process.env.SMILES_MAX_DETAILS) || Infinity;
 // Measured on 2026-10-06: the 406 is keyed on the IP alone. prd, green, blue, a
 // fresh load-balancer cookie and a fresh browser all got it at the same moment,
 // so only time recovers it. One call per recheck costs almost nothing.
@@ -644,8 +643,7 @@ function highestCeiling(ceilings: SmilesCeilings): number | null {
 // so comparing the ceiling with the calendar compares like with like.
 //
 // When there is no calendar (partner-only routes), stage 1 covers nothing and
-// the sweep falls back to day by day within a limit, always saying how much was
-// left out, never cutting silently.
+// the sweep falls back to day by day over the whole window.
 export async function searchSmilesYear(
   page: Page,
   route: SmilesRoute,
@@ -765,9 +763,7 @@ export async function searchSmilesYear(
       onLog("Nenhuma sondagem respondeu, então não há como saber se a rota tem calendário. Nada mais foi consultado.");
     } else if (calendar.size === 0) {
       // A route without a calendar (usually partner-only): no cheap probe says
-      // which days are worth it, so fill the gaps between samples day by day up
-      // to the limit, and say out loud what was left out.
-      onLog("Esta rota não devolve calendário. Preenchendo os dias entre as sondagens, um a um.");
+      // which days are worth it, so fill the gaps between samples day by day.
       const missing: string[] = [];
       for (let date = start; date <= end; date = addDays(date, 1)) {
         if (!fetched.has(date) && withinSaleWindow(date)) missing.push(date);
@@ -781,6 +777,7 @@ export async function searchSmilesYear(
             `${cut} dia(s) do período ficaram sem verificação (limite de ${MAX_DETAILED_DAYS} por busca)`,
         );
       }
+      onLog(`Esta rota não devolve calendário. Consultando os ${toFetch.length} dia(s) restantes, um a um.`);
 
       for (let i = 0; i < toFetch.length; i++) {
         if (stopRequested(toFetch.length - i)) break;
