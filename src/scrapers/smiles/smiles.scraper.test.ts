@@ -8,6 +8,7 @@ import {
   error452,
   readSmilesResponse,
   SmilesOutOfSaleWindowError,
+  SmilesTransientError,
   SmilesUpstreamError,
 } from "./smiles.scraper.ts";
 
@@ -63,6 +64,7 @@ describe("Smiles response parser", () => {
     assert.ok(error452(fixture("smiles-452-date.json"), route, "2027-09-01") instanceof SmilesOutOfSaleWindowError);
     assert.match(error452(fixture("smiles-452-airport.json"), route, "2027-09-01").message, /GRU → XQZ/);
     assert.ok(error452(fixture("smiles-452-upstream-503.json"), route, "2026-10-06") instanceof SmilesUpstreamError);
+    assert.ok(error452(fixture("smiles-452-flightlist.json"), route, "2026-10-20") instanceof SmilesTransientError);
   });
 
   test("builds one section per cabin with seats in the copied text", () => {

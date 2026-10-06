@@ -9,12 +9,14 @@ process.env.SMILES_SEARCH_INTERVAL_MS = "1";
 process.env.SMILES_BLOCK_RECHECK_MS = "30";
 process.env.SMILES_MAX_BLOCK_WAIT_MS = "200";
 process.env.SMILES_SEARCH_TIMEOUT_MS = "20";
+process.env.SMILES_TRANSIENT_RETRY_MS = "1";
 const { searchSmilesYear } = await import("./smiles.scraper.ts");
 
 const fixture = (name: string) => fs.readFileSync(path.join(FIXTURES_DIR, name), "utf8");
 const partnerDay = { status: 200, text: fixture("smiles-real-congener.json") };
 const blocked = { status: 406, text: fixture("smiles-406-budget.json") };
 const serverError = { status: 500, text: "{}" };
+const backendCrash = { status: 452, text: fixture("smiles-452-flightlist.json") };
 
 type Reply = { status: number; text: string } | "hang";
 
@@ -57,6 +59,16 @@ describe("Smiles sweep on a route without calendar", () => {
     assert.equal(asked[3], asked[4]);
     assert.equal(asked[4], asked[5]);
     assert.ok(logs.some((m) => m.includes("(406). Esperando")));
+  });
+
+  test("retries a day their backend crashed on", async () => {
+    const { page, asked } = fakePage((call) => (call === 3 || call === 4 ? backendCrash : partnerDay));
+
+    const result = await searchSmilesYear(page, { origin: "KKK", destination: "LLL" }, {}, () => {}, () => {}, () => false, tenDays);
+
+    assert.equal(result.days.length, 10);
+    assert.deepEqual(result.failedDays, []);
+    assert.equal(asked[2], asked[4]);
   });
 
   test("stops the day-by-day fill after consecutive failures", async () => {

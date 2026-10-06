@@ -392,6 +392,15 @@ export class SmilesUpstreamError extends Error {
   }
 }
 
+// A crash inside their search service on one call. Measured on 2026-10-06 over
+// ~300 GRU→CUN days: ~10% of calls got it, sometimes 5 days in a row, and the
+// same dates answered 200 when asked again later.
+export class SmilesTransientError extends Error {
+  constructor(date: string, detail: string) {
+    super(`O Smiles falhou do lado dele para ${date}, mesmo tentando de novo (452: ${detail}).`);
+  }
+}
+
 // Still 503 after moving to another origin: every following day would fail the
 // same way, so the sweep stops instead of logging each one.
 export class SmilesUpstreamDownError extends SmilesBlockedError {
@@ -410,6 +419,8 @@ export class SmilesUpstreamDownError extends SmilesBlockedError {
 //   {"errorMessage":"data não permitida"}                       → date not on sale
 //   {"error":"Error: Falha ao obter os dados do aeroporto: XQZ"} → unknown airport code
 //   {"error":"AxiosError: Request failed with status code 503"}  → their backend failed
+//   {"error":"TypeError: Cannot read properties of undefined (reading 'flightList')"}
+//                                                                → their backend, transient
 //
 // Treating every 452 as an airport error made a GRU→MRU sweep blame the codes
 // for dates that simply were not on sale yet.
@@ -424,6 +435,9 @@ export function error452(text: string, route: SmilesRoute, date: string): Error 
 
   if (body.errorMessage === "data não permitida") return new SmilesOutOfSaleWindowError(date);
   if (typeof body.error === "string" && body.error.includes("status code 503")) return new SmilesUpstreamError(date);
+  if (typeof body.error === "string" && body.error.includes("Cannot read properties of undefined")) {
+    return new SmilesTransientError(date, body.error);
+  }
   if (typeof body.error === "string" && body.error.includes("Falha ao obter os dados do aeroporto")) {
     return new Error(
       `O Smiles não reconheceu um dos aeroportos de ${route.origin.toUpperCase()} → ${route.destination.toUpperCase()}. ` +
@@ -518,6 +532,13 @@ export function readSmilesResponse(text: string, date: string, onLog: OnLog = ()
   return { date, flights, calendar };
 }
 
+const TRANSIENT_RETRIES = 2;
+const TRANSIENT_RETRY_MS = Number(process.env.SMILES_TRANSIENT_RETRY_MS) || 5000;
+
+function isTransient452(result: { status: number; text: string }, route: SmilesRoute, date: string): boolean {
+  return result.status === 452 && error452(result.text, route, date) instanceof SmilesTransientError;
+}
+
 function isUpstream503(result: { status: number; text: string }, route: SmilesRoute, date: string): boolean {
   return result.status === 452 && error452(result.text, route, date) instanceof SmilesUpstreamError;
 }
@@ -541,6 +562,11 @@ export async function fetchSmilesDay(
     await refreshSmilesSession(page);
     result = await callApi(page, route, date);
     if (isUpstream503(result, route, date)) throw new SmilesUpstreamDownError();
+  }
+  for (let attempt = 1; attempt <= TRANSIENT_RETRIES && isTransient452(result, route, date); attempt++) {
+    onLog(`O Smiles falhou do lado dele em ${date}. Tentando de novo (${attempt}/${TRANSIENT_RETRIES}).`);
+    await new Promise((resolve) => setTimeout(resolve, TRANSIENT_RETRY_MS));
+    result = await callApi(page, route, date);
   }
 
   if (result.status === 406) throw new SmilesBudgetError();

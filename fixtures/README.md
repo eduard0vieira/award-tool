@@ -13,6 +13,7 @@ the 406 in `docs/CONTEXT.md`).
 | `smiles-452-date.json` | Smiles, 452 for a date outside the sale window | saved by hand from a real response |
 | `smiles-452-airport.json` | Smiles, 452 for an unknown airport | saved by hand from a real response |
 | `smiles-452-upstream-503.json` | Smiles, 452 wrapping a 503 from its search backend | saved by hand from a real response |
+| `smiles-452-flightlist.json` | Smiles, 452 for a crash inside its search service, gone when asked again | saved by hand from a real response |
 | `smiles-406-budget.json` | Smiles, 406 from the Akamai edge when the IP is over its budget (`clientIP` anonymized) | `npx tsx scripts/measure-smiles-budget.ts GRU CUN` |
 | `azul-real.json` | Azul, one date, called by the site itself | `npx tsx scripts/recon-azul.ts` |
 | `azul-real-multidata.json` | Azul, six dates, hijacked call | `BATCHES=6 npx tsx scripts/recon-azul.ts` |
