@@ -31,3 +31,5 @@ fixtures/*.png
 *.db
 *.db-journal
 /generated/
+
+.claude/settings.local.json
