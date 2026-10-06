@@ -789,12 +789,57 @@ button:disabled {
   color: var(--brand);
 }
 
-.editing-dates .date-chip {
-  cursor: pointer;
+.edit-dates-button {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px var(--e2);
 }
 
-.editing-dates .date-chip:hover {
+.dates-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e2);
+  padding: var(--e3);
+}
+
+.dates-editor-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-soft);
+}
+
+.dates-editor-text {
+  width: 100%;
+  padding: var(--e2) var(--e3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.dates-editor-text:focus {
+  outline: none;
   border-color: var(--brand);
+  box-shadow: var(--ring);
+}
+
+.dates-editor-error {
+  margin: 0;
+  padding: var(--e2) var(--e3);
+  border-radius: var(--radius-sm);
+  background: var(--error-bg);
+  color: var(--error);
+  font-size: 12px;
+}
+
+.dates-editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e2);
 }
 
 .alert-outdated .alert-gallery,

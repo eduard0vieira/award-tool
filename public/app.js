@@ -573,6 +573,11 @@ function legText(sections) {
 // share the same array.
 const excludedDates = new WeakMap();
 
+const PENCIL_ICON =
+  '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" ' +
+  'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+  '<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>';
+
 function excludedOf(section) {
   return (section && excludedDates.get(section.days)) || new Set();
 }
@@ -1093,38 +1098,98 @@ function renderColumn(columnEl, section, colorClass) {
   };
 
   editButton.hidden = false;
+  editButton.innerHTML = PENCIL_ICON;
   if (!canEditDates(section)) {
     editButton.disabled = true;
     editButton.title = "Edição indisponível: as datas dessa cabine não batem com o texto do alerta.";
     return;
   }
+
+  const editor = document.createElement("div");
+  editor.className = "dates-editor";
+  editor.hidden = true;
+  editor.innerHTML = `
+    <p class="dates-editor-hint">Apague as datas que não vão no alerta. Selecione um trecho ou uma linha inteira para tirar várias de uma vez.</p>
+    <textarea class="dates-editor-text" spellcheck="false"></textarea>
+    <p class="dates-editor-error" hidden></p>
+    <div class="dates-editor-actions">
+      <button type="button" class="action-button dates-editor-apply">Aplicar</button>
+      <button type="button" class="action-button dates-editor-restore">Restaurar todas</button>
+      <button type="button" class="action-button dates-editor-cancel">Cancelar</button>
+    </div>`;
+  chipsEl.before(editor);
+  const textArea = editor.querySelector(".dates-editor-text");
+  const errorEl = editor.querySelector(".dates-editor-error");
+
+  const setEditing = (editing) => {
+    editor.hidden = !editing;
+    chipsEl.hidden = editing;
+    editButton.setAttribute("aria-pressed", String(editing));
+    errorEl.hidden = true;
+    if (!editing) return;
+    columnEl.open = true;
+    textArea.value = keptSection(section).text;
+    textArea.rows = Math.max(3, textArea.value.split("\n").length + 1);
+    textArea.focus();
+  };
+
+  const apply = () => {
+    const parsed = parseKeptDates(textArea.value, section);
+    if (parsed.error) {
+      errorEl.textContent = parsed.error;
+      errorEl.hidden = false;
+      return;
+    }
+    const excluded = new Set(section.days.map((day) => day.date).filter((date) => !parsed.kept.has(date)));
+    excludedDates.set(section.days, excluded);
+    for (const chip of chipsEl.querySelectorAll(".date-chip")) {
+      chip.classList.toggle("date-chip-excluded", excluded.has(chip.dataset.date));
+    }
+    renderSummary();
+    setEditing(false);
+    columnEl.dispatchEvent(new CustomEvent("alert-dates-changed", { bubbles: true }));
+  };
+
   editButton.onclick = (event) => {
     event.preventDefault();
     event.stopPropagation();
-    const editing = columnEl.classList.toggle("editing-dates");
-    if (editing) columnEl.open = true;
-    editButton.textContent = editing ? "✓ Pronto" : "✏️";
-    editButton.setAttribute("aria-pressed", String(editing));
+    setEditing(editor.hidden);
   };
-
-  // In edit mode a click takes the day out of (or back into) the alert, and a
-  // chip with a booking link must not open the site.
-  chipsEl.onclick = (event) => {
-    if (!columnEl.classList.contains("editing-dates")) return;
-    const chip = event.target.closest(".date-chip");
-    if (!chip) return;
-    event.preventDefault();
-
-    if (!excludedDates.has(section.days)) excludedDates.set(section.days, new Set());
-    const excluded = excludedDates.get(section.days);
-    const { date } = chip.dataset;
-    if (excluded.has(date)) excluded.delete(date);
-    else excluded.add(date);
-    chip.classList.toggle("date-chip-excluded", excluded.has(date));
-
-    renderSummary();
-    columnEl.dispatchEvent(new CustomEvent("alert-dates-changed", { bubbles: true }));
+  editor.querySelector(".dates-editor-apply").onclick = apply;
+  editor.querySelector(".dates-editor-cancel").onclick = () => setEditing(false);
+  editor.querySelector(".dates-editor-restore").onclick = () => {
+    textArea.value = section.text;
+    errorEl.hidden = true;
   };
+  textArea.onkeydown = (event) => {
+    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) apply();
+    if (event.key === "Escape") setEditing(false);
+  };
+}
+
+// The text area is free text, so it is read strictly: every day left in it must
+// be one the search returned, written exactly as the copy text writes it. The
+// alert never carries what was typed, only the days it matched.
+function parseKeptDates(text, section) {
+  const datesByMonth = new Map(
+    groupByMonth(section.days).map((group) => [group.title, new Map(group.items.map((day) => [dayToken(day), day.date]))]),
+  );
+  const kept = new Set();
+  for (const rawLine of text.split("\n")) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const match = line.match(/^(\S+ \d{4}):(.*)$/);
+    if (!match) return { error: `Linha fora do formato "Mmm AAAA: DD, DD": "${line}"` };
+    const [, month, rest] = match;
+    const dates = datesByMonth.get(month);
+    if (!dates) return { error: `${month} não está no resultado dessa busca.` };
+    for (const token of rest.split(",").map((part) => part.trim()).filter(Boolean)) {
+      const date = dates.get(token);
+      if (!date) return { error: `"${token}" não é uma data de ${month} no resultado dessa busca.` };
+      kept.add(date);
+    }
+  }
+  return { kept };
 }
 
 function renderTapLeg(targetEl, label, report) {
@@ -1156,7 +1221,7 @@ function renderLegSections(targetEl, label, sections) {
       <summary class="column-header">
         <span class="chevron" aria-hidden="true">›</span>
         <h3></h3>
-        <button type="button" class="edit-dates-button" title="Tirar datas do alerta" aria-pressed="false">✏️</button>
+        <button type="button" class="edit-dates-button" title="Editar datas do alerta" aria-label="Editar datas do alerta" aria-pressed="false"></button>
         <button type="button" class="copy-button">Copiar</button>
       </summary>
       <p class="column-summary"></p>
