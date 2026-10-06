@@ -719,6 +719,13 @@ export async function searchSmilesYear(
     }
   };
 
+  const stopRequested = (remainingDays: number): boolean => {
+    if (!shouldStop()) return false;
+    onLog("Busca cancelada. Devolvendo o que já veio.");
+    gaps.push(`a busca foi cancelada: ${remainingDays} dia(s) do período não chegaram a ser consultados`);
+    return true;
+  };
+
   const samples: string[] = [];
   for (let date = start; date <= end; date = addDays(date, SAMPLING_STEP_DAYS)) samples.push(date);
 
@@ -749,7 +756,9 @@ export async function searchSmilesYear(
       onProgress(0.6 * ((i + 1) / samples.length));
     }
 
-    if (days.length === 0) {
+    if (shouldStop()) {
+      // Already reported by the sampling loop.
+    } else if (days.length === 0) {
       // An empty calendar only means "no calendar" when some probe answered.
       // With none, it is just the failure again, and filling day by day would
       // spend requests on that false evidence.
@@ -774,6 +783,7 @@ export async function searchSmilesYear(
       }
 
       for (let i = 0; i < toFetch.length; i++) {
+        if (stopRequested(toFetch.length - i)) break;
         if (!withinSaleWindow(toFetch[i]!)) break;
         await fetchDay(toFetch[i]!);
         onProgress(0.6 + 0.4 * ((i + 1) / toFetch.length));
@@ -798,6 +808,7 @@ export async function searchSmilesYear(
       }
 
       for (let i = 0; i < chosen.length; i++) {
+        if (stopRequested(chosen.length - i)) break;
         await fetchDay(chosen[i]![0]);
         onProgress(0.6 + 0.4 * ((i + 1) / chosen.length));
       }
