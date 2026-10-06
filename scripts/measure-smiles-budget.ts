@@ -54,7 +54,7 @@ type Call = { status: number; text: string };
 async function call(page: Page, env: string, date: string): Promise<Call> {
   return page.evaluate(
     async ({ url, headers }) => {
-      const response = await fetch(url, { headers });
+      const response = await fetch(url, { headers, signal: AbortSignal.timeout(60_000) });
       return { status: response.status, text: await response.text() };
     },
     { url: root(env) + searchPath(date), headers: HEADERS },
