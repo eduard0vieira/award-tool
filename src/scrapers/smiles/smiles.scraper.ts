@@ -617,6 +617,15 @@ function todayPlus(days: number): string {
   return addDays(new Date().toISOString().slice(0, 10), days);
 }
 
+class SearchCancelledError extends Error {
+  readonly date: string;
+
+  constructor(date: string) {
+    super(`Busca cancelada em ${date}.`);
+    this.date = date;
+  }
+}
+
 async function waitUnlessStopped(ms: number, shouldStop: ShouldStop): Promise<number> {
   const started = Date.now();
   while (Date.now() - started < ms && !shouldStop()) {
@@ -669,6 +678,15 @@ export async function searchSmilesYear(
   // Per block, not per sweep: a partner route needs several block cycles to
   // cover the window, and a cumulative limit would end it partial for nothing.
   let blockedMs = 0;
+  let consecutiveDayFailures = 0;
+  let cancelReported = false;
+
+  const reportCancel = (gap: string) => {
+    if (cancelReported) return;
+    cancelReported = true;
+    onLog("Busca cancelada. Devolvendo o que já veio.");
+    gaps.push(gap);
+  };
 
   const fetchWaitingOutBlocks = async (date: string): Promise<SmilesDayResponse> => {
     for (;;) {
@@ -684,10 +702,7 @@ export async function searchSmilesYear(
             `${Math.round(MAX_BLOCK_WAIT_MS / 60000)} min de espera neste bloqueio).`,
         );
         blockedMs += await waitUnlessStopped(BLOCK_RECHECK_MS, shouldStop);
-        if (shouldStop()) {
-          onLog("Busca cancelada durante a espera do bloqueio.");
-          throw err;
-        }
+        if (shouldStop()) throw new SearchCancelledError(date);
       }
     }
   };
@@ -697,6 +712,7 @@ export async function searchSmilesYear(
     fetched.add(date);
     try {
       const response = await fetchWaitingOutBlocks(date);
+      consecutiveDayFailures = 0;
       days.push(response);
       for (const day of response.calendar) {
         // A day without a fare stays out: it is no candidate, and as zero it
@@ -707,25 +723,38 @@ export async function searchSmilesYear(
       }
       return response;
     } catch (err) {
-      // A block is not one day's failure but the end of the sweep; insisting
-      // only burns whatever budget is left.
-      if (err instanceof SmilesBlockedError) throw err;
+      if (err instanceof SmilesBlockedError || err instanceof SearchCancelledError) throw err;
       if (err instanceof SmilesOutOfSaleWindowError) {
         if (withinSaleWindow(date)) saleWindow.rejectedFrom = date;
         return null;
       }
       const message = err instanceof Error ? err.message : String(err);
       failedDays.push({ date, error: message });
+      consecutiveDayFailures++;
       onLog(`Falha em ${date}: ${message}`);
       return null;
     }
   };
 
-  const stopRequested = (remainingDays: number): boolean => {
-    if (!shouldStop()) return false;
-    onLog("Busca cancelada. Devolvendo o que já veio.");
-    gaps.push(`a busca foi cancelada: ${remainingDays} dia(s) do período não chegaram a ser consultados`);
-    return true;
+  // Without the old 25-day cap this loop can run ~280 days, so a systematic
+  // error has to stop it the same way it stops the sampling.
+  const fetchDays = async (dates: string[]) => {
+    consecutiveDayFailures = 0;
+    for (let i = 0; i < dates.length; i++) {
+      if (shouldStop()) {
+        reportCancel(`a busca foi cancelada: ${dates.length - i} dia(s) do período não chegaram a ser consultados`);
+        return;
+      }
+      if (!withinSaleWindow(dates[i]!)) return;
+      await fetchDay(dates[i]!);
+      if (consecutiveDayFailures >= MAX_CONSECUTIVE_FAILURES) {
+        const remaining = dates.length - i - 1;
+        onLog(`${consecutiveDayFailures} dias seguidos falharam. Parando com o que já veio.`);
+        if (remaining > 0) gaps.push(`a varredura parou cedo: ${remaining} dia(s) do período não chegaram a ser consultados`);
+        return;
+      }
+      onProgress(0.6 + 0.4 * ((i + 1) / dates.length));
+    }
   };
 
   const samples: string[] = [];
@@ -740,9 +769,7 @@ export async function searchSmilesYear(
   try {
     for (let i = 0; i < samples.length; i++) {
       if (shouldStop()) {
-        const remaining = samples.length - i;
-        onLog("Busca cancelada. Devolvendo o que já veio.");
-        if (remaining > 0) gaps.push(`a busca foi cancelada: ${remaining} sondagem(ns) do período não chegaram a ser feitas`);
+        reportCancel(`a busca foi cancelada: ${samples.length - i} sondagem(ns) do período não chegaram a ser feitas`);
         break;
       }
       const response = await fetchDay(samples[i]!);
@@ -759,7 +786,7 @@ export async function searchSmilesYear(
     }
 
     if (shouldStop()) {
-      // Already reported by the sampling loop.
+      reportCancel("a busca foi cancelada antes de detalhar os dias do período");
     } else if (days.length === 0) {
       // An empty calendar only means "no calendar" when some probe answered.
       // With none, it is just the failure again, and filling day by day would
@@ -782,13 +809,7 @@ export async function searchSmilesYear(
         );
       }
       onLog(`Esta rota não devolve calendário. Consultando os ${toFetch.length} dia(s) restantes, um a um.`);
-
-      for (let i = 0; i < toFetch.length; i++) {
-        if (stopRequested(toFetch.length - i)) break;
-        if (!withinSaleWindow(toFetch[i]!)) break;
-        await fetchDay(toFetch[i]!);
-        onProgress(0.6 + 0.4 * ((i + 1) / toFetch.length));
-      }
+      await fetchDays(toFetch);
     } else {
       const candidates = Array.from(calendar.entries())
         .filter(([date]) => date >= start && date <= end && !fetched.has(date) && withinSaleWindow(date))
@@ -807,19 +828,19 @@ export async function searchSmilesYear(
       } else if (chosen.length > 0) {
         onLog(`${chosen.length} dia(s) passaram no teto. Buscando cabine e assentos de cada um.`);
       }
-
-      for (let i = 0; i < chosen.length; i++) {
-        if (stopRequested(chosen.length - i)) break;
-        await fetchDay(chosen[i]![0]);
-        onProgress(0.6 + 0.4 * ((i + 1) / chosen.length));
-      }
+      await fetchDays(chosen.map(([date]) => date));
     }
   } catch (err) {
     // What already came is worth keeping: return a partial result with the gap
     // explained instead of losing a whole sweep to a block at its end.
-    if (!(err instanceof SmilesBlockedError)) throw err;
-    onLog(err.message);
-    gaps.push(`a busca foi interrompida pelo bloqueio do Smiles depois de ${days.length} dia(s): ${err.gapSummary}`);
+    if (err instanceof SearchCancelledError) {
+      reportCancel(`a busca foi cancelada durante a espera do bloqueio do Smiles, em ${err.date}`);
+    } else if (err instanceof SmilesBlockedError) {
+      onLog(err.message);
+      gaps.push(`a busca foi interrompida pelo bloqueio do Smiles depois de ${days.length} dia(s): ${err.gapSummary}`);
+    } else {
+      throw err;
+    }
   }
 
   if (saleWindow.rejectedFrom) {
