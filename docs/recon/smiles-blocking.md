@@ -1,6 +1,6 @@
 # Smiles: the two blocks (406 and 403)
 
-Last updated: 2026-09-15.
+Last updated: 2026-10-06.
 
 The Smiles search runs from inside Chrome, with the page sitting on the API's
 origin (`api-air-flightsearch-prd.smiles.com.br`). There are two different ways
@@ -8,12 +8,13 @@ for the search to die, and they have neither the same cause nor the same wait.
 
 ## 406: request budget per IP
 
-- The API is what answers.
-- Measured: the block lasts more than 20 min and replanting the cookies does not
-  recover it. It is a per-IP budget over a sliding window (the probes spent ~99
-  and the next run was blocked at the 40th).
-- There is no "try again": insisting only burns what is left of the budget.
-- In the code: `SmilesBudgetError`.
+- Akamai's edge is what answers, with JSON carrying a `referenceId` and the
+  `clientIP` (`fixtures/smiles-406-budget.json`).
+- Keyed on the IP alone: see the 2026-10-06 section.
+- Hammering burns more budget. The sweep waits instead: one recheck every
+  `SMILES_BLOCK_RECHECK_MS` (10 min), resuming on the same date, up to
+  `SMILES_MAX_BLOCK_WAIT_MS` (3 h) per block. `SmilesBudgetError` reaches the
+  result only when that limit runs out.
 
 ## 403: denied at the edge (solved on 2026-09-15)
 
@@ -30,7 +31,7 @@ First ruling out what looked obvious:
 | test | result |
 |---|---|
 | browser → root and search, on the 3 environments (prd/green/blue) | 403 HTML on all |
-| **outside the browser** (Node `fetch`, same IP) | **406**: the IP is allowed |
+| **outside the browser** (Node `fetch`, same IP) | **406**, which any non-browser gets (see the 2026-10-06 section) |
 | `www.smiles.com.br` in the same Chrome | 200 |
 | clearing Akamai's 5 cookies and repeating | 403 again |
 | going through the site first, so the sensor validates `_abck` | 403 again |
@@ -130,3 +131,54 @@ is `SmilesUpstreamDownError`, which stops the sweep like a block.
 The same log showed the sweep concluding "this route has no calendar" after no
 probe had answered and filling 25 days on that. An empty calendar now only
 counts when at least one probe came back.
+
+## 406 is keyed on the IP alone (measured on 2026-10-06)
+
+`scripts/measure-smiles-budget.ts` spent the budget on GRU→CUN and, right after
+the first 406, tried every way around it that cheap-flights had used:
+
+| variant | result |
+|---|---|
+| bot profile, `prd` again | 406 |
+| bot profile, `green` | 406 |
+| bot profile, `blue` | 406 |
+| bot profile, `prd`, `akaalb_*` cleared | 406 |
+| fresh browser, `prd` | 406 |
+
+Same `clientIP` in every body. Rotating hosts or sessions does not help; only
+time does. The block was still on at +10 min and gone 87 min later (the check
+in between hung, so the exact length is unknown).
+
+How much fits: with a fresh budget, 372 calls in a row at the bot's pace (one
+every ~7 s, call included) and no 406. That is more than a whole leg of the sale
+window. The old "~100–150 per window" figure does not hold at this pace.
+
+A call from outside the browser gets a 406 whether or not the IP is over
+budget, so it says nothing about the budget.
+
+## 452 from a crash inside their search service
+
+`{"error":"TypeError: Cannot read properties of undefined (reading 'flightList')"}`
+came back on ~10% of the GRU→CUN days, up to 5 in a row. The same dates
+answered 200 when asked again later. It is `SmilesTransientError`, and the
+scraper retries that day twice before counting it as a failure. In the
+2026-10-06 sweep every one of them passed on the first retry, 5 s later.
+
+## A call that never answers
+
+Once a search call hung for over an hour and froze the whole run with no error.
+Every call now has a deadline (`SMILES_SEARCH_TIMEOUT_MS`, 60 s) and a hang
+becomes a failed day.
+
+## How long a sweep takes (2026-10-06, partial evidence)
+
+- One call takes ~8 s at the bot's pace (372 calls in 51 min, response time
+  included). The 4 s limiter barely matters; Smiles answers in 4–8 s.
+- A leg of a route without calendar is ~330 calls: ~45–50 min with a fresh
+  budget. Not yet confirmed end to end: the only full sweep started right after
+  the measurement had spent 372 calls, hit 406 at ~90 calls and was stopped.
+- After that 406, a 10 min wait let one call through before the next 406. The
+  budget refills slowly while a recent burst is still in the window; how long
+  the window is was not measured.
+- A round trip (~660 calls) does not fit in the 372 known to pass, so the
+  second leg will likely wait out at least one block.
