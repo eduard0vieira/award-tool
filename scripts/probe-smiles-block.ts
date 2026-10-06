@@ -13,7 +13,9 @@ import { openChromeSession } from "../src/core/chrome-session.ts";
 // its own: same URL, same cookies, APP gives HTML and WEB gives 200.
 //
 // So the probe measures header variants instead of just repeating the search,
-// and compares with a call from outside the browser (which answers 406 when the IP is fine).
+// and compares with a call from outside the browser. That call gets a 406 whether
+// or not the IP is over budget (measured on 2026-10-05/06), so only an HTML
+// block page there says something: the edge barred the IP.
 //
 // Usage: npx tsx scripts/probe-smiles-block.ts [GRU] [MIA] [2026-11-20]
 
@@ -74,8 +76,8 @@ function read(status: number, text: string): Reading {
 async function main() {
   console.log(`\nProbe de bloqueio do Smiles — ${origin.toUpperCase()} → ${destination.toUpperCase()} em ${date}\n`);
 
-  // Step 0: outside the browser. 406 here is normal and means "the IP is
-  // free"; any HTML block page means the edge blocked the IP.
+  // Step 0: outside the browser. A 406 here is what any non-browser gets and
+  // says nothing about the budget; an HTML block page means the edge barred the IP.
   let outside: Reading;
   try {
     const response = await fetch(searchUrl(), { headers: { "x-api-key": API_KEY } });
