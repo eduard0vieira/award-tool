@@ -433,15 +433,31 @@ export function error452(text: string, route: SmilesRoute, date: string): Error 
   return new Error(`O Smiles respondeu 452 para ${date}. ${summarizeBody(text)}`);
 }
 
+// A fetch without a deadline once hung for over an hour (2026-10-06) and froze
+// the whole sweep with no error. Now a hang becomes a failed day.
+const SEARCH_TIMEOUT_MS = Number(process.env.SMILES_SEARCH_TIMEOUT_MS) || 60_000;
+
 async function callApi(page: Page, route: SmilesRoute, date: string) {
   await smilesRateLimiter.waitTurn();
-  return page.evaluate(
-    async ({ url, headers }) => {
-      const response = await fetch(url, { headers });
+  const call = page.evaluate(
+    async ({ url, headers, timeoutMs }) => {
+      const response = await fetch(url, { headers, signal: AbortSignal.timeout(timeoutMs) });
       return { status: response.status, text: await response.text() };
     },
-    { url: searchUrl(route, date), headers: API_HEADERS },
+    { url: searchUrl(route, date), headers: API_HEADERS, timeoutMs: SEARCH_TIMEOUT_MS },
   );
+  let timer: NodeJS.Timeout | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`O Smiles não respondeu em ${Math.round(SEARCH_TIMEOUT_MS / 1000)} s para ${date}.`)),
+      SEARCH_TIMEOUT_MS + 10_000,
+    );
+  });
+  try {
+    return await Promise.race([call, deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // How long one day's response stays valid. Short on purpose: the target is the

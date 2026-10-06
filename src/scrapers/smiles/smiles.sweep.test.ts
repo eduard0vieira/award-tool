@@ -8,6 +8,7 @@ import { FIXTURES_DIR } from "../../core/paths.ts";
 process.env.SMILES_SEARCH_INTERVAL_MS = "1";
 process.env.SMILES_BLOCK_RECHECK_MS = "30";
 process.env.SMILES_MAX_BLOCK_WAIT_MS = "200";
+process.env.SMILES_SEARCH_TIMEOUT_MS = "20";
 const { searchSmilesYear } = await import("./smiles.scraper.ts");
 
 const fixture = (name: string) => fs.readFileSync(path.join(FIXTURES_DIR, name), "utf8");
@@ -15,7 +16,7 @@ const partnerDay = { status: 200, text: fixture("smiles-real-congener.json") };
 const blocked = { status: 406, text: fixture("smiles-406-budget.json") };
 const serverError = { status: 500, text: "{}" };
 
-type Reply = { status: number; text: string };
+type Reply = { status: number; text: string } | "hang";
 
 // Answers each search call from `script(callNumber, date)`.
 function fakePage(script: (call: number, date: string) => Reply) {
@@ -25,7 +26,8 @@ function fakePage(script: (call: number, date: string) => Reply) {
     evaluate: async (_fn: unknown, { url }: { url: string }) => {
       const date = new URL(url).searchParams.get("departureDate")!;
       asked.push(date);
-      return script(++calls, date);
+      const reply = script(++calls, date);
+      return reply === "hang" ? new Promise(() => {}) : reply;
     },
     goto: async () => ({ status: () => 403 }),
     waitForTimeout: async () => {},
@@ -65,6 +67,15 @@ describe("Smiles sweep on a route without calendar", () => {
     assert.equal(result.failedDays.length, 3);
     assert.equal(asked.length, 5);
     assert.ok(result.gaps.some((gap) => gap.includes("parou cedo: 5 dia(s)")));
+  });
+
+  test("turns a call that never answers into a failed day", async () => {
+    const { page } = fakePage((call) => (call <= 2 ? partnerDay : "hang"));
+
+    const result = await searchSmilesYear(page, { origin: "III", destination: "JJJ" }, {}, () => {}, () => {}, () => false, tenDays);
+
+    assert.equal(result.failedDays.length, 3);
+    assert.match(result.failedDays[0]!.error, /não respondeu/);
   });
 
   test("reports a cancel during the block wait as a cancel", async () => {
