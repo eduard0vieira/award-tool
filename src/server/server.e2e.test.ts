@@ -31,6 +31,7 @@ class FakeSource implements SearchSource<FakeSearchDto> {
     idleMinutes: 0,
   });
   release: () => void = () => {};
+  starts = 0;
 
   constructor(
     private readonly runner: JobRunner,
@@ -42,6 +43,7 @@ class FakeSource implements SearchSource<FakeSearchDto> {
   }
 
   start(jobId: string, request: FakeSearchDto) {
+    this.starts++;
     return this.runner.run(this.pool, jobId, async () => {
       const job = this.jobs.callbacks(jobId);
       job.progress(0.5);
@@ -50,8 +52,8 @@ class FakeSource implements SearchSource<FakeSearchDto> {
       if (request.origin === "ASK" && !(await job.ask("Continuar?"))) throw new Error("refused");
       this.jobs.complete(jobId, {
         legs: [{ label: request.origin, sections: [] }],
-        partialNotice: "parcial",
         localFile: "spreadsheets/voos.csv",
+        ...(request.origin === "PRT" ? { partialNotice: "parcial" } : {}),
       });
     });
   }
@@ -332,5 +334,106 @@ describe("server with auth", () => {
       body: JSON.stringify(person),
     });
     assert.match(response.headers.get("set-cookie")!, /; Secure$/);
+  });
+
+  type Started = { jobId: string; joined?: { by: string | null }; reused?: { by: string | null } };
+  const startSearch = async (cookie: string, body: Record<string, unknown>) => {
+    const response = await fetch(`${url}/api/searches`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", cookie },
+      body: JSON.stringify({ source: "fake", ...body }),
+    });
+    assert.equal(response.status, 200);
+    return (await response.json()) as Started;
+  };
+  const runToDone = async (cookie: string, jobId: string) => {
+    const events = readEvents(`${url}/api/searches/${jobId}/events`, cookie);
+    await nextEvent(events, "progress");
+    fake.release();
+    return nextEvent(events, "done");
+  };
+  const historyItem = async (cookie: string, id: string, status: string) => {
+    for (let attempt = 0; attempt < 50; attempt++) {
+      const items = (await fetch(`${url}/api/history`, { headers: { cookie } }).then((r) => r.json())) as {
+        id: string;
+        status: string;
+      }[];
+      const item = items.find((entry) => entry.id === id);
+      if (item?.status === status) return item as Record<string, unknown>;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    throw new Error(`search ${id} never reached "${status}" in the history`);
+  };
+
+  test("records every search in the shared history with who ran it", async () => {
+    const cookie = await sessionCookie();
+    const { jobId } = await startSearch(cookie, { origin: "GRU", destination: "AAA" });
+    await runToDone(cookie, jobId);
+
+    const item = await historyItem(cookie, jobId, "done");
+    assert.equal(item.user, "thiago");
+    assert.equal(item.source, "fake");
+    assert.deepEqual(item.request, { origin: "GRU", destination: "AAA" });
+    assert.equal("result" in item, false);
+
+    const full = await fetch(`${url}/api/history/${jobId}`, { headers: { cookie } }).then((r) => r.json());
+    assert.deepEqual(full.result.legs, [{ label: "GRU", sections: [] }]);
+    assert.equal((await fetch(`${url}/api/history/missing`, { headers: { cookie } })).status, 404);
+    assert.equal((await fetch(`${url}/api/history?limit=0`, { headers: { cookie } })).status, 400);
+  });
+
+  test("joins an identical search that is already running instead of starting another", async () => {
+    const cookie = await sessionCookie();
+    const before = fake.starts;
+    const first = await startSearch(cookie, { origin: "GRU", destination: "BBB" });
+    const second = await startSearch(cookie, { origin: "gru", destination: "bbb" });
+    assert.equal(second.jobId, first.jobId);
+    assert.deepEqual(second.joined, { by: "thiago" });
+    assert.equal(fake.starts, before + 1);
+    await runToDone(cookie, first.jobId);
+  });
+
+  test("reuses a recent identical result only when asked, without searching again", async () => {
+    const cookie = await sessionCookie();
+    const { jobId } = await startSearch(cookie, { origin: "GRU", destination: "CCC" });
+    await runToDone(cookie, jobId);
+    await historyItem(cookie, jobId, "done");
+    const before = fake.starts;
+
+    const reused = await startSearch(cookie, { origin: "GRU", destination: "CCC", reuseRecent: true });
+    assert.notEqual(reused.jobId, jobId);
+    assert.equal(reused.reused?.by, "thiago");
+    assert.equal(fake.starts, before);
+    const events = readEvents(`${url}/api/searches/${reused.jobId}/events`, cookie);
+    assert.match(String((await nextEvent(events, "notice")).message), /Resultado de uma busca de thiago/);
+    assert.deepEqual((await nextEvent(events, "done")).legs, [{ label: "GRU", sections: [] }]);
+
+    const fresh = await startSearch(cookie, { origin: "GRU", destination: "CCC" });
+    assert.equal(fresh.reused, undefined);
+    assert.equal(fake.starts, before + 1);
+    await runToDone(cookie, fresh.jobId);
+  });
+
+  test("records a cancelled search as cancelled", async () => {
+    const cookie = await sessionCookie();
+    const { jobId } = await startSearch(cookie, { origin: "GRU", destination: "EEE" });
+    const events = readEvents(`${url}/api/searches/${jobId}/events`, cookie);
+    await nextEvent(events, "progress");
+    await fetch(`${url}/api/searches/${jobId}/cancel`, { method: "POST", headers: { cookie } });
+    fake.release();
+    await nextEvent(events, "error");
+    const item = await historyItem(cookie, jobId, "cancelled");
+    assert.equal(item.error, "Busca cancelada.");
+  });
+
+  test("never hands a partial result to someone asking for a recent one", async () => {
+    const cookie = await sessionCookie();
+    const { jobId } = await startSearch(cookie, { origin: "PRT", destination: "DDD" });
+    await runToDone(cookie, jobId);
+    await historyItem(cookie, jobId, "partial");
+
+    const again = await startSearch(cookie, { origin: "PRT", destination: "DDD", reuseRecent: true });
+    assert.equal(again.reused, undefined);
+    await runToDone(cookie, again.jobId);
   });
 });

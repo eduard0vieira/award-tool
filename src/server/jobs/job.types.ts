@@ -17,6 +17,9 @@ export type Job = {
   error?: string;
   result?: JobEvent;
   events: Subject<JobEvent>;
+  requestKey?: string;
+  // Username, or null for a machine credential or a server without login.
+  requestedBy?: string | null;
 };
 
 export type JobCallbacks = {

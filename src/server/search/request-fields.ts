@@ -42,4 +42,9 @@ export class RouteRequestDto {
 
   @AirportField("destination")
   destination!: string;
+
+  // Asks for a recent identical result instead of a new search. Never part of
+  // what makes two searches the same.
+  @OptionalBooleanField("reuseRecent")
+  reuseRecent?: boolean;
 }

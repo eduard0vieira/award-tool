@@ -8,10 +8,29 @@ import type { Job, JobCallbacks, JobEvent } from "./job.types.ts";
 export class JobStore {
   private readonly jobs = new Map<string, Job>();
 
-  create(): string {
+  create(meta: { requestKey?: string; requestedBy?: string | null } = {}): string {
     const jobId = randomUUID();
-    this.jobs.set(jobId, { status: "queued", progress: 0, events: new Subject() });
+    this.jobs.set(jobId, { status: "queued", progress: 0, events: new Subject(), ...meta });
     return jobId;
+  }
+
+  // A job that is born finished, holding a result saved earlier. The usual
+  // event stream replays it, so whoever opens it sees an ordinary "done".
+  createFinished(result: Record<string, unknown>, notice: string): string {
+    const jobId = randomUUID();
+    const events = new Subject<JobEvent>();
+    events.complete();
+    this.jobs.set(jobId, { status: "done", progress: 1, notice, result: { ...result, type: "done" }, events });
+    return jobId;
+  }
+
+  findActive(requestKey: string): { jobId: string; requestedBy: string | null } | null {
+    for (const [jobId, job] of this.jobs) {
+      if (job.requestKey === requestKey && !job.cancelled && (job.status === "queued" || job.status === "running")) {
+        return { jobId, requestedBy: job.requestedBy ?? null };
+      }
+    }
+    return null;
   }
 
   get(jobId: string): Job {

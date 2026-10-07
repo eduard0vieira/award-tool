@@ -24,6 +24,9 @@ export const config = {
   // users in the database.
   credentials: readCredentials(),
   loginDisabled: process.env.LOGIN_DISABLED === "true",
+  // A finished identical search this recent is offered instead of a new one.
+  searchReuseHours: Number(process.env.SEARCH_REUSE_HOURS) || 6,
+  searchResultRetentionDays: Number(process.env.SEARCH_RESULT_RETENTION_DAYS) || 30,
   // Sessions idle this long are closed to give the RAM back (a SeatSpy session
   // costs ~450 MB); reopening costs ~6s once per burst of searches.
   idleMinutes: readIdleMinutes(),

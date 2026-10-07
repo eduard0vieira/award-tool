@@ -1,4 +1,6 @@
-import { Body, Controller, Get, HttpCode, Post } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Post, Req } from "@nestjs/common";
+import type { Request } from "express";
+import { actorOf } from "../auth/actor.ts";
 import { JobStore } from "../jobs/job-store.service.ts";
 import { SearchService } from "./search.service.ts";
 
@@ -19,7 +21,7 @@ export class SearchController {
   // Validated by the chosen source's own DTO, which depends on `source`.
   @Post()
   @HttpCode(200)
-  async start(@Body() body: Record<string, unknown> | undefined) {
-    return { jobId: await this.search.start(body) };
+  async start(@Body() body: Record<string, unknown> | undefined, @Req() req: Request) {
+    return this.search.start(body, actorOf(req));
   }
 }

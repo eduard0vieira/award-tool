@@ -4,7 +4,7 @@ import { JobStore } from "./job-store.service.ts";
 
 // Reported as an error with its own text because the front already knows how
 // to close a card on error; the text makes clear nothing failed.
-const CANCELLED = "Busca cancelada.";
+export const CANCELLED = "Busca cancelada.";
 
 @Injectable()
 export class JobRunner {
