@@ -9,9 +9,17 @@ async function apiFetch(url, options) {
 }
 
 document.getElementById("logout-button").addEventListener("click", async () => {
-  const response = await fetch("/api/logout", { method: "POST" });
-  if (response.ok) location.href = "/login";
-  else alert("Não foi possível sair. Tente de novo.");
+  try {
+    const response = await fetch("/api/logout", { method: "POST" });
+    if (response.ok) {
+      location.href = "/login";
+      return;
+    }
+    alert("Não foi possível sair. Tente de novo.");
+  } catch (err) {
+    console.error("Falha ao sair:", err);
+    alert("Não foi possível conectar ao servidor para sair. Confira a conexão e tente de novo.");
+  }
 });
 
 const tapForm = document.getElementById("tap-search-form");
