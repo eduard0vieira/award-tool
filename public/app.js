@@ -9,9 +9,17 @@ async function apiFetch(url, options) {
 }
 
 document.getElementById("logout-button").addEventListener("click", async () => {
-  const response = await fetch("/api/logout", { method: "POST" });
-  if (response.ok) location.href = "/login";
-  else alert("Não foi possível sair. Tente de novo.");
+  try {
+    const response = await fetch("/api/logout", { method: "POST" });
+    if (response.ok) {
+      location.href = "/login";
+      return;
+    }
+    alert("Não foi possível sair. Tente de novo.");
+  } catch (err) {
+    console.error("Falha ao sair:", err);
+    alert("Não foi possível conectar ao servidor para sair. Confira a conexão e tente de novo.");
+  }
 });
 
 const tapForm = document.getElementById("tap-search-form");
@@ -32,6 +40,7 @@ const seatspyRoundTripCheckbox = document.getElementById("seatspy-round-trip");
 const seatspyEconomyCeilingInput = document.getElementById("seatspy-ceiling-economy");
 const seatspyPremiumCeilingInput = document.getElementById("seatspy-ceiling-premium");
 const seatspyBusinessCeilingInput = document.getElementById("seatspy-ceiling-business");
+const seatspyFirstCeilingInput = document.getElementById("seatspy-ceiling-first");
 const seatspyNotice = document.getElementById("seatspy-notice");
 const seatspyQueue = document.getElementById("seatspy-queue");
 
@@ -79,7 +88,6 @@ const latamNotice = document.getElementById("latam-notice");
 const latamQueue = document.getElementById("latam-queue");
 
 const jobTemplate = document.getElementById("job-template");
-const legTemplate = document.getElementById("leg-template");
 const tabButtons = document.querySelectorAll(".tab-button");
 const panels = {
   tap: document.getElementById("panel-tap"),
@@ -95,6 +103,7 @@ const historyEmpty = document.getElementById("history-empty");
 const historyTop = document.getElementById("history-top");
 const historySummary = document.getElementById("history-summary");
 const clearHistoryButton = document.getElementById("clear-history-button");
+const historyNotice = document.getElementById("history-notice");
 
 const MONTHS_PT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 const HISTORY_KEY = "awardtool.history.v2";
@@ -124,20 +133,45 @@ const PROGRAM_LABELS = {
 const AA_CABIN_LABELS = { economy: "Econômica", premium: "Premium Economy", business: "Executiva", first: "Primeira Classe" };
 const AA_CABIN_CLASSES = { economy: "cabin-economy", premium: "cabin-premium", business: "cabin-business", first: "cabin-first" };
 
+function markSelectedTab(buttons, selected) {
+  for (const button of buttons) {
+    const isSelected = button === selected;
+    button.classList.toggle("active", isSelected);
+    button.setAttribute("aria-selected", String(isSelected));
+    button.tabIndex = isSelected ? 0 : -1;
+  }
+}
+
+// Arrow keys move between tabs and Tab leaves the list, the keyboard pattern
+// screen readers announce for role="tablist".
+function onTabListKeydown(event, buttons, select) {
+  const list = [...buttons];
+  const index = list.indexOf(event.currentTarget);
+  const target = { ArrowRight: index + 1, ArrowLeft: index - 1, Home: 0, End: list.length - 1 }[event.key];
+  if (target === undefined) return;
+  event.preventDefault();
+  const next = list[(target + list.length) % list.length];
+  select(next);
+  next.focus();
+}
+
 // Tabs only toggle hidden: nothing is destroyed or recreated, so running search
 // cards in one tab keep going and stay visible when you come back.
+function selectTab(button) {
+  markSelectedTab(tabButtons, button);
+  const tab = button.dataset.tab;
+  for (const [name, panel] of Object.entries(panels)) panel.hidden = name !== tab;
+  if (tab === "history") renderHistory();
+  window.history.replaceState(null, "", `#${tab}`);
+}
+
 tabButtons.forEach((button) => {
-  button.addEventListener("click", () => {
-    tabButtons.forEach((other) => other.classList.remove("active"));
-    button.classList.add("active");
-    const tab = button.dataset.tab;
-    for (const [name, panel] of Object.entries(panels)) panel.hidden = name !== tab;
-    if (tab === "history") renderHistory();
-  });
+  button.addEventListener("click", () => selectTab(button));
+  button.addEventListener("keydown", (event) => onTabListKeydown(event, tabButtons, selectTab));
 });
 
 function activateTab(tab) {
-  document.querySelector(`.tab-button[data-tab="${tab}"]`).click();
+  selectTab(document.querySelector(`.tab-button[data-tab="${tab}"]`));
 }
 
 // The history used to live under another key with Portuguese fields. It is
@@ -202,6 +236,36 @@ function latestSearchOf(origin, destination, program) {
   return sameRoute.reduce((newest, item) => (item.timestamp > newest.timestamp ? item : newest));
 }
 
+// Facts sit side by side with space between them instead of " · " joins.
+function setFacts(element, facts) {
+  element.classList.add("facts");
+  element.replaceChildren(
+    ...facts.filter(Boolean).map((fact) => {
+      const span = document.createElement("span");
+      if (typeof fact === "string") {
+        span.textContent = fact;
+      } else {
+        span.textContent = fact.text;
+        span.className = fact.className;
+      }
+      return span;
+    }),
+  );
+}
+
+function plural(count, one, other) {
+  return `${count} ${count === 1 ? one : other}`;
+}
+
+const reaisFormat = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 0 });
+const reaisCentsFormat = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+const integerFormat = new Intl.NumberFormat("pt-BR");
+// Search dates are calendar days ("2026-11-08"); read in UTC they never shift a day.
+const shortDateFormat = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", timeZone: "UTC" });
+const fullDateFormat = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" });
+const formatShortDate = (isoDate) => shortDateFormat.format(new Date(`${isoDate}T00:00:00Z`));
+const formatFullDate = (isoDate) => fullDateFormat.format(new Date(`${isoDate}T00:00:00Z`));
+
 function formatDateTime(timestamp) {
   const date = new Date(timestamp);
   const day = date.toLocaleDateString("pt-BR");
@@ -257,13 +321,26 @@ function repeatSearch(item) {
     aaRoundTripCheckbox.checked = Boolean(item.roundTrip);
     activateTab("aa");
     aaOriginInput.focus();
-  } else {
+  } else if (item.program === "LATAM") {
+    latamOriginInput.value = item.origin;
+    latamDestinationInput.value = item.destination;
+    activateTab("latam");
+    latamOriginInput.focus();
+  } else if (item.program === "IBERIA") {
+    iberiaOriginInput.value = item.origin;
+    iberiaDestinationInput.value = item.destination;
+    iberiaRoundTripCheckbox.checked = Boolean(item.roundTrip);
+    activateTab("iberia");
+    iberiaOriginInput.focus();
+  } else if ([...seatspyProgramSelect.options].some((option) => option.value === item.program)) {
     seatspyProgramSelect.value = item.program;
     seatspyOriginInput.value = item.origin;
     seatspyDestinationInput.value = item.destination;
     seatspyRoundTripCheckbox.checked = Boolean(item.roundTrip);
     activateTab("seatspy");
     seatspyOriginInput.focus();
+  } else {
+    showNotice(historyNotice, `Não há aba para repetir buscas do programa "${item.program}". Preencha a busca na aba do programa.`);
   }
 }
 
@@ -311,6 +388,9 @@ function removeFromHistory(timestamps) {
 }
 
 function renderHistory() {
+  // A re-render would bring back the row hidden while its undo is pending.
+  if (pendingRemoval?.kind === "history") finishPendingRemoval();
+  clearNotice(historyNotice);
   const history = groupForDisplay(loadHistory().slice().sort((a, b) => b.timestamp - a.timestamp));
   historyList.innerHTML = "";
   historyEmpty.hidden = history.length > 0;
@@ -326,9 +406,12 @@ function renderHistory() {
     }),
   ).size;
   const withinTolerance = history.filter((item) => Date.now() - item.timestamp < TOLERANCE_MS).length;
-  historySummary.textContent =
-    `${history.length} busca(s) · ${uniqueRoutes} trecho(s) diferente(s) · ` +
-    `${withinTolerance} dentro da tolerância de ${TOLERANCE_DAYS} dias · última ${formatRelativeTime(history[0].timestamp)}`;
+  setFacts(historySummary, [
+    plural(history.length, "busca", "buscas"),
+    plural(uniqueRoutes, "trecho diferente", "trechos diferentes"),
+    `${withinTolerance} dentro da tolerância de ${TOLERANCE_DAYS} dias`,
+    `última ${formatRelativeTime(history[0].timestamp)}`,
+  ]);
 
   const groups = new Map();
   for (const item of history) {
@@ -350,7 +433,7 @@ function renderHistory() {
 
     const subtitle = document.createElement("span");
     subtitle.className = "day-subtitle";
-    subtitle.textContent = `${new Date(items[0].timestamp).toLocaleDateString("pt-BR")} · ${items.length} busca(s)`;
+    setFacts(subtitle, [new Date(items[0].timestamp).toLocaleDateString("pt-BR"), plural(items.length, "busca", "buscas")]);
 
     header.append(label, subtitle);
     group.appendChild(header);
@@ -366,7 +449,7 @@ function historyCabins(item) {
   if (item.program === "SMILES") return [["Econômica", "cabin-economy"], ["Conforto", "cabin-premium"], ["Executiva", "cabin-business"]];
   if (item.program === "AA") {
     // Passengers only show when more than one, to tell it apart from the regular entry of the same route.
-    const label = (AA_CABIN_LABELS[item.cabin] || "Cabine n/d") + (item.passengers > 1 ? ` · ${item.passengers} pax` : "");
+    const label = (AA_CABIN_LABELS[item.cabin] || "Cabine n/d") + (item.passengers > 1 ? `, ${item.passengers} pax` : "");
     return [[label, AA_CABIN_CLASSES[item.cabin] || "cabin-economy"]];
   }
   return [["Econômica", "cabin-economy"], ["Premium", "cabin-premium"], ["Executiva", "cabin-business"], ["Primeira", "cabin-first"]];
@@ -385,15 +468,7 @@ function createHistoryItem(item) {
 
   const route = document.createElement("span");
   route.className = "history-item-route";
-  const from = document.createElement("strong");
-  from.textContent = item.origin;
-  const arrow = document.createElement("span");
-  arrow.className = item.roundTrip ? "route-arrow route-arrow-round-trip" : "route-arrow";
-  arrow.textContent = item.roundTrip ? "⇄" : "→";
-  arrow.title = item.roundTrip ? "Ida e volta" : "Somente ida";
-  const to = document.createElement("strong");
-  to.textContent = item.destination;
-  route.append(from, arrow, to);
+  appendRoute(route, item.origin, item.destination, item.roundTrip);
 
   main.append(programTag, route);
 
@@ -426,11 +501,13 @@ function createHistoryItem(item) {
 
   right.append(time, relative);
 
+  const spokenRoute = `${item.origin} para ${item.destination}${item.roundTrip ? ", ida e volta" : ""}`;
   const repeatButton = document.createElement("button");
   repeatButton.type = "button";
   repeatButton.className = "repeat-search-button";
   repeatButton.title = "Preencher a busca com esse trecho";
-  repeatButton.textContent = "↻";
+  repeatButton.setAttribute("aria-label", `Repetir a busca ${spokenRoute}`);
+  repeatButton.innerHTML = ICONS.repeat;
   repeatButton.addEventListener("click", () => repeatSearch(item));
 
   // A round-trip entry that came from two entries deletes both, or the leftover
@@ -439,8 +516,17 @@ function createHistoryItem(item) {
   deleteButton.type = "button";
   deleteButton.className = "delete-item-button";
   deleteButton.title = "Remover este trecho do histórico";
-  deleteButton.textContent = "✕";
-  deleteButton.addEventListener("click", () => removeFromHistory(item.timestamps || [item.timestamp]));
+  deleteButton.setAttribute("aria-label", `Remover ${spokenRoute} do histórico`);
+  deleteButton.innerHTML = ICONS.close;
+  deleteButton.addEventListener("click", () =>
+    removeWithUndo({
+      kind: "history",
+      message: `${item.origin} → ${item.destination} removido do histórico`,
+      element: row,
+      returnFocusTo: deleteButton,
+      commit: () => removeFromHistory(item.timestamps || [item.timestamp]),
+    }),
+  );
 
   row.append(main, cabins, right, repeatButton, deleteButton);
   return row;
@@ -452,9 +538,70 @@ clearHistoryButton.addEventListener("click", () => {
   renderHistory();
 });
 
+const announcer = document.getElementById("announcer");
+
+// A notice that was display:none when its text changed is not read by screen
+// readers, so messages also go through this live region, which never hides.
+function announce(message) {
+  announcer.textContent = "";
+  setTimeout(() => (announcer.textContent = message), 50);
+}
+
+const UNDO_MS = 6000;
+const toastEl = document.getElementById("toast");
+const toastTextEl = toastEl.querySelector(".toast-text");
+const toastUndoButton = toastEl.querySelector(".toast-undo");
+let pendingRemoval = null;
+
+// Removing only becomes final when the toast expires, so a click on the wrong
+// Remover can be taken back. A new removal finalizes the previous one first.
+function removeWithUndo({ kind, message, element, returnFocusTo, commit }) {
+  finishPendingRemoval();
+  // The focused button disappears with its element; a keyboard user would be
+  // dropped at the top of the page, so focus waits on Desfazer instead.
+  const focusWasInside = element.contains(document.activeElement);
+  element.hidden = true;
+  pendingRemoval = {
+    kind,
+    element,
+    returnFocusTo,
+    commit,
+    panel: element.closest('[role="tabpanel"]'),
+    timer: setTimeout(finishPendingRemoval, UNDO_MS),
+  };
+  toastTextEl.textContent = message;
+  toastEl.hidden = false;
+  if (focusWasInside) toastUndoButton.focus();
+  announce(`${message}. Use Desfazer para trazer de volta.`);
+}
+
+function finishPendingRemoval() {
+  if (!pendingRemoval) return;
+  const { commit, timer, panel } = pendingRemoval;
+  pendingRemoval = null;
+  clearTimeout(timer);
+  const undoHadFocus = toastEl.contains(document.activeElement);
+  toastEl.hidden = true;
+  commit();
+  if (undoHadFocus) panel?.focus();
+}
+
+toastUndoButton.addEventListener("click", () => {
+  if (!pendingRemoval) return;
+  const { element, returnFocusTo, timer } = pendingRemoval;
+  pendingRemoval = null;
+  clearTimeout(timer);
+  toastEl.hidden = true;
+  element.hidden = false;
+  returnFocusTo.focus();
+});
+
+window.addEventListener("pagehide", finishPendingRemoval);
+
 function showNotice(noticeEl, message) {
   noticeEl.textContent = message;
   noticeEl.hidden = false;
+  announce(message);
 }
 
 function clearNotice(noticeEl) {
@@ -463,18 +610,22 @@ function clearNotice(noticeEl) {
 }
 
 function updateBar(barEl, fraction) {
-  barEl.style.width = `${Math.min(Math.round(fraction * 100), 100)}%`;
+  barEl.style.transform = `scaleX(${Math.min(Math.max(fraction, 0), 1)})`;
 }
+
+let cardCount = 0;
 
 // Every search gets its own card, so several run in parallel without one
 // disturbing another's progress or result.
-function createJobCard(queueEl, routeTitle) {
+// `title` names the program; `detail` (cabin, passengers) only when it tells
+// two cards of the same route apart.
+function createJobCard(queueEl, { program, detail, origin, destination, roundTrip }) {
   const fragment = jobTemplate.content.cloneNode(true);
   const root = fragment.querySelector(".search-job");
 
   const card = {
     root,
-    routeEl: root.querySelector(".job-route"),
+    spokenTitle: `${program}${detail ? ` (${detail})` : ""}, ${origin} para ${destination}${roundTrip ? ", ida e volta" : ""}`,
     statusEl: root.querySelector(".job-status"),
     progressEl: root.querySelector(".progress"),
     progressLabelEl: root.querySelector(".progress-label"),
@@ -499,17 +650,33 @@ function createJobCard(queueEl, routeTitle) {
     copyLegs: [],
   };
 
-  card.routeEl.textContent = routeTitle;
+  root.querySelector(".job-program-name").textContent = program;
+  const detailEl = root.querySelector(".job-detail");
+  detailEl.textContent = detail || "";
+  detailEl.hidden = !detail;
+  appendRoute(root.querySelector(".job-route"), origin, destination, roundTrip);
 
+  const cardId = `card-${++cardCount}`;
+  const [datesTab, upgradeTab] = card.subtabButtons;
+  datesTab.id = `${cardId}-dates-tab`;
+  upgradeTab.id = `${cardId}-upgrade-tab`;
+  card.resultEl.id = `${cardId}-dates`;
+  card.upgradeSubpanelEl.id = `${cardId}-upgrade`;
+  datesTab.setAttribute("aria-controls", card.resultEl.id);
+  upgradeTab.setAttribute("aria-controls", card.upgradeSubpanelEl.id);
+  card.resultEl.setAttribute("aria-labelledby", datesTab.id);
+  card.upgradeSubpanelEl.setAttribute("aria-labelledby", upgradeTab.id);
+
+  const selectSubtab = (button) => {
+    markSelectedTab(card.subtabButtons, button);
+    const subtab = button.dataset.subtab;
+    card.resultEl.hidden = subtab !== "dates";
+    card.upgradeSubpanelEl.hidden = subtab !== "upgrade";
+    if (subtab === "upgrade") renderUpgrade(card);
+  };
   card.subtabButtons.forEach((button) => {
-    button.addEventListener("click", () => {
-      card.subtabButtons.forEach((other) => other.classList.remove("active"));
-      button.classList.add("active");
-      const subtab = button.dataset.subtab;
-      card.resultEl.hidden = subtab !== "dates";
-      card.upgradeSubpanelEl.hidden = subtab !== "upgrade";
-      if (subtab === "upgrade") renderUpgrade(card);
-    });
+    button.addEventListener("click", () => selectSubtab(button));
+    button.addEventListener("keydown", (event) => onTabListKeydown(event, card.subtabButtons, selectSubtab));
   });
 
   card.setStatus = (text, className) => {
@@ -519,6 +686,10 @@ function createJobCard(queueEl, routeTitle) {
     // A search ending in error never reaches updateCardActions: without this the
     // card is a dead block with no Remove or Minimize until a reload.
     if (className === "status-error") card.actionsEl.hidden = false;
+    // Cards restored on page load would read out a burst of "Pronto".
+    if (!card.restored && (className === "status-done" || className === "status-error")) {
+      announce(`${card.spokenTitle}: ${text}`);
+    }
   };
 
   card.copyOutboundButton.addEventListener("click", () => copyLeg(card, 0, card.copyOutboundButton, "Copiar ida"));
@@ -553,18 +724,25 @@ function createJobCard(queueEl, routeTitle) {
       }
     } catch (err) {
       card.stopButton.disabled = false;
-      card.noticeEl.textContent = err.message || "Falha ao parar a busca.";
-      card.noticeEl.hidden = false;
+      showNotice(card.noticeEl, err.message || "Falha ao parar a busca.");
     }
   });
 
   // Remove takes the card off the screen AND out of storage; otherwise it would
   // come back on the next reload, which is exactly what persistence does.
-  card.removeButton.addEventListener("click", () => {
-    const id = root.dataset.searchId;
-    if (id) saveSearches(loadSearches().filter((search) => search.id !== id));
-    root.remove();
-  });
+  card.removeButton.addEventListener("click", () =>
+    removeWithUndo({
+      kind: "search",
+      message: `Busca ${card.spokenTitle} removida`,
+      element: root,
+      returnFocusTo: card.removeButton,
+      commit: () => {
+        const id = root.dataset.searchId;
+        if (id) saveSearches(loadSearches().filter((search) => search.id !== id));
+        root.remove();
+      },
+    }),
+  );
 
   queueEl.prepend(root);
   return card;
@@ -589,10 +767,65 @@ function legText(sections) {
 // share the same array.
 const excludedDates = new WeakMap();
 
-const PENCIL_ICON =
-  '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" ' +
-  'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-  '<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>';
+function svgIcon(paths, { filled = false } = {}) {
+  const paint = filled ? 'fill="currentColor" stroke="none"' : 'fill="none" stroke="currentColor"';
+  return (
+    `<svg class="icon" viewBox="0 0 24 24" width="16" height="16" ${paint} stroke-width="2" ` +
+    `stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${paths}</svg>`
+  );
+}
+
+const ICONS = {
+  pencil: svgIcon('<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/>'),
+  repeat: svgIcon('<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>'),
+  close: svgIcon('<path d="M18 6 6 18"/><path d="m6 6 12 12"/>'),
+  megaphone: svgIcon('<path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>'),
+  check: svgIcon('<path d="M20 6 9 17l-5-5"/>'),
+  sheet: svgIcon('<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/>'),
+  file: svgIcon('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>'),
+  oneWay: svgIcon('<path d="M4 12h16"/><path d="m14 6 6 6-6 6"/>'),
+  roundTrip: svgIcon('<path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/>'),
+};
+
+// The arrow is drawn, so screen readers get the words it stands for instead.
+function appendRoute(target, origin, destination, roundTrip) {
+  const from = document.createElement("strong");
+  from.textContent = origin;
+  const arrow = document.createElement("span");
+  arrow.className = "route-arrow";
+  arrow.title = roundTrip ? "Ida e volta" : "Somente ida";
+  arrow.innerHTML = roundTrip ? ICONS.roundTrip : ICONS.oneWay;
+  const spokenArrow = document.createElement("span");
+  spokenArrow.className = "visually-hidden";
+  spokenArrow.textContent = " para ";
+  arrow.append(spokenArrow);
+  const to = document.createElement("strong");
+  to.textContent = destination;
+  target.append(from, arrow, to);
+  if (roundTrip) {
+    const spokenRoundTrip = document.createElement("span");
+    spokenRoundTrip.className = "visually-hidden";
+    spokenRoundTrip.textContent = ", ida e volta";
+    target.append(spokenRoundTrip);
+  }
+}
+
+function setIconLabel(element, iconName, text) {
+  element.innerHTML = ICONS[iconName];
+  element.append(text);
+}
+
+function setAlertButtonState(button, cabinClass, state) {
+  if (state === "busy") {
+    button.textContent = "Gerando…";
+  } else if (state === "done") {
+    setIconLabel(button, "check", cabinClass);
+    button.title = "Alerta gerado";
+  } else {
+    setIconLabel(button, "megaphone", cabinClass);
+    button.removeAttribute("title");
+  }
+}
 
 function excludedOf(section) {
   return (section && excludedDates.get(section.days)) || new Set();
@@ -632,12 +865,25 @@ function keptSection(section) {
   };
 }
 
-async function copyLeg(card, index, button, originalLabel) {
+// The clipboard refuses outside a secure context or without focus; saying
+// "Copiado!" then sent an empty paste to the group.
+async function copyToClipboard(button, text, idleLabel) {
+  let copied = false;
+  try {
+    await navigator.clipboard.writeText(text);
+    copied = true;
+  } catch (err) {
+    console.error("Falha ao copiar:", err);
+  }
+  button.textContent = copied ? "Copiado!" : "Não foi possível copiar";
+  announce(copied ? "Copiado" : "Não foi possível copiar");
+  setTimeout(() => (button.textContent = idleLabel), copied ? 1500 : 4000);
+}
+
+function copyLeg(card, index, button, originalLabel) {
   const text = legText(card.copyLegs[index]);
   if (!text) return;
-  await navigator.clipboard.writeText(text);
-  button.textContent = "Copiado!";
-  setTimeout(() => (button.textContent = originalLabel), 1500);
+  copyToClipboard(button, text, originalLabel);
 }
 
 function updateCardActions(card) {
@@ -767,7 +1013,7 @@ function showQuestion(card, jobId, { id, message }) {
 
   const answer = async (proceed, button) => {
     actions.querySelectorAll("button").forEach((other) => (other.disabled = true));
-    button.textContent = "...";
+    button.textContent = "…";
     try {
       const response = await apiFetch(`/api/searches/${jobId}/answer`, {
         method: "POST",
@@ -823,6 +1069,7 @@ function runOnServer(card, body, progressLabel, session) {
     if (session) card.root.dataset.searchId = session.record.id;
 
     if (step?.result) {
+      card.restored = true;
       card.setStatus("Pronto", "status-done");
       updateBar(card.barEl, 1);
       card.progressLabelEl.textContent = "Recuperado";
@@ -873,11 +1120,11 @@ function runOnServer(card, body, progressLabel, session) {
       if (event.type === "queued") {
         card.setStatus("Na fila", "status-queued");
       } else if (event.type === "started") {
-        card.setStatus("Buscando...", "status-searching");
+        card.setStatus("Buscando…", "status-searching");
       } else if (event.type === "progress") {
         updateBar(card.barEl, event.fraction);
       } else if (event.type === "window") {
-        card.progressWindowEl.textContent = `Janela ${event.current} de ${event.total} · ${event.start} – ${event.end}`;
+        setFacts(card.progressWindowEl, [`Janela ${event.current} de ${event.total}`, `${event.start} – ${event.end}`]);
         card.noticeEl.hidden = true;
       } else if (event.type === "notice") {
         // Transient (e.g. AwardTool's rate-limit cooldown): cleared by the next window or progress.
@@ -890,7 +1137,7 @@ function runOnServer(card, body, progressLabel, session) {
       } else if (event.type === "done") {
         events.close();
         removeQuestion(card);
-        // Otherwise the label stays frozen on the last "Buscando..." after the search ends.
+        // Otherwise the label stays frozen on the last "Buscando…" after the search ends.
         card.progressLabelEl.textContent = "";
         const result = {
           result: event.legs || event.section || event.report,
@@ -959,49 +1206,27 @@ function renderUpgrade(card) {
   for (const leg of upgradeLegs) {
     const crossed = computeUpgrade(leg.business, leg.economy);
 
+    const block = createColumn(leg.label, "upgrade-leg");
+    block.querySelector(".edit-dates-button").remove();
+    block.querySelector(".date-chips").remove();
+    const body = block.querySelector(".column-body");
     // Legs without crossed dates are born closed, leaving room for the ones that have them.
-    const block = document.createElement("details");
-    block.className = "upgrade-leg";
-    block.open = crossed.length > 0;
+    setColumnExpanded(block, crossed.length > 0);
 
-    const header = document.createElement("summary");
-    header.className = "column-header";
-
-    const chevron = document.createElement("span");
-    chevron.className = "chevron";
-    chevron.setAttribute("aria-hidden", "true");
-    chevron.textContent = "›";
-    header.appendChild(chevron);
-
-    const title = document.createElement("h3");
-    title.className = "upgrade-title";
-    title.textContent = leg.label;
-    header.appendChild(title);
-
+    const copyButton = block.querySelector(".copy-button");
     if (crossed.length > 0) {
-      const copyButton = document.createElement("button");
-      copyButton.type = "button";
-      copyButton.className = "copy-button";
       copyButton.textContent = "Copiar datas";
-      copyButton.onclick = (event) => {
-        // Keeps the click on the button (inside <summary>) from also collapsing the block.
-        event.preventDefault();
-        event.stopPropagation();
-        navigator.clipboard.writeText(datesTextByMonth(crossed.map((item) => item.date)));
-        copyButton.textContent = "Copiado!";
-        setTimeout(() => (copyButton.textContent = "Copiar datas"), 1500);
-      };
-      header.appendChild(copyButton);
+      copyButton.addEventListener("click", () =>
+        copyToClipboard(copyButton, datesTextByMonth(crossed.map((item) => item.date)), "Copiar datas"),
+      );
+    } else {
+      copyButton.remove();
     }
-    block.appendChild(header);
 
-    const summary = document.createElement("p");
-    summary.className = "column-summary";
-    summary.textContent =
+    block.querySelector(".column-summary").textContent =
       crossed.length > 0
-        ? `${crossed.length} dia(s) com as duas cabines disponíveis.`
+        ? `${plural(crossed.length, "dia", "dias")} com as duas cabines disponíveis.`
         : "Nenhum dia com Executiva e Econômica juntas nesse período.";
-    block.appendChild(summary);
 
     if (crossed.length > 0) {
       const dates = document.createElement("div");
@@ -1035,7 +1260,7 @@ function renderUpgrade(card) {
         }
         dates.appendChild(rows);
       }
-      block.appendChild(dates);
+      body.appendChild(dates);
     }
 
     upgradeListEl.appendChild(block);
@@ -1052,20 +1277,23 @@ function renderColumn(columnEl, section, colorClass) {
     summaryEl.textContent = "Sem disponibilidade nesse período.";
     copyButton.hidden = true;
     editButton.hidden = true;
-    columnEl.open = false;
+    setColumnExpanded(columnEl, false);
     return;
   }
-  columnEl.open = true;
+  setColumnExpanded(columnEl, true);
 
   // Miles sources show "123K"; LATAM sends unit "BRL" and becomes "R$ 909". When
   // SeatSpy marks a day available without a price, min/max are null.
-  const format = (value) => (section.unit === "BRL" ? `R$ ${value.toLocaleString("pt-BR")}` : `${value}K`);
+  const format = (value) => (section.unit === "BRL" ? reaisFormat.format(value) : `${value}K`);
   const renderSummary = () => {
     const kept = keptSection(section);
     const removed = section.days.length - kept.days.length;
     const range = kept.min != null ? `${format(kept.min)}–${format(kept.max)}` : "Preço não informado";
-    summaryEl.textContent =
-      `${range} · ${kept.days.length} dia(s)` + (removed > 0 ? ` · ${removed} fora do alerta` : "");
+    setFacts(summaryEl, [
+      { text: range, className: "fact-lead" },
+      plural(kept.days.length, "dia", "dias"),
+      removed > 0 && { text: `${removed} fora do alerta`, className: "fact-excluded" },
+    ]);
     copyButton.disabled = kept.days.length === 0;
   };
   renderSummary();
@@ -1090,13 +1318,13 @@ function renderColumn(columnEl, section, colorClass) {
         chip.href = link;
         chip.target = "_blank";
         chip.rel = "noopener noreferrer";
-        chip.title = `Abrir a emissão de ${date} no site`;
+        chip.title = `Abrir a emissão de ${formatFullDate(date)} no site`;
       }
       if (seats > 0) {
         const seatsEl = document.createElement("small");
         seatsEl.className = "date-chip-seats";
         seatsEl.textContent = seats;
-        seatsEl.title = `${seats} vaga(s)`;
+        seatsEl.title = plural(seats, "vaga", "vagas");
         chip.appendChild(seatsEl);
       }
       row.appendChild(chip);
@@ -1105,29 +1333,24 @@ function renderColumn(columnEl, section, colorClass) {
   }
 
   copyButton.hidden = false;
-  copyButton.onclick = (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    navigator.clipboard.writeText(keptSection(section).text);
-    copyButton.textContent = "Copiado!";
-    setTimeout(() => (copyButton.textContent = "Copiar"), 1500);
-  };
+  copyButton.onclick = () => copyToClipboard(copyButton, keptSection(section).text, "Copiar");
 
   editButton.hidden = false;
-  editButton.innerHTML = PENCIL_ICON;
+  editButton.innerHTML = ICONS.pencil;
   if (!canEditDates(section)) {
     editButton.disabled = true;
     editButton.title = "Edição indisponível: as datas dessa cabine não batem com o texto do alerta.";
     return;
   }
 
+  const editorId = `${columnEl.querySelector(".column-body").id}-editor`;
   const editor = document.createElement("div");
   editor.className = "dates-editor";
   editor.hidden = true;
   editor.innerHTML = `
-    <p class="dates-editor-hint">Apague as datas que não vão no alerta. Selecione um trecho ou uma linha inteira para tirar várias de uma vez.</p>
-    <textarea class="dates-editor-text" spellcheck="false"></textarea>
-    <p class="dates-editor-error" hidden></p>
+    <p class="dates-editor-hint" id="${editorId}-hint">Apague as datas que não vão no alerta. Selecione um trecho ou uma linha inteira para tirar várias de uma vez.</p>
+    <textarea class="dates-editor-text" spellcheck="false" aria-describedby="${editorId}-hint ${editorId}-error"></textarea>
+    <p class="dates-editor-error" id="${editorId}-error" role="alert" hidden></p>
     <div class="dates-editor-actions">
       <button type="button" class="action-button dates-editor-apply">Aplicar</button>
       <button type="button" class="action-button dates-editor-restore">Restaurar todas</button>
@@ -1135,15 +1358,25 @@ function renderColumn(columnEl, section, colorClass) {
     </div>`;
   chipsEl.before(editor);
   const textArea = editor.querySelector(".dates-editor-text");
+  textArea.setAttribute("aria-label", `Datas de ${columnEl.querySelector(".column-label").textContent} que vão no alerta`);
   const errorEl = editor.querySelector(".dates-editor-error");
+  const setError = (message) => {
+    errorEl.textContent = message;
+    errorEl.hidden = !message;
+    if (message) textArea.setAttribute("aria-invalid", "true");
+    else textArea.removeAttribute("aria-invalid");
+  };
 
   const setEditing = (editing) => {
     editor.hidden = !editing;
     chipsEl.hidden = editing;
     editButton.setAttribute("aria-pressed", String(editing));
-    errorEl.hidden = true;
-    if (!editing) return;
-    columnEl.open = true;
+    setError("");
+    if (!editing) {
+      if (editor.contains(document.activeElement)) editButton.focus();
+      return;
+    }
+    setColumnExpanded(columnEl, true);
     textArea.value = keptSection(section).text;
     textArea.rows = Math.max(3, textArea.value.split("\n").length + 1);
     textArea.focus();
@@ -1152,8 +1385,8 @@ function renderColumn(columnEl, section, colorClass) {
   const apply = () => {
     const parsed = parseKeptDates(textArea.value, section);
     if (parsed.error) {
-      errorEl.textContent = parsed.error;
-      errorEl.hidden = false;
+      setError(parsed.error);
+      textArea.focus();
       return;
     }
     const excluded = new Set(section.days.map((day) => day.date).filter((date) => !parsed.kept.has(date)));
@@ -1166,16 +1399,12 @@ function renderColumn(columnEl, section, colorClass) {
     columnEl.dispatchEvent(new CustomEvent("alert-dates-changed", { bubbles: true }));
   };
 
-  editButton.onclick = (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    setEditing(editor.hidden);
-  };
+  editButton.onclick = () => setEditing(editor.hidden);
   editor.querySelector(".dates-editor-apply").onclick = apply;
   editor.querySelector(".dates-editor-cancel").onclick = () => setEditing(false);
   editor.querySelector(".dates-editor-restore").onclick = () => {
     textArea.value = section.text;
-    errorEl.hidden = true;
+    setError("");
   };
   textArea.onkeydown = (event) => {
     if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) apply();
@@ -1208,17 +1437,46 @@ function parseKeptDates(text, section) {
   return { kept };
 }
 
-function renderTapLeg(targetEl, label, report) {
-  const fragment = legTemplate.content.cloneNode(true);
-  const root = fragment.querySelector(".leg");
-  root.querySelector(".leg-title").textContent = label;
-  renderColumn(root.querySelector(".column-business"), report.business, "cabin-business");
-  renderColumn(root.querySelector(".column-economy"), report.economy, "cabin-economy");
-  targetEl.appendChild(root);
+let columnCount = 0;
+
+// A disclosure button instead of <details>: the cabin's Copiar and edit buttons
+// sit in the header, and interactive content inside <summary> is invalid; it
+// also kept them reachable while the cabin is collapsed.
+function createColumn(title, extraClass = "") {
+  const column = document.createElement("section");
+  column.className = `column ${extraClass}`.trim();
+  const bodyId = `column-${++columnCount}`;
+  column.innerHTML = `
+    <div class="column-header">
+      <h3 class="column-title">
+        <button type="button" class="column-toggle" aria-expanded="true" aria-controls="${bodyId}">
+          <span class="chevron" aria-hidden="true">›</span>
+          <span class="column-label"></span>
+        </button>
+      </h3>
+      <div class="column-actions">
+        <button type="button" class="edit-dates-button" title="Editar datas do alerta" aria-label="Editar datas do alerta" aria-pressed="false"></button>
+        <button type="button" class="copy-button">Copiar</button>
+      </div>
+    </div>
+    <div class="column-body" id="${bodyId}">
+      <p class="column-summary"></p>
+      <div class="date-chips"></div>
+    </div>`;
+  column.querySelector(".column-label").textContent = title;
+  const toggle = column.querySelector(".column-toggle");
+  toggle.addEventListener("click", () => setColumnExpanded(column, toggle.getAttribute("aria-expanded") !== "true"));
+  return column;
 }
 
-// For sources whose cabins come from the server, so columns are built on the fly.
-function renderLegSections(targetEl, label, sections) {
+function setColumnExpanded(column, expanded) {
+  column.querySelector(".column-toggle").setAttribute("aria-expanded", String(expanded));
+  column.querySelector(".column-body").hidden = !expanded;
+}
+
+// Each leg collapses on its own: with both legs on screen, reaching the return
+// used to mean scrolling the whole outbound.
+function renderLeg(targetEl, label, columnsClass, fillColumns) {
   const root = document.createElement("details");
   root.className = "leg";
   root.open = true;
@@ -1229,25 +1487,34 @@ function renderLegSections(targetEl, label, sections) {
   root.appendChild(title);
 
   const columns = document.createElement("div");
-  columns.className = "columns columns-3";
-  for (const section of sections) {
-    const column = document.createElement("details");
-    column.className = "column";
-    column.innerHTML = `
-      <summary class="column-header">
-        <span class="chevron" aria-hidden="true">›</span>
-        <h3></h3>
-        <button type="button" class="edit-dates-button" title="Editar datas do alerta" aria-label="Editar datas do alerta" aria-pressed="false"></button>
-        <button type="button" class="copy-button">Copiar</button>
-      </summary>
-      <p class="column-summary"></p>
-      <div class="date-chips"></div>`;
-    column.querySelector("h3").textContent = section.label;
-    renderColumn(column, section, section.colorClass);
-    columns.appendChild(column);
-  }
+  columns.className = columnsClass;
+  fillColumns(columns);
   root.appendChild(columns);
   targetEl.appendChild(root);
+}
+
+function renderTapLeg(targetEl, label, report) {
+  renderLeg(targetEl, label, "columns", (columns) => {
+    for (const [title, columnClass, section, colorClass] of [
+      ["Executiva", "column-business", report.business, "cabin-business"],
+      ["Econômica", "column-economy", report.economy, "cabin-economy"],
+    ]) {
+      const column = createColumn(title, columnClass);
+      columns.appendChild(column);
+      renderColumn(column, section, colorClass);
+    }
+  });
+}
+
+// For sources whose cabins come from the server, so columns are built on the fly.
+function renderLegSections(targetEl, label, sections) {
+  renderLeg(targetEl, label, "columns columns-3", (columns) => {
+    for (const section of sections) {
+      const column = createColumn(section.label, section.colorClass?.replace("cabin-", "column-"));
+      columns.appendChild(column);
+      renderColumn(column, section, section.colorClass);
+    }
+  });
 }
 
 function ceilingInMiles(input) {
@@ -1257,33 +1524,33 @@ function ceilingInMiles(input) {
 
 function showFailure(card, err) {
   card.setStatus("Erro", "status-error");
-  card.noticeEl.textContent = err.message || "Erro inesperado.";
-  card.noticeEl.hidden = false;
+  showNotice(card.noticeEl, err.message || "Erro inesperado.");
 }
 
 function showPartialNotices(card, notices) {
   if (notices.length === 0) return;
-  card.noticeEl.textContent = [...new Set(notices)].join(" ");
-  card.noticeEl.hidden = false;
+  showNotice(card.noticeEl, [...new Set(notices)].join(" "));
 }
 
 async function startTapSearch(origin, destination, roundTrip, ceilings, session) {
   session = session || newSession("tap", [origin, destination, roundTrip, ceilings]);
-  const arrow = roundTrip ? "⇄" : "→";
-  const card = createJobCard(tapQueue, `TAP: ${origin} ${arrow} ${destination}`);
+  const card = createJobCard(tapQueue, { program: "TAP", origin, destination, roundTrip });
   const partialNotices = [];
 
   try {
     const outbound = await runOnServer(
       card,
       { source: "tap", origin, destination, ceilings },
-      roundTrip ? "Buscando ida..." : "Buscando...",
+      roundTrip ? "Buscando ida…" : "Buscando…",
       session,
     );
     const outboundReport = outbound.result;
     if (outbound.appliedCeilings) {
-      card.ceilingsEl.textContent =
-        `Teto aplicado: Executiva ${outbound.appliedCeilings.businessK}K · Econômica ${outbound.appliedCeilings.economyK}K`;
+      setFacts(card.ceilingsEl, [
+        { text: "Teto aplicado", className: "fact-lead" },
+        `Executiva ${outbound.appliedCeilings.businessK}K`,
+        `Econômica ${outbound.appliedCeilings.economyK}K`,
+      ]);
       card.ceilingsEl.hidden = false;
     }
     if (outbound.partialNotice) partialNotices.push(outbound.partialNotice);
@@ -1306,7 +1573,7 @@ async function startTapSearch(origin, destination, roundTrip, ceilings, session)
       const inbound = await runOnServer(
         card,
         { source: "tap", origin: destination, destination: origin, ceilings },
-        "Buscando volta...",
+        "Buscando volta…",
         session,
       );
       returnReport = inbound.result;
@@ -1340,8 +1607,7 @@ async function startTapSearch(origin, destination, roundTrip, ceilings, session)
 // One SeatSpy search already brings both legs (and spends a single credit).
 async function startSeatspySearch(program, origin, destination, roundTrip, showSeats, session) {
   session = session || newSession("seatspy", [program, origin, destination, roundTrip, showSeats]);
-  const arrow = roundTrip ? "⇄" : "→";
-  const card = createJobCard(seatspyQueue, `${PROGRAM_LABELS[program] || program}: ${origin} ${arrow} ${destination}`);
+  const card = createJobCard(seatspyQueue, { program: PROGRAM_LABELS[program] || program, origin, destination, roundTrip });
 
   try {
     const { result: legs } = await runOnServer(
@@ -1357,9 +1623,10 @@ async function startSeatspySearch(program, origin, destination, roundTrip, showS
           economy: ceilingInMiles(seatspyEconomyCeilingInput),
           premium: ceilingInMiles(seatspyPremiumCeilingInput),
           business: ceilingInMiles(seatspyBusinessCeilingInput),
+          first: ceilingInMiles(seatspyFirstCeilingInput),
         },
       },
-      roundTrip ? "Buscando ida e volta..." : "Buscando...",
+      roundTrip ? "Buscando ida e volta…" : "Buscando…",
       session,
     );
     for (const leg of legs) {
@@ -1394,7 +1661,7 @@ function showLocalFile(card, path, label) {
   if (!path) return;
   const block = document.createElement("p");
   block.className = "spreadsheet-link";
-  block.textContent = `💾 Planilha da ${label} em ${path}`;
+  setIconLabel(block, "file", `Planilha da ${label} em ${path}`);
   card.root.appendChild(block);
 }
 
@@ -1406,7 +1673,7 @@ function showSpreadsheetLink(card, url, label) {
   link.href = url;
   link.target = "_blank";
   link.rel = "noopener";
-  link.textContent = `📊 Planilha da ${label}`;
+  setIconLabel(link, "sheet", `Planilha da ${label}`);
   block.append(link);
   card.root.appendChild(block);
 }
@@ -1414,8 +1681,7 @@ function showSpreadsheetLink(card, url, label) {
 // One direction per job (the endpoint is one-way), all three cabins together.
 async function startSmilesSearch(origin, destination, ceilings, roundTrip, period, session) {
   session = session || newSession("smiles", [origin, destination, ceilings, roundTrip, period]);
-  const arrow = roundTrip ? "⇄" : "→";
-  const card = createJobCard(smilesQueue, `Smiles: ${origin} ${arrow} ${destination}`);
+  const card = createJobCard(smilesQueue, { program: "Smiles", origin, destination, roundTrip });
   const partialNotices = [];
   const baseBody = { source: "smiles", ceilings, period };
 
@@ -1423,7 +1689,7 @@ async function startSmilesSearch(origin, destination, ceilings, roundTrip, perio
     const outbound = await runOnServer(
       card,
       { ...baseBody, origin, destination },
-      roundTrip ? "Buscando ida..." : "Buscando...",
+      roundTrip ? "Buscando ida…" : "Buscando…",
       session,
     );
     const outboundLegs = outbound.result;
@@ -1438,7 +1704,7 @@ async function startSmilesSearch(origin, destination, ceilings, roundTrip, perio
       const inbound = await runOnServer(
         card,
         { ...baseBody, origin: destination, destination: origin },
-        "Buscando volta...",
+        "Buscando volta…",
         session,
       );
       returnLegs = inbound.result;
@@ -1514,10 +1780,10 @@ function showAlertButtons(card, source, origin, destination, options) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "alert-button";
-    button.textContent = `📢 ${option.cabinClass}`;
+    setAlertButtonState(button, option.cabinClass, "idle");
     button.addEventListener("click", async () => {
       button.disabled = true;
-      button.textContent = "⏳ Gerando...";
+      setAlertButtonState(button, option.cabinClass, "busy");
       try {
         const outbound = keptSection(option.outbound);
         const inbound = keptSection(option.inbound);
@@ -1534,18 +1800,17 @@ function showAlertButtons(card, source, origin, destination, options) {
           returnText: hasDays(inbound) ? inbound.text : "",
         });
         showGeneratedAlert(card, alert);
-        button.textContent = `✓ ${option.cabinClass}`;
+        setAlertButtonState(button, option.cabinClass, "done");
       } catch (err) {
-        button.textContent = `📢 ${option.cabinClass}`;
-        card.noticeEl.textContent = err.message || "Falha ao gerar o alerta.";
-        card.noticeEl.hidden = false;
+        setAlertButtonState(button, option.cabinClass, "idle");
+        showNotice(card.noticeEl, err.message || "Falha ao gerar o alerta.");
       } finally {
         button.disabled = false;
       }
     });
-    // The alert already on screen no longer matches the dates: back to 📢 so it gets generated again.
+    // The alert already on screen no longer matches the dates: back to idle so it gets generated again.
     card.root.addEventListener("alert-dates-changed", () => {
-      if (!button.disabled) button.textContent = `📢 ${option.cabinClass}`;
+      if (!button.disabled) setAlertButtonState(button, option.cabinClass, "idle");
     });
     bar.appendChild(button);
   }
@@ -1568,14 +1833,16 @@ function alertBlock(title, images, caption) {
 
   const gallery = document.createElement("div");
   gallery.className = "alert-gallery";
-  for (const url of images) {
+  for (const [index, url] of images.entries()) {
     const link = document.createElement("a");
     link.href = url;
     link.target = "_blank";
     link.download = url.split("/").pop();
     const image = document.createElement("img");
     image.src = url;
-    image.alt = "Imagem do alerta";
+    image.width = 220;
+    image.decoding = "async";
+    image.alt = images.length > 1 ? `Card ${index + 1} de ${images.length} do alerta` : "Card do alerta";
     link.appendChild(image);
     gallery.appendChild(link);
   }
@@ -1590,11 +1857,7 @@ function alertBlock(title, images, caption) {
   copyButton.type = "button";
   copyButton.className = "copy-button";
   copyButton.textContent = "Copiar legenda";
-  copyButton.addEventListener("click", () => {
-    navigator.clipboard.writeText(caption);
-    copyButton.textContent = "Copiado!";
-    setTimeout(() => (copyButton.textContent = "Copiar legenda"), 1500);
-  });
+  copyButton.addEventListener("click", () => copyToClipboard(copyButton, caption, "Copiar legenda"));
   block.appendChild(copyButton);
 
   return block;
@@ -1651,14 +1914,14 @@ function showAaBookingShortcut(card, legs) {
 
     const dates = document.createElement("span");
     dates.className = "pair-dates";
-    dates.textContent = `${label} · ${day.date.split("-").reverse().slice(0, 2).join("/")}`;
+    setFacts(dates, [label, formatShortDate(day.date)]);
 
     const link = document.createElement("a");
     link.className = "pair-open";
     link.href = day.link;
     link.target = "_blank";
     link.rel = "noopener noreferrer";
-    link.textContent = "abrir no site";
+    link.textContent = "Abrir no site da American";
 
     row.append(value, dates, link);
     block.appendChild(row);
@@ -1677,11 +1940,16 @@ function cheapestDayWithLink(section) {
 // One cabin per search, one job per direction; no Upgrade tab (a single cabin never crosses another).
 async function startAaSearch(origin, destination, cabin, maxStops, ceiling, roundTrip, passengers = 1, session) {
   session = session || newSession("aa", [origin, destination, cabin, maxStops, ceiling, roundTrip, passengers]);
-  const arrow = roundTrip ? "⇄" : "→";
   const cabinLabel = AA_CABIN_LABELS[cabin] || cabin;
   // One passenger is the common case; the title only mentions it when there are more.
   const passengersLabel = passengers > 1 ? `, ${passengers} passageiros` : "";
-  const card = createJobCard(aaQueue, `American Airlines (${cabinLabel}${passengersLabel}): ${origin} ${arrow} ${destination}`);
+  const card = createJobCard(aaQueue, {
+    program: "American Airlines",
+    detail: `${cabinLabel}${passengersLabel}`,
+    origin,
+    destination,
+    roundTrip,
+  });
   const partialNotices = [];
   const baseBody = { source: "aa", cabin, maxStops, ceiling, passengers };
 
@@ -1689,13 +1957,13 @@ async function startAaSearch(origin, destination, cabin, maxStops, ceiling, roun
     const outbound = await runOnServer(
       card,
       { ...baseBody, origin, destination },
-      roundTrip ? "Buscando ida..." : "Buscando...",
+      roundTrip ? "Buscando ida…" : "Buscando…",
       session,
     );
     const outboundSection = outbound.result;
     if (outbound.partialNotice) partialNotices.push(outbound.partialNotice);
     renderLegSections(card.resultEl, roundTrip ? `Ida: ${origin} → ${destination}` : `${origin} → ${destination}`, [
-      { ...outboundSection, colorClass: AA_CABIN_CLASSES[cabin] },
+      { ...outboundSection, label: cabinLabel, colorClass: AA_CABIN_CLASSES[cabin] },
     ]);
     recordLegForCopy(card, [outboundSection]);
     if (!session.resuming) saveToHistory(origin, destination, "AA", false, { cabin, passengers });
@@ -1705,13 +1973,13 @@ async function startAaSearch(origin, destination, cabin, maxStops, ceiling, roun
       const inbound = await runOnServer(
         card,
         { ...baseBody, origin: destination, destination: origin },
-        "Buscando volta...",
+        "Buscando volta…",
         session,
       );
       returnSection = inbound.result;
       if (inbound.partialNotice) partialNotices.push(inbound.partialNotice);
       renderLegSections(card.resultEl, `Volta: ${destination} → ${origin}`, [
-        { ...returnSection, colorClass: AA_CABIN_CLASSES[cabin] },
+        { ...returnSection, label: cabinLabel, colorClass: AA_CABIN_CLASSES[cabin] },
       ]);
       recordLegForCopy(card, [returnSection]);
       promoteLatestToRoundTrip(origin, destination, "AA");
@@ -1767,31 +2035,23 @@ function showMilesConfirmation(card, confirmation) {
         `${pair.outboundDate} → ${pair.returnDate}`,
     )
     .join("\n");
-  copyButton.addEventListener("click", () => {
-    navigator.clipboard.writeText(text);
-    copyButton.textContent = "Copiado!";
-    setTimeout(() => (copyButton.textContent = "Copiar"), 1500);
-  });
+  copyButton.addEventListener("click", () => copyToClipboard(copyButton, text, "Copiar"));
   block.appendChild(copyButton);
   // Price near the top: it is the number people look for, and at the bottom it sat behind a year of dates.
   card.root.querySelector(".job-header").after(block);
 }
 
 function pairRow(pair) {
-  const number = (value) => value.toLocaleString("pt-BR");
-  const reais = (value) => value.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
-  const shortDate = (iso) => iso.split("-").reverse().slice(0, 2).join("/");
-
   const row = document.createElement("div");
   row.className = "pair-row";
 
   const value = document.createElement("strong");
   value.className = "pair-value";
-  value.textContent = `${number(pair.options[0].miles)} pts + R$ ${reais(pair.options[0].totalReais)}`;
+  value.textContent = `${integerFormat.format(pair.options[0].miles)} pts + ${reaisCentsFormat.format(pair.options[0].totalReais)}`;
 
   const dates = document.createElement("span");
   dates.className = "pair-dates";
-  dates.textContent = `${shortDate(pair.outboundDate)} → ${shortDate(pair.returnDate)}`;
+  dates.textContent = `${formatShortDate(pair.outboundDate)} → ${formatShortDate(pair.returnDate)}`;
 
   row.append(value, dates);
 
@@ -1801,7 +2061,7 @@ function pairRow(pair) {
     link.className = "pair-capture";
     link.href = pair.image;
     link.target = "_blank";
-    link.textContent = "print";
+    link.textContent = "Ver captura da LATAM";
     row.appendChild(link);
   }
   return row;
@@ -1838,11 +2098,11 @@ function showLatamAlertButton(card, origin, destination, legs, confirmation) {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "alert-button";
-  button.textContent = "📢 Econômica";
+  setAlertButtonState(button, "Econômica", "idle");
   button.title = "Todas as datas do calendário, com os pontos vindos dos pares confirmados";
   button.addEventListener("click", async () => {
     button.disabled = true;
-    button.textContent = "⏳ Gerando...";
+    setAlertButtonState(button, "Econômica", "busy");
     try {
       const outbound = keptSection(outboundSection);
       const inbound = keptSection(inboundSection);
@@ -1869,17 +2129,16 @@ function showLatamAlertButton(card, origin, destination, legs, confirmation) {
         returnText: hasDays(inbound) ? inbound.text : "",
       });
       showGeneratedAlert(card, alert);
-      button.textContent = "✓ Econômica";
+      setAlertButtonState(button, "Econômica", "done");
     } catch (err) {
-      button.textContent = "📢 Econômica";
-      card.noticeEl.textContent = err.message || "Falha ao gerar o alerta.";
-      card.noticeEl.hidden = false;
+      setAlertButtonState(button, "Econômica", "idle");
+      showNotice(card.noticeEl, err.message || "Falha ao gerar o alerta.");
     } finally {
       button.disabled = false;
     }
   });
   card.root.addEventListener("alert-dates-changed", () => {
-    if (!button.disabled) button.textContent = "📢 Econômica";
+    if (!button.disabled) setAlertButtonState(button, "Econômica", "idle");
   });
   bar.appendChild(button);
   card.root.querySelector(".job-header").after(bar);
@@ -1889,13 +2148,13 @@ function showLatamAlertButton(card, origin, destination, legs, confirmation) {
 // The alert comes from the miles confirmation, where the number the client pays shows up.
 async function startLatamSearch(origin, destination, ceilings, confirmMiles, session) {
   session = session || newSession("latam", [origin, destination, ceilings, confirmMiles]);
-  const card = createJobCard(latamQueue, `LATAM: ${origin} ⇄ ${destination}`);
+  const card = createJobCard(latamQueue, { program: "LATAM", origin, destination, roundTrip: true });
 
   try {
     const { result: legs, partialNotice, confirmation } = await runOnServer(
       card,
       { source: "latam", origin, destination, ceilings, confirmMiles, outboundMarginReais: 100, returnMarginReais: 300 },
-      "Buscando ida e volta...",
+      "Buscando ida e volta…",
       session,
     );
     for (const leg of legs) {
@@ -1917,15 +2176,37 @@ async function startLatamSearch(origin, destination, ceilings, confirmMiles, ses
   }
 }
 
-function repeatWarning(program, origin, destination, roundTrip) {
-  const routes = roundTrip
+function searchRoutes(origin, destination, roundTrip) {
+  return roundTrip
     ? [
         [origin, destination],
         [destination, origin],
       ]
     : [[origin, destination]];
+}
 
-  for (const [from, to] of routes) {
+// Paid searches only enter the history when they end, so without this a double
+// click on Buscar started the same paid search twice with no warning.
+const runningSearches = new Map();
+
+function trackRunning(program, origin, destination, roundTrip, search) {
+  const keys = searchRoutes(origin, destination, roundTrip).map(([from, to]) => `${program}|${from}|${to}`);
+  for (const key of keys) runningSearches.set(key, (runningSearches.get(key) || 0) + 1);
+  search.finally(() => {
+    for (const key of keys) {
+      const count = runningSearches.get(key) - 1;
+      if (count > 0) runningSearches.set(key, count);
+      else runningSearches.delete(key);
+    }
+  });
+}
+
+function repeatWarning(program, origin, destination, roundTrip) {
+  for (const [from, to] of searchRoutes(origin, destination, roundTrip)) {
+    if (runningSearches.has(`${program}|${from}|${to}`)) {
+      if (!confirm(`A busca ${from} → ${to} ainda está em andamento. Buscar de novo mesmo assim?`)) return false;
+      continue;
+    }
     const previous = latestSearchOf(from, to, program);
     if (previous && Date.now() - previous.timestamp < TOLERANCE_MS) {
       const confirmed = confirm(
@@ -1953,10 +2234,16 @@ tapForm.addEventListener("submit", (event) => {
     const value = parseFloat(input.value);
     return Number.isFinite(value) && value > 0 ? value : null;
   };
-  startTapSearch(origin, destination, roundTrip, {
-    business: inK(tapBusinessCeilingInput),
-    economy: inK(tapEconomyCeilingInput),
-  });
+  trackRunning(
+    "tap",
+    origin,
+    destination,
+    roundTrip,
+    startTapSearch(origin, destination, roundTrip, {
+      business: inK(tapBusinessCeilingInput),
+      economy: inK(tapEconomyCeilingInput),
+    }),
+  );
 });
 
 latamForm.addEventListener("submit", (event) => {
@@ -1985,8 +2272,7 @@ latamForm.addEventListener("submit", (event) => {
 // without saying which cabin it is, so there is nothing to choose.
 async function startIberiaSearch(origin, destination, ceilingAvios, roundTrip, detailDays = 0, maxStops = null, cabin = "", session) {
   session = session || newSession("iberia", [origin, destination, ceilingAvios, roundTrip, detailDays, maxStops, cabin]);
-  const arrow = roundTrip ? "⇄" : "→";
-  const card = createJobCard(iberiaQueue, `Iberia (Avios): ${origin} ${arrow} ${destination}`);
+  const card = createJobCard(iberiaQueue, { program: "Iberia", detail: "Avios", origin, destination, roundTrip });
   const partialNotices = [];
   const baseBody = { source: "iberia", ceiling: ceilingAvios, detailDays, maxStops, cabins: cabin ? [cabin] : [] };
 
@@ -1994,12 +2280,12 @@ async function startIberiaSearch(origin, destination, ceilingAvios, roundTrip, d
     const outbound = await runOnServer(
       card,
       { ...baseBody, origin, destination },
-      roundTrip ? "Buscando ida..." : "Buscando...",
+      roundTrip ? "Buscando ida…" : "Buscando…",
       session,
     );
     if (outbound.partialNotice) partialNotices.push(outbound.partialNotice);
     renderLegSections(card.resultEl, roundTrip ? `Ida: ${origin} → ${destination}` : `${origin} → ${destination}`, [
-      { ...outbound.result, colorClass: "cabin-economy" },
+      { ...outbound.result, label: "Menor preço do dia, qualquer cabine", colorClass: "" },
     ]);
     recordLegForCopy(card, [outbound.result]);
     if (!session.resuming) saveToHistory(origin, destination, "IBERIA", false, {});
@@ -2009,11 +2295,11 @@ async function startIberiaSearch(origin, destination, ceilingAvios, roundTrip, d
       inbound = await runOnServer(
         card,
         { ...baseBody, origin: destination, destination: origin },
-        "Buscando volta...",
+        "Buscando volta…",
         session,
       );
       if (inbound.partialNotice) partialNotices.push(inbound.partialNotice);
-      renderLegSections(card.resultEl, `Volta: ${destination} → ${origin}`, [{ ...inbound.result, colorClass: "cabin-economy" }]);
+      renderLegSections(card.resultEl, `Volta: ${destination} → ${origin}`, [{ ...inbound.result, label: "Menor preço do dia, qualquer cabine", colorClass: "" }]);
       recordLegForCopy(card, [inbound.result]);
       promoteLatestToRoundTrip(origin, destination, "IBERIA");
     }
@@ -2115,9 +2401,17 @@ seatspyForm.addEventListener("submit", (event) => {
     return;
   }
   if (!repeatWarning(program, origin, destination, roundTrip)) return;
-  startSeatspySearch(program, origin, destination, roundTrip, seatspyShowSeatsCheckbox.checked);
+  trackRunning(
+    program,
+    origin,
+    destination,
+    roundTrip,
+    startSeatspySearch(program, origin, destination, roundTrip, seatspyShowSeatsCheckbox.checked),
+  );
 });
 
 // Runs last: every source's functions and form elements must already exist.
 migrateLegacyHistory();
+const tabFromUrl = location.hash.slice(1);
+if (Object.hasOwn(panels, tabFromUrl)) activateTab(tabFromUrl);
 restoreSearches();

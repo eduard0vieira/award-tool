@@ -13,6 +13,9 @@ import { issueSession, isValidSession, SESSION_TTL_MS, sessionUserId } from "./s
 
 const COOKIE = "bot_session";
 const PUBLIC_PATHS = new Set(["/login", "/login.js", "/styles.css", "/favicon.svg", "/api/login", "/api/logout"]);
+// A strict pattern, not a "/fonts/" prefix: "/fonts/../index.html" would pass a
+// prefix check, and the static server normalizes it into the protected page.
+const PUBLIC_FONT = /^\/fonts\/[a-z0-9-]+\.woff2$/;
 const FAILED_LOGIN_DELAY_MS = 1000;
 
 // Kept on disk so a restart (every update on the always-on machine) does not log
@@ -82,7 +85,7 @@ export function createAuth(prisma: PrismaClient, machineCredentials: Credentials
   };
 
   const guard = async (req: Request, res: Response, next: NextFunction) => {
-    if (PUBLIC_PATHS.has(req.path)) return next();
+    if (PUBLIC_PATHS.has(req.path) || PUBLIC_FONT.test(req.path)) return next();
     if (machineCredentials && basicAuthOk(req.headers.authorization, machineCredentials)) {
       setActor(req, { kind: "machine" });
       return next();
