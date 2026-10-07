@@ -109,7 +109,13 @@ export async function startAaSession(headless = false): Promise<AaSession> {
   const session = await openChromeSession(headless, "AA");
 
   // Warm-up: without the home page first, Akamai answers 403 on /booking URLs.
-  await session.page.goto("https://www.aa.com/", { waitUntil: "domcontentloaded", timeout: 60000 });
+  // The explicit locale matters: a profile without AA cookies, from a Brazilian
+  // IP, is sent from www.aa.com/ to aa.com.br, whose page reloads itself a few
+  // seconds later and aborts the deep link's navigation (net::ERR_ABORTED).
+  await session.page.goto("https://www.aa.com/homePage.do?locale=en_US", {
+    waitUntil: "domcontentloaded",
+    timeout: 60000,
+  });
   await session.page.waitForTimeout(4000);
 
   if (/access denied/i.test(await session.page.title())) {
