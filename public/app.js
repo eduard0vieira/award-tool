@@ -1900,7 +1900,7 @@ async function startAaSearch(origin, destination, cabin, maxStops, ceiling, roun
     const outboundSection = outbound.result;
     if (outbound.partialNotice) partialNotices.push(outbound.partialNotice);
     renderLegSections(card.resultEl, roundTrip ? `Ida: ${origin} → ${destination}` : `${origin} → ${destination}`, [
-      { ...outboundSection, colorClass: AA_CABIN_CLASSES[cabin] },
+      { ...outboundSection, label: cabinLabel, colorClass: AA_CABIN_CLASSES[cabin] },
     ]);
     recordLegForCopy(card, [outboundSection]);
     if (!session.resuming) saveToHistory(origin, destination, "AA", false, { cabin, passengers });
@@ -1916,7 +1916,7 @@ async function startAaSearch(origin, destination, cabin, maxStops, ceiling, roun
       returnSection = inbound.result;
       if (inbound.partialNotice) partialNotices.push(inbound.partialNotice);
       renderLegSections(card.resultEl, `Volta: ${destination} → ${origin}`, [
-        { ...returnSection, colorClass: AA_CABIN_CLASSES[cabin] },
+        { ...returnSection, label: cabinLabel, colorClass: AA_CABIN_CLASSES[cabin] },
       ]);
       recordLegForCopy(card, [returnSection]);
       promoteLatestToRoundTrip(origin, destination, "AA");
@@ -2223,7 +2223,7 @@ async function startIberiaSearch(origin, destination, ceilingAvios, roundTrip, d
     );
     if (outbound.partialNotice) partialNotices.push(outbound.partialNotice);
     renderLegSections(card.resultEl, roundTrip ? `Ida: ${origin} → ${destination}` : `${origin} → ${destination}`, [
-      { ...outbound.result, colorClass: "cabin-economy" },
+      { ...outbound.result, label: "Menor preço do dia, qualquer cabine", colorClass: "" },
     ]);
     recordLegForCopy(card, [outbound.result]);
     if (!session.resuming) saveToHistory(origin, destination, "IBERIA", false, {});
@@ -2237,7 +2237,7 @@ async function startIberiaSearch(origin, destination, ceilingAvios, roundTrip, d
         session,
       );
       if (inbound.partialNotice) partialNotices.push(inbound.partialNotice);
-      renderLegSections(card.resultEl, `Volta: ${destination} → ${origin}`, [{ ...inbound.result, colorClass: "cabin-economy" }]);
+      renderLegSections(card.resultEl, `Volta: ${destination} → ${origin}`, [{ ...inbound.result, label: "Menor preço do dia, qualquer cabine", colorClass: "" }]);
       recordLegForCopy(card, [inbound.result]);
       promoteLatestToRoundTrip(origin, destination, "IBERIA");
     }
