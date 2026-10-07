@@ -1203,6 +1203,16 @@ select {
   font-weight: 600;
 }
 
+.alert-caption-label {
+  margin-top: var(--e4);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.alert-caption-label + .alert-caption {
+  margin-top: var(--e1);
+}
+
 .alert-caption {
   max-width: 80ch;
   margin: var(--e3) 0;

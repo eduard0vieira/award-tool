@@ -49,7 +49,28 @@ export type GeneratedAlert = {
   // both directions cross (see RenderAlerta.jsx in the portal).
   comboImage?: string;
   comboCaption?: string;
+  // Only when the alert has return dates. The error says why it could not be
+  // built, so a missing return caption never looks like a one-way alert.
+  returnCaption?: string;
+  returnCaptionError?: string;
 };
+
+// The portal writes only the outbound caption. The return one is the same text
+// with the route line mirrored, keeping the portal's rule that the bold closes
+// before the last flag (some WhatsApp clients ignore "*" right after an emoji).
+const ROUTE_LINE = /^✈️ \*(.+) \(([A-Z]{3})\) (\S+) - (.+) \(([A-Z]{3})\)\* (\S+)$/u;
+
+export function mirrorCaption(caption: string): string {
+  const [first = "", ...rest] = caption.split("\n");
+  const match = first.match(ROUTE_LINE);
+  if (!match) {
+    throw new Error(`A legenda do portal mudou de formato e a da volta não pôde ser montada. Primeira linha: "${first}"`);
+  }
+  const [, originCity, origin, originFlag, destinationCity, destination, destinationFlag] = match;
+  return [`✈️ *${destinationCity} (${destination}) ${destinationFlag} - ${originCity} (${origin})* ${originFlag}`, ...rest].join(
+    "\n",
+  );
+}
 
 // The portal's own route shape, read by its ?render page.
 function portalRoute(request: AlertRequest) {
@@ -144,6 +165,14 @@ export async function generateAlert(
       images,
       caption: (await page.locator("#render-legenda").textContent()) ?? "",
     };
+    if (request.returnText) {
+      try {
+        alert.returnCaption = mirrorCaption(alert.caption);
+      } catch (err) {
+        console.error(err);
+        alert.returnCaptionError = (err as Error).message;
+      }
+    }
 
     const comboCard = page.locator("#render-combo");
     if (await comboCard.count()) {

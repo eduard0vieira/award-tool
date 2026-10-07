@@ -1828,7 +1828,29 @@ function showAlertButtons(card, source, origin, destination, options) {
 }
 
 // An "images + caption + copy" block, used for the main alert and the combinations one.
-function alertBlock(title, images, caption) {
+function appendCaption(block, label, caption) {
+  if (label) {
+    const labelEl = document.createElement("div");
+    labelEl.className = "alert-caption-label";
+    labelEl.textContent = label;
+    block.appendChild(labelEl);
+  }
+
+  const captionEl = document.createElement("pre");
+  captionEl.className = "alert-caption";
+  captionEl.textContent = caption;
+  block.appendChild(captionEl);
+
+  const copyButton = document.createElement("button");
+  copyButton.type = "button";
+  copyButton.className = "copy-button";
+  const idleLabel = label ? `Copiar ${label.toLowerCase()}` : "Copiar legenda";
+  copyButton.textContent = idleLabel;
+  copyButton.addEventListener("click", () => copyToClipboard(copyButton, caption, idleLabel));
+  block.appendChild(copyButton);
+}
+
+function alertBlock(title, images, caption, { returnCaption, returnCaptionError } = {}) {
   const block = document.createElement("div");
   block.className = "alert-result";
 
@@ -1856,26 +1878,24 @@ function alertBlock(title, images, caption) {
   }
   block.appendChild(gallery);
 
-  const captionEl = document.createElement("pre");
-  captionEl.className = "alert-caption";
-  captionEl.textContent = caption;
-  block.appendChild(captionEl);
-
-  const copyButton = document.createElement("button");
-  copyButton.type = "button";
-  copyButton.className = "copy-button";
-  copyButton.textContent = "Copiar legenda";
-  copyButton.addEventListener("click", () => copyToClipboard(copyButton, caption, "Copiar legenda"));
-  block.appendChild(copyButton);
+  const hasReturn = Boolean(returnCaption || returnCaptionError);
+  appendCaption(block, hasReturn ? "Legenda da ida" : "", caption);
+  if (returnCaption) appendCaption(block, "Legenda da volta", returnCaption);
+  if (returnCaptionError) {
+    const error = document.createElement("p");
+    error.className = "notice";
+    error.textContent = returnCaptionError;
+    block.appendChild(error);
+  }
 
   return block;
 }
 
-function showGeneratedAlert(card, { images, caption, comboImage, comboCaption }) {
+function showGeneratedAlert(card, { images, caption, comboImage, comboCaption, returnCaption, returnCaptionError }) {
   // Combos only come when outbound and return dates cross: the alert sent after
   // the main one, with the combinations ready.
   const hasCombo = Boolean(comboImage);
-  insertAfterAlert(card, alertBlock(hasCombo ? "Alerta principal" : "", images, caption));
+  insertAfterAlert(card, alertBlock(hasCombo ? "Alerta principal" : "", images, caption, { returnCaption, returnCaptionError }));
   if (hasCombo) insertAfterAlert(card, alertBlock("Combinações ida + volta", [comboImage], comboCaption || ""));
 }
 
