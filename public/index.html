@@ -12,7 +12,10 @@
   <main>
     <header class="app-header">
       <h1><img class="brand-mark" src="/favicon.svg" alt="" width="28" height="28" /> Bot de Emissões <span class="version">v1</span></h1>
-      <button type="button" id="logout-button" class="action-button">Sair</button>
+      <div class="session">
+        <span id="current-user" class="current-user" hidden></span>
+        <button type="button" id="logout-button" class="action-button">Sair</button>
+      </div>
     </header>
 
     <div class="tabs" role="tablist" aria-label="Programas">
@@ -338,10 +341,9 @@
     <section id="panel-history" class="panel" role="tabpanel" aria-labelledby="tab-history" tabindex="-1" hidden>
       <div id="history-top" class="history-top" hidden>
         <p id="history-summary" class="history-summary"></p>
-        <button type="button" id="clear-history-button" class="clear-button">Limpar histórico</button>
       </div>
       <p id="history-notice" class="notice" hidden></p>
-      <p id="history-empty" class="history-empty" hidden>Nenhum trecho pesquisado ainda. As buscas feitas nas abas de cada programa aparecem aqui.</p>
+      <p id="history-empty" class="history-empty" hidden>Nenhum trecho pesquisado ainda. As buscas de todo mundo, feitas nas abas de cada programa, aparecem aqui.</p>
       <div id="history-list" class="history-list"></div>
     </section>
   </main>

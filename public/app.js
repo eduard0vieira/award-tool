@@ -8,6 +8,16 @@ async function apiFetch(url, options) {
   return response;
 }
 
+const currentUserEl = document.getElementById("current-user");
+apiFetch("/api/me")
+  .then((response) => response.json())
+  .then(({ username }) => {
+    currentUser = username;
+    currentUserEl.textContent = username || "";
+    currentUserEl.hidden = !username;
+  })
+  .catch((err) => console.error("Não foi possível saber quem está logado:", err));
+
 document.getElementById("logout-button").addEventListener("click", async () => {
   try {
     const response = await fetch("/api/logout", { method: "POST" });
@@ -102,12 +112,9 @@ const historyList = document.getElementById("history-list");
 const historyEmpty = document.getElementById("history-empty");
 const historyTop = document.getElementById("history-top");
 const historySummary = document.getElementById("history-summary");
-const clearHistoryButton = document.getElementById("clear-history-button");
 const historyNotice = document.getElementById("history-notice");
 
 const MONTHS_PT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
-const HISTORY_KEY = "awardtool.history.v2";
-const LEGACY_HISTORY_KEY = "awardtool_historico";
 const TOLERANCE_DAYS = 5;
 const TOLERANCE_MS = TOLERANCE_DAYS * 24 * 60 * 60 * 1000;
 
@@ -176,57 +183,39 @@ function activateTab(tab) {
 
 // The history used to live under another key with Portuguese fields. It is
 // moved once, then the old key goes away so clearing the history cannot bring it back.
-function migrateLegacyHistory() {
-  const legacyAaCabins = { economica: "economy", premium: "premium", executiva: "business", primeira: "first" };
-  try {
-    const legacy = JSON.parse(localStorage.getItem(LEGACY_HISTORY_KEY));
-    if (!Array.isArray(legacy)) return;
-    const migrated = legacy.map((item) => ({
-      origin: item.origem,
-      destination: item.destino,
-      program: item.programa || "tap",
-      roundTrip: Boolean(item.idaEVolta),
-      ...(item.cabine ? { cabin: legacyAaCabins[item.cabine] || item.cabine } : {}),
-      ...(item.passageiros ? { passengers: item.passageiros } : {}),
-      timestamp: item.timestamp,
-    }));
-    localStorage.setItem(HISTORY_KEY, JSON.stringify([...loadHistory(), ...migrated]));
-    localStorage.removeItem(LEGACY_HISTORY_KEY);
-  } catch (err) {
-    console.error("Não consegui migrar o histórico antigo:", err);
-  }
+// The history is the server's: every search anyone ran, kept in its database.
+const PROGRAM_BY_SOURCE = { tap: "tap", aa: "AA", latam: "LATAM", smiles: "SMILES", iberia: "IBERIA" };
+// Failed and cancelled searches stay on the server, but nobody has dates from them.
+const LISTED_STATUSES = new Set(["queued", "running", "done", "partial"]);
+let currentUser = null;
+
+function historyItemFrom(row) {
+  return {
+    id: row.id,
+    program: row.source === "seatspy" ? row.request.airline : PROGRAM_BY_SOURCE[row.source] || row.source,
+    origin: row.origin,
+    destination: row.destination,
+    roundTrip: row.source === "latam" || (row.source === "seatspy" && row.request.roundTrip === true),
+    cabin: row.request.cabin,
+    passengers: row.request.passengers,
+    user: row.user,
+    status: row.status,
+    timestamp: Date.parse(row.createdAt),
+  };
 }
 
-function loadHistory() {
-  try {
-    return JSON.parse(localStorage.getItem(HISTORY_KEY)) || [];
-  } catch {
-    return [];
+async function loadHistory() {
+  const response = await apiFetch("/api/history?limit=200");
+  const body = await response.json().catch(() => null);
+  if (!response.ok || !Array.isArray(body)) {
+    throw new Error(body?.error || "Não foi possível carregar o histórico do servidor.");
   }
-}
-
-function saveToHistory(origin, destination, program, roundTrip = false, extras = {}) {
-  const history = loadHistory();
-  history.push({ origin, destination, program, roundTrip, ...extras, timestamp: Date.now() });
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
-}
-
-// Legs that run in sequence enter the history as soon as the outbound ends; if
-// the return also completes, the entry becomes a round trip instead of two entries.
-function promoteLatestToRoundTrip(origin, destination, program) {
-  const history = loadHistory();
-  const latest = history
-    .filter((item) => item.origin === origin && item.destination === destination && item.program === program)
-    .reduce((newest, item) => (!newest || item.timestamp > newest.timestamp ? item : newest), null);
-  if (latest) {
-    latest.roundTrip = true;
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
-  }
+  return body.filter((row) => LISTED_STATUSES.has(row.status)).map(historyItemFrom);
 }
 
 // A round-trip entry covers both directions of the route.
-function latestSearchOf(origin, destination, program) {
-  const sameRoute = loadHistory().filter(
+function latestSearchOf(history, origin, destination, program) {
+  const sameRoute = history.filter(
     (item) =>
       item.program === program &&
       ((item.origin === origin && item.destination === destination) ||
@@ -234,6 +223,11 @@ function latestSearchOf(origin, destination, program) {
   );
   if (sameRoute.length === 0) return null;
   return sameRoute.reduce((newest, item) => (item.timestamp > newest.timestamp ? item : newest));
+}
+
+function whoSearched(item) {
+  if (!item.user) return "";
+  return item.user === currentUser ? "você" : item.user;
 }
 
 // Facts sit side by side with space between them instead of " · " joins.
@@ -344,9 +338,9 @@ function repeatSearch(item) {
   }
 }
 
-// Older history kept both legs apart (A→B and B→A). Those pairs (same program,
+// The server keeps each leg apart (A→B and B→A). Those pairs (same program,
 // opposite directions, up to 3h apart) show as one ⇄ entry, with the outbound's
-// direction and the time the return ended.
+// direction and the time the return started.
 function groupForDisplay(history) {
   const PAIR_WINDOW_MS = 3 * 60 * 60 * 1000;
   const used = new Set();
@@ -371,27 +365,25 @@ function groupForDisplay(history) {
         used.add(j);
         // The older entry of the pair is the outbound: it sets the direction shown.
         const outbound = history[j];
-        // `timestamps` is the delete key: a merged pair deletes both entries.
-        display.push({ ...outbound, roundTrip: true, timestamp: item.timestamp, timestamps: [outbound.timestamp, item.timestamp] });
+        display.push({ ...outbound, roundTrip: true, timestamp: item.timestamp });
         continue;
       }
     }
-    display.push({ ...item, timestamps: [item.timestamp] });
+    display.push(item);
   }
   return display;
 }
 
-function removeFromHistory(timestamps) {
-  const targets = new Set(timestamps);
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(loadHistory().filter((item) => !targets.has(item.timestamp))));
-  renderHistory();
-}
-
-function renderHistory() {
-  // A re-render would bring back the row hidden while its undo is pending.
-  if (pendingRemoval?.kind === "history") finishPendingRemoval();
+async function renderHistory() {
   clearNotice(historyNotice);
-  const history = groupForDisplay(loadHistory().slice().sort((a, b) => b.timestamp - a.timestamp));
+  let items;
+  try {
+    items = await loadHistory();
+  } catch (err) {
+    showNotice(historyNotice, err.message);
+    return;
+  }
+  const history = groupForDisplay(items.sort((a, b) => b.timestamp - a.timestamp));
   historyList.innerHTML = "";
   historyEmpty.hidden = history.length > 0;
   historyTop.hidden = history.length === 0;
@@ -406,8 +398,10 @@ function renderHistory() {
     }),
   ).size;
   const withinTolerance = history.filter((item) => Date.now() - item.timestamp < TOLERANCE_MS).length;
+  const people = new Set(history.map((item) => item.user).filter(Boolean)).size;
   setFacts(historySummary, [
     plural(history.length, "busca", "buscas"),
+    people > 0 && plural(people, "pessoa", "pessoas"),
     plural(uniqueRoutes, "trecho diferente", "trechos diferentes"),
     `${withinTolerance} dentro da tolerância de ${TOLERANCE_DAYS} dias`,
     `última ${formatRelativeTime(history[0].timestamp)}`,
@@ -472,6 +466,20 @@ function createHistoryItem(item) {
 
   main.append(programTag, route);
 
+  const who = whoSearched(item);
+  if (who) {
+    const user = document.createElement("span");
+    user.className = "history-item-user";
+    user.textContent = `por ${who}`;
+    main.appendChild(user);
+  }
+  if (item.status === "partial" || item.status === "running" || item.status === "queued") {
+    const status = document.createElement("span");
+    status.className = `history-item-status status-${item.status}`;
+    status.textContent = item.status === "partial" ? "parcial" : "em andamento";
+    main.appendChild(status);
+  }
+
   if (Date.now() - item.timestamp < TOLERANCE_MS) {
     const dot = document.createElement("span");
     dot.className = "recent-dot";
@@ -510,33 +518,9 @@ function createHistoryItem(item) {
   repeatButton.innerHTML = ICONS.repeat;
   repeatButton.addEventListener("click", () => repeatSearch(item));
 
-  // A round-trip entry that came from two entries deletes both, or the leftover
-  // half would reappear on its own.
-  const deleteButton = document.createElement("button");
-  deleteButton.type = "button";
-  deleteButton.className = "delete-item-button";
-  deleteButton.title = "Remover este trecho do histórico";
-  deleteButton.setAttribute("aria-label", `Remover ${spokenRoute} do histórico`);
-  deleteButton.innerHTML = ICONS.close;
-  deleteButton.addEventListener("click", () =>
-    removeWithUndo({
-      kind: "history",
-      message: `${item.origin} → ${item.destination} removido do histórico`,
-      element: row,
-      returnFocusTo: deleteButton,
-      commit: () => removeFromHistory(item.timestamps || [item.timestamp]),
-    }),
-  );
-
-  row.append(main, cabins, right, repeatButton, deleteButton);
+  row.append(main, cabins, right, repeatButton);
   return row;
 }
-
-clearHistoryButton.addEventListener("click", () => {
-  if (!confirm("Apagar todo o histórico de buscas? Isso não pode ser desfeito.")) return;
-  localStorage.removeItem(HISTORY_KEY);
-  renderHistory();
-});
 
 const announcer = document.getElementById("announcer");
 
@@ -682,7 +666,8 @@ function createJobCard(queueEl, { program, detail, origin, destination, roundTri
   card.setStatus = (text, className) => {
     card.statusEl.textContent = text;
     card.statusEl.className = `job-status ${className}`;
-    card.stopButton.hidden = className === "status-done" || className === "status-error";
+    // A shared job is someone else's search too: stopping it would stop theirs.
+    card.stopButton.hidden = card.sharedJob || className === "status-done" || className === "status-error";
     // A search ending in error never reaches updateCardActions: without this the
     // card is a dead block with no Remove or Minimize until a reload.
     if (className === "status-error") card.actionsEl.hidden = false;
@@ -1052,6 +1037,24 @@ function removeQuestion(card) {
 
 // Runs one step over SSE and resolves with its final result. Only this search's
 // card is touched; cards running in parallel are unaffected.
+// The result came from someone's recent identical search; one click runs the
+// whole search again with data from now.
+function offerFreshSearch(card, session) {
+  if (card.freshSearchButton) return;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "action-button fresh-search-button";
+  button.textContent = "Buscar de novo";
+  button.addEventListener("click", () => {
+    button.disabled = true;
+    const fresh = newSession(session.record.source, session.record.args);
+    fresh.forceFresh = true;
+    RESUME_BY_SOURCE[session.record.source](...session.record.args, fresh);
+  });
+  card.freshSearchButton = button;
+  card.noticeEl.after(button);
+}
+
 function runOnServer(card, body, progressLabel, session) {
   return new Promise(async (resolve, reject) => {
     card.progressLabelEl.textContent = progressLabel;
@@ -1092,7 +1095,9 @@ function runOnServer(card, body, progressLabel, session) {
         response = await apiFetch("/api/searches", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
+          // A recent identical search comes back instead of a new one, unless
+          // this is the "Buscar de novo" of such a result.
+          body: JSON.stringify({ ...body, reuseRecent: !session?.forceFresh }),
         });
       } catch {
         reject(new Error("Não foi possível conectar ao servidor."));
@@ -1105,8 +1110,16 @@ function runOnServer(card, body, progressLabel, session) {
         return;
       }
 
-      ({ jobId } = await response.json());
+      const started = await response.json();
+      jobId = started.jobId;
       card.root.dataset.jobId = jobId;
+      if (started.joined) {
+        card.sharedJob = true;
+        card.stopButton.hidden = true;
+        const by = started.joined.by && started.joined.by !== currentUser ? `, pedida por ${started.joined.by}` : "";
+        showNotice(card.noticeEl, `Essa mesma busca já estava rodando${by}. Acompanhando ela em vez de buscar de novo.`);
+      }
+      if (started.reused && session) offerFreshSearch(card, session);
       if (session) {
         session.record.steps[session.index - 1] = { jobId };
         persistSession(session);
@@ -1561,7 +1574,6 @@ async function startTapSearch(origin, destination, roundTrip, ceilings, session)
       { label: "Executiva", ...outboundReport.business },
       { label: "Econômica", ...outboundReport.economy },
     ]);
-    if (!session.resuming) saveToHistory(origin, destination, "tap");
 
     // When you stopped the outbound (empty windows usually mean the source is
     // down), the return does not start: it would spend 10 more AwardTool
@@ -1585,7 +1597,6 @@ async function startTapSearch(origin, destination, roundTrip, ceilings, session)
         { label: "Executiva", ...returnReport.business },
         { label: "Econômica", ...returnReport.economy },
       ]);
-      promoteLatestToRoundTrip(origin, destination, "tap");
     }
 
     card.setStatus("Pronto", "status-done");
@@ -1633,7 +1644,6 @@ async function startSeatspySearch(program, origin, destination, roundTrip, showS
       renderLegSections(card.resultEl, leg.label, leg.sections);
       recordLegForCopy(card, leg.sections);
     }
-    if (!session.resuming) saveToHistory(origin, destination, program, roundTrip);
 
     card.setStatus("Pronto", "status-done");
     card.resultEl.hidden = false;
@@ -1696,7 +1706,6 @@ async function startSmilesSearch(origin, destination, ceilings, roundTrip, perio
     if (outbound.partialNotice) partialNotices.push(outbound.partialNotice);
     renderLegSections(card.resultEl, roundTrip ? `Ida: ${origin} → ${destination}` : `${origin} → ${destination}`, outboundLegs[0].sections);
     recordLegForCopy(card, outboundLegs[0].sections);
-    if (!session.resuming) saveToHistory(origin, destination, "SMILES", false);
 
     let returnLegs = null;
     let returnSpreadsheetUrl = null;
@@ -1712,7 +1721,6 @@ async function startSmilesSearch(origin, destination, ceilings, roundTrip, perio
       if (inbound.partialNotice) partialNotices.push(inbound.partialNotice);
       renderLegSections(card.resultEl, `Volta: ${destination} → ${origin}`, returnLegs[0].sections);
       recordLegForCopy(card, returnLegs[0].sections);
-      promoteLatestToRoundTrip(origin, destination, "SMILES");
     }
 
     card.setStatus("Pronto", "status-done");
@@ -1966,7 +1974,6 @@ async function startAaSearch(origin, destination, cabin, maxStops, ceiling, roun
       { ...outboundSection, label: cabinLabel, colorClass: AA_CABIN_CLASSES[cabin] },
     ]);
     recordLegForCopy(card, [outboundSection]);
-    if (!session.resuming) saveToHistory(origin, destination, "AA", false, { cabin, passengers });
 
     let returnSection = null;
     if (roundTrip) {
@@ -1982,7 +1989,6 @@ async function startAaSearch(origin, destination, cabin, maxStops, ceiling, roun
         { ...returnSection, label: cabinLabel, colorClass: AA_CABIN_CLASSES[cabin] },
       ]);
       recordLegForCopy(card, [returnSection]);
-      promoteLatestToRoundTrip(origin, destination, "AA");
     }
 
     card.setStatus("Pronto", "status-done");
@@ -2163,7 +2169,6 @@ async function startLatamSearch(origin, destination, ceilings, confirmMiles, ses
     }
     if (confirmation) showMilesConfirmation(card, confirmation);
     showLatamAlertButton(card, origin, destination, legs, confirmation);
-    if (!session.resuming) saveToHistory(origin, destination, "LATAM", true);
 
     card.setStatus("Pronto", "status-done");
     card.resultEl.hidden = false;
@@ -2201,16 +2206,26 @@ function trackRunning(program, origin, destination, roundTrip, search) {
   });
 }
 
-function repeatWarning(program, origin, destination, roundTrip) {
+// The paid sources have a query limit, so a route anyone searched recently asks
+// before searching again. It reads the shared history, not just this browser's.
+async function repeatWarning(program, origin, destination, roundTrip) {
+  let history;
+  try {
+    history = await loadHistory();
+  } catch (err) {
+    return confirm(`${err.message} Não deu para conferir se esse trecho já foi buscado. Buscar mesmo assim?`);
+  }
   for (const [from, to] of searchRoutes(origin, destination, roundTrip)) {
     if (runningSearches.has(`${program}|${from}|${to}`)) {
       if (!confirm(`A busca ${from} → ${to} ainda está em andamento. Buscar de novo mesmo assim?`)) return false;
       continue;
     }
-    const previous = latestSearchOf(from, to, program);
+    const previous = latestSearchOf(history, from, to, program);
     if (previous && Date.now() - previous.timestamp < TOLERANCE_MS) {
+      const who = whoSearched(previous);
+      const subject = !who || who === "você" ? "Você já buscou" : `${who} já buscou`;
       const confirmed = confirm(
-        `Você já buscou ${from} → ${to} ${formatRelativeTime(previous.timestamp)} ` +
+        `${subject} ${from} → ${to} ${formatRelativeTime(previous.timestamp)} ` +
           `(${formatDateTime(previous.timestamp)}), há menos de ${TOLERANCE_DAYS} dias. Buscar de novo mesmo assim?`,
       );
       if (!confirmed) return false;
@@ -2219,7 +2234,7 @@ function repeatWarning(program, origin, destination, roundTrip) {
   return true;
 }
 
-tapForm.addEventListener("submit", (event) => {
+tapForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   clearNotice(tapNotice);
   const origin = tapOriginInput.value.trim().toUpperCase();
@@ -2229,7 +2244,7 @@ tapForm.addEventListener("submit", (event) => {
     showNotice(tapNotice, "Preencha origem e destino.");
     return;
   }
-  if (!repeatWarning("tap", origin, destination, roundTrip)) return;
+  if (!(await repeatWarning("tap", origin, destination, roundTrip))) return;
   const inK = (input) => {
     const value = parseFloat(input.value);
     return Number.isFinite(value) && value > 0 ? value : null;
@@ -2288,7 +2303,6 @@ async function startIberiaSearch(origin, destination, ceilingAvios, roundTrip, d
       { ...outbound.result, label: "Menor preço do dia, qualquer cabine", colorClass: "" },
     ]);
     recordLegForCopy(card, [outbound.result]);
-    if (!session.resuming) saveToHistory(origin, destination, "IBERIA", false, {});
 
     let inbound = null;
     if (roundTrip) {
@@ -2301,7 +2315,6 @@ async function startIberiaSearch(origin, destination, ceilingAvios, roundTrip, d
       if (inbound.partialNotice) partialNotices.push(inbound.partialNotice);
       renderLegSections(card.resultEl, `Volta: ${destination} → ${origin}`, [{ ...inbound.result, label: "Menor preço do dia, qualquer cabine", colorClass: "" }]);
       recordLegForCopy(card, [inbound.result]);
-      promoteLatestToRoundTrip(origin, destination, "IBERIA");
     }
 
     card.setStatus("Pronto", "status-done");
@@ -2389,7 +2402,7 @@ smilesForm.addEventListener("submit", (event) => {
   );
 });
 
-seatspyForm.addEventListener("submit", (event) => {
+seatspyForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   clearNotice(seatspyNotice);
   const program = seatspyProgramSelect.value;
@@ -2400,7 +2413,7 @@ seatspyForm.addEventListener("submit", (event) => {
     showNotice(seatspyNotice, "Preencha origem e destino.");
     return;
   }
-  if (!repeatWarning(program, origin, destination, roundTrip)) return;
+  if (!(await repeatWarning(program, origin, destination, roundTrip))) return;
   trackRunning(
     program,
     origin,
@@ -2411,7 +2424,6 @@ seatspyForm.addEventListener("submit", (event) => {
 });
 
 // Runs last: every source's functions and form elements must already exist.
-migrateLegacyHistory();
 const tabFromUrl = location.hash.slice(1);
 if (Object.hasOwn(panels, tabFromUrl)) activateTab(tabFromUrl);
 restoreSearches();

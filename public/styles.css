@@ -226,6 +226,17 @@ main > h1 {
   justify-content: space-between;
 }
 
+.session {
+  display: flex;
+  align-items: center;
+  gap: var(--e3);
+}
+
+.current-user {
+  font-size: var(--text-sm);
+  color: var(--ink-soft);
+}
+
 .app-header h1,
 main > h1 {
   display: flex;
@@ -1380,6 +1391,25 @@ select {
   margin-left: auto;
 }
 
+.history-item-user,
+.history-item-status {
+  font-size: var(--text-sm);
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+.history-item-status {
+  padding: 1px var(--e2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-chip);
+  font-size: var(--text-xs);
+}
+
+.search-job > .fresh-search-button {
+  align-self: flex-start;
+  margin: 0 var(--e5) var(--e3);
+}
+
 .history-item-time,
 .history-item-relative {
   font-size: var(--text-sm);
@@ -1569,6 +1599,10 @@ select {
 
   .search-job > .notice {
     margin: var(--e3) var(--e4);
+  }
+
+  .search-job > .fresh-search-button {
+    margin: 0 var(--e4) var(--e3);
   }
 
   .subtabs {
