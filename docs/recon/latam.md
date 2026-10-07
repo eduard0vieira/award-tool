@@ -200,3 +200,29 @@ return list, then `/offers/redemption-options`) instead of sleeping.
 legs by miles, so the first card is the cheapest flight. Trade-off seen on the
 first run: the cheapest is sometimes a connection (01/01 → 11/01: 70,691 direct
 under RECOMMENDED, 61,570 with one stop each way and a higher fee).
+
+## Login (2026-10-07, Windows notebook)
+
+Recorded with `scripts/recon-latam-login.ts` on a throwaway profile, real
+Chrome, typing the `.env` credentials. Anonymous miles search redirects to
+`auth.latamairlines.com` (Auth0 Universal Login), one screen per step:
+
+| Path | Fields | Submit |
+| --- | --- | --- |
+| `/u/login/identifier` | `input[name="alias"]` (type text: email, CPF or LATAM Pass number) | `#primary-button` "Continuar" |
+| `/u/login/password` | `input[name="password"]` | `#primary-button` "Fazer login" |
+| `/u/mfa-login-options` | none: two clickable options, WhatsApp and Email | (the option itself) |
+| `/u/mfa-email-challenge` | `input[name="code-0"]` … `code-5`, one digit each | `#form-button--primaryAction` "Inserir código" |
+
+Each step is a form POST answered with 302. After the code it lands back on the
+`oferta-voos` deep link, logged in.
+
+- **The verification code is a second factor**, sent to the email or WhatsApp
+  on the account. It showed up on this fresh profile; whether a profile that
+  already passed it is asked again (and how often) is **not measured yet**.
+- **reCAPTCHA Enterprise** runs invisibly on the identifier screen (score
+  based, no checkbox). With real Chrome it never showed a challenge.
+- The code screen's URL has no "login" in it, so detecting the login by the
+  path misses it; the host is what tells.
+- The old pre-fill looked for `input[type="email"]`, which this form does not
+  have, so it never filled anything.
