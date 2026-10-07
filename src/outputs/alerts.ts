@@ -97,8 +97,15 @@ export async function generateAlert(
       // Same quality as the portal's manual export (html2canvas with scale 2).
       deviceScaleFactor: 2,
       viewport: { width: 1200, height: 900 },
+      // A fixed header instead of httpCredentials: the browser only sends those
+      // after a 401 challenge, and a missing login now redirects to /login.
+      // Playwright's `send: "always"` does not cover browser navigation.
       ...(options.authUser && options.authPass
-        ? { httpCredentials: { username: options.authUser, password: options.authPass } }
+        ? {
+            extraHTTPHeaders: {
+              authorization: `Basic ${Buffer.from(`${options.authUser}:${options.authPass}`).toString("base64")}`,
+            },
+          }
         : {}),
     });
     const page = await context.newPage();
