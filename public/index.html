@@ -312,10 +312,16 @@
         <div class="field">
           <label for="smiles-from">Datas de</label>
           <input id="smiles-from" name="from" class="date-input" placeholder="DD/MM/AAAA" inputmode="numeric" maxlength="10" autocomplete="off" />
+          <div class="reveal" data-error-for="smiles-from">
+            <div><p class="field-error" id="smiles-from-error"></p></div>
+          </div>
         </div>
         <div class="field">
           <label for="smiles-until">Até</label>
           <input id="smiles-until" name="until" class="date-input" placeholder="DD/MM/AAAA" inputmode="numeric" maxlength="10" autocomplete="off" />
+          <div class="reveal" data-error-for="smiles-until">
+            <div><p class="field-error" id="smiles-until-error"></p></div>
+          </div>
         </div>
 
         <button type="submit">Buscar</button>

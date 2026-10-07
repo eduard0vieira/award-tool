@@ -452,12 +452,20 @@ button[type="submit"]:hover:not(:disabled) {
 .panel > form {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
+  align-items: flex-start;
   gap: var(--e3) var(--e4);
   padding: var(--e4) var(--e5) var(--e5);
   border: 1px solid var(--line);
   border-radius: var(--radius-panel);
   background: var(--surface);
+}
+
+/* Top alignment lets a field's error message grow downward without lifting
+   the row; controls without a label drop by one label height to line up with
+   the inputs. */
+.panel > form > .checkbox,
+.panel > form > button[type="submit"] {
+  margin-top: calc(var(--text-sm) * 1.5 + var(--e1));
 }
 
 .field {
