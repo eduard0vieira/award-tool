@@ -550,6 +550,21 @@ input[type="number"] {
   font-variant-numeric: tabular-nums;
 }
 
+.date-input {
+  font-family: var(--font-data);
+  font-size: var(--text-md);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.field:has(.date-input) {
+  flex: 0 1 136px;
+}
+
+.field input[aria-invalid="true"] {
+  border-color: var(--error);
+}
+
 select {
   appearance: none;
   padding-right: var(--e6) !important;

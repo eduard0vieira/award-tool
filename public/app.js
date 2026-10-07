@@ -2377,6 +2377,54 @@ aaForm.addEventListener("submit", (event) => {
   );
 });
 
+// "31/12/2026" → "2026-12-31". A date that does not exist (31/02) is null, never
+// rolled over into the next month.
+function parseTypedDate(text) {
+  const match = text.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!match) return null;
+  const [, day, month, year] = match;
+  const iso = `${year}-${month}-${day}`;
+  const date = new Date(`${iso}T00:00:00Z`);
+  return date.getUTCFullYear() === Number(year) && date.getUTCMonth() + 1 === Number(month) && date.getUTCDate() === Number(day)
+    ? iso
+    : null;
+}
+
+// Typing only digits fills in the slashes; deleting is left alone so the caret
+// never jumps while a date is being fixed.
+for (const input of [smilesFromInput, smilesUntilInput]) {
+  input.addEventListener("input", (event) => {
+    if (!event.inputType?.startsWith("insert")) return;
+    const digits = input.value.replace(/\D/g, "").slice(0, 8);
+    input.value = [digits.slice(0, 2), digits.slice(2, 4), digits.slice(4)].filter(Boolean).join("/");
+    input.removeAttribute("aria-invalid");
+  });
+}
+
+// Empty stays empty (the server's default period); anything typed must be a
+// real date, or the search would quietly run on a different period.
+function readPeriod() {
+  const period = {};
+  for (const [key, input, label] of [
+    ["from", smilesFromInput, "inicial"],
+    ["until", smilesUntilInput, "final"],
+  ]) {
+    input.removeAttribute("aria-invalid");
+    if (!input.value.trim()) continue;
+    const iso = parseTypedDate(input.value);
+    if (!iso) {
+      input.setAttribute("aria-invalid", "true");
+      return { error: `A data ${label} "${input.value}" não existe. Use DD/MM/AAAA, por exemplo 05/11/2026.`, input };
+    }
+    period[key] = iso;
+  }
+  if (period.from && period.until && period.until < period.from) {
+    smilesUntilInput.setAttribute("aria-invalid", "true");
+    return { error: "A data final vem antes da inicial.", input: smilesUntilInput };
+  }
+  return { period };
+}
+
 smilesForm.addEventListener("submit", (event) => {
   event.preventDefault();
   clearNotice(smilesNotice);
@@ -2384,6 +2432,12 @@ smilesForm.addEventListener("submit", (event) => {
   const destination = smilesDestinationInput.value.trim().toUpperCase();
   if (!origin || !destination) {
     showNotice(smilesNotice, "Preencha origem e destino.");
+    return;
+  }
+  const { period, error, input } = readPeriod();
+  if (error) {
+    showNotice(smilesNotice, error);
+    input.focus();
     return;
   }
   // Searching Smiles is free: no repeat warning like the paid sources have.
@@ -2396,9 +2450,7 @@ smilesForm.addEventListener("submit", (event) => {
       business: ceilingInMiles(smilesBusinessCeilingInput),
     },
     smilesRoundTripCheckbox.checked,
-    // Both empty means the server's default period; no date is made up here to
-    // compete with the rule that already lives there.
-    { from: smilesFromInput.value || undefined, until: smilesUntilInput.value || undefined },
+    period,
   );
 });
 
