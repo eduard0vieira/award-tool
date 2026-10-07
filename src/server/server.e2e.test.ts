@@ -1,6 +1,7 @@
 import "reflect-metadata";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
+import http from "node:http";
 import { after, before, describe, test } from "node:test";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import { Test } from "@nestjs/testing";
@@ -235,7 +236,23 @@ describe("server with auth", () => {
     const page = await fetch(`${url}/login`);
     assert.equal(page.status, 200);
     assert.match(await page.text(), /id="login-form"/);
-    for (const asset of ["/login.js", "/styles.css"]) assert.equal((await fetch(`${url}${asset}`)).status, 200, asset);
+    for (const asset of ["/login.js", "/styles.css", "/fonts/barlow-400.woff2"]) {
+      assert.equal((await fetch(`${url}${asset}`)).status, 200, asset);
+    }
+  });
+
+  test("does not let a font path reach a protected page", async () => {
+    // fetch() would normalize the "..", so the raw path goes through node:http.
+    const { hostname, port } = new URL(url);
+    const status = await new Promise<number | undefined>((resolve, reject) => {
+      http
+        .get({ hostname: hostname.replace(/^\[|\]$/g, ""), port, path: "/fonts/../index.html" }, (response) => {
+          response.resume();
+          resolve(response.statusCode);
+        })
+        .on("error", reject);
+    });
+    assert.equal(status, 302);
   });
 
   test("still serves the page to Basic credentials, which the alert renderer uses", async () => {

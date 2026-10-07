@@ -280,3 +280,18 @@ September to January give 309 and July 2027 gives 23 days at 75,000.
 
 Treating it as an error made the sweep give up after three months in a row and
 return "no availability" for the whole year on a seasonal route.
+
+## Front design tokens
+
+The front follows airport wayfinding signage (tokens in `public/styles.css`):
+
+- Palette: background `#eff1f0`, surface `#ffffff`, ink `#1b1f23`, soft ink
+  `#545c65`, lines `#d5d9dc`, sign yellow `#ffcc00` (also the favicon, a
+  departures sign), error `#c8102e`. Light theme only.
+- Type: Barlow (interface) and Barlow Semi Condensed (dates, codes, numbers,
+  always `tabular-nums`), self-hosted in `public/fonts/` (OFL). The login page
+  loads them before the session exists, so `src/server/auth/auth.ts` allows
+  `/fonts/*.woff2` by a strict pattern, never by prefix.
+- The yellow only marks "where": the route plate of a search card and the open
+  tab. Cabins are ruled columns colored by cabin, not boxes. No emoji, no
+  entrance animations, no " · " joins on screen (clipboard texts keep theirs).
