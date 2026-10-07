@@ -286,8 +286,8 @@ return "no availability" for the whole year on a seasonal route.
 The front follows airport wayfinding signage (tokens in `public/styles.css`):
 
 - Palette: background `#eff1f0`, surface `#ffffff`, ink `#1b1f23`, soft ink
-  `#545c65`, lines `#d5d9dc`, sign yellow `#ffcc00`, error `#c8102e` (the
-  favicon red). Light theme only.
+  `#545c65`, lines `#d5d9dc`, sign yellow `#ffcc00` (also the favicon, a
+  departures sign), error `#c8102e`. Light theme only.
 - Type: Barlow (interface) and Barlow Semi Condensed (dates, codes, numbers,
   always `tabular-nums`), self-hosted in `public/fonts/` (OFL). The login page
   loads them before the session exists, so `src/server/auth/auth.ts` allows
