@@ -1775,14 +1775,16 @@ function alertBlock(title, images, caption) {
 
   const gallery = document.createElement("div");
   gallery.className = "alert-gallery";
-  for (const url of images) {
+  for (const [index, url] of images.entries()) {
     const link = document.createElement("a");
     link.href = url;
     link.target = "_blank";
     link.download = url.split("/").pop();
     const image = document.createElement("img");
     image.src = url;
-    image.alt = "Imagem do alerta";
+    image.width = 220;
+    image.decoding = "async";
+    image.alt = images.length > 1 ? `Card ${index + 1} de ${images.length} do alerta` : "Card do alerta";
     link.appendChild(image);
     gallery.appendChild(link);
   }
@@ -1861,7 +1863,7 @@ function showAaBookingShortcut(card, legs) {
     link.href = day.link;
     link.target = "_blank";
     link.rel = "noopener noreferrer";
-    link.textContent = "abrir no site";
+    link.textContent = "Abrir no site da American";
 
     row.append(value, dates, link);
     block.appendChild(row);
@@ -1996,7 +1998,7 @@ function pairRow(pair) {
     link.className = "pair-capture";
     link.href = pair.image;
     link.target = "_blank";
-    link.textContent = "print";
+    link.textContent = "Ver captura da LATAM";
     row.appendChild(link);
   }
   return row;

@@ -30,14 +30,14 @@
       <form id="tap-search-form">
         <div class="field">
           <label for="tap-origin">Origem</label>
-          <input id="tap-origin" placeholder="GRU" maxlength="3" required autocomplete="off" />
+          <input id="tap-origin" name="origin" placeholder="GRU" maxlength="3" pattern="[A-Za-z]{3}" title="Código IATA de 3 letras" required autocomplete="off" autocapitalize="characters" spellcheck="false" />
         </div>
         <div class="field">
           <label for="tap-destination">Destino</label>
-          <input id="tap-destination" placeholder="LIS" maxlength="3" required autocomplete="off" />
+          <input id="tap-destination" name="destination" placeholder="LIS" maxlength="3" pattern="[A-Za-z]{3}" title="Código IATA de 3 letras" required autocomplete="off" autocapitalize="characters" spellcheck="false" />
         </div>
         <label class="checkbox">
-          <input type="checkbox" id="tap-round-trip" checked />
+          <input type="checkbox" id="tap-round-trip" name="round-trip" checked />
           Ida e volta
         </label>
         <button type="submit">Buscar</button>
@@ -46,11 +46,11 @@
         <div class="ceilings-row">
           <div class="field">
             <label for="tap-ceiling-business">Teto Executiva (K)</label>
-            <input id="tap-ceiling-business" type="number" min="1" step="0.5" placeholder="padrão: 181" autocomplete="off" />
+            <input id="tap-ceiling-business" name="ceiling-business" type="number" min="1" step="0.5" placeholder="padrão: 181" autocomplete="off" />
           </div>
           <div class="field">
             <label for="tap-ceiling-economy">Teto Econômica (K)</label>
-            <input id="tap-ceiling-economy" type="number" min="1" step="0.5" placeholder="padrão: 53" autocomplete="off" />
+            <input id="tap-ceiling-economy" name="ceiling-economy" type="number" min="1" step="0.5" placeholder="padrão: 53" autocomplete="off" />
           </div>
         </div>
       </form>
@@ -64,7 +64,7 @@
       <form id="seatspy-search-form">
         <div class="field">
           <label for="seatspy-program">Programa</label>
-          <select id="seatspy-program">
+          <select id="seatspy-program" name="program">
             <option value="AF">Air France</option>
             <option value="B6">JetBlue</option>
             <option value="BA">British Airways</option>
@@ -78,19 +78,19 @@
         </div>
         <div class="field">
           <label for="seatspy-origin">Origem</label>
-          <input id="seatspy-origin" placeholder="GRU" maxlength="3" required autocomplete="off" />
+          <input id="seatspy-origin" name="origin" placeholder="GRU" maxlength="3" pattern="[A-Za-z]{3}" title="Código IATA de 3 letras" required autocomplete="off" autocapitalize="characters" spellcheck="false" />
         </div>
         <div class="field">
           <label for="seatspy-destination">Destino</label>
-          <input id="seatspy-destination" placeholder="MAD" maxlength="3" required autocomplete="off" />
+          <input id="seatspy-destination" name="destination" placeholder="MAD" maxlength="3" pattern="[A-Za-z]{3}" title="Código IATA de 3 letras" required autocomplete="off" autocapitalize="characters" spellcheck="false" />
         </div>
         <label class="checkbox">
-          <input type="checkbox" id="seatspy-round-trip" checked />
+          <input type="checkbox" id="seatspy-round-trip" name="round-trip" checked />
           Ida e volta
         </label>
         <!-- Unchecked, seats leave the card AND the copied text (see buildSeatspyReport). -->
         <label class="checkbox">
-          <input type="checkbox" id="seatspy-show-seats" checked />
+          <input type="checkbox" id="seatspy-show-seats" name="show-seats" checked />
           Mostrar assentos
         </label>
         <button type="submit">Buscar</button>
@@ -98,19 +98,19 @@
         <div class="ceilings-row">
           <div class="field">
             <label for="seatspy-ceiling-economy">Teto Econômica (K)</label>
-            <input id="seatspy-ceiling-economy" type="number" min="1" step="0.25" placeholder="ex.: 25" autocomplete="off" />
+            <input id="seatspy-ceiling-economy" name="ceiling-economy" type="number" min="1" step="0.25" placeholder="ex.: 25" autocomplete="off" />
           </div>
           <div class="field">
             <label for="seatspy-ceiling-premium">Teto Premium (K)</label>
-            <input id="seatspy-ceiling-premium" type="number" min="1" step="0.25" placeholder="ex.: 51" autocomplete="off" />
+            <input id="seatspy-ceiling-premium" name="ceiling-premium" type="number" min="1" step="0.25" placeholder="ex.: 51" autocomplete="off" />
           </div>
           <div class="field">
             <label for="seatspy-ceiling-business">Teto Executiva (K)</label>
-            <input id="seatspy-ceiling-business" type="number" min="1" step="0.25" placeholder="ex.: 74" autocomplete="off" />
+            <input id="seatspy-ceiling-business" name="ceiling-business" type="number" min="1" step="0.25" placeholder="ex.: 74" autocomplete="off" />
           </div>
           <div class="field">
             <label for="seatspy-ceiling-first">Teto Primeira (K)</label>
-            <input id="seatspy-ceiling-first" type="number" min="1" step="0.25" placeholder="ex.: 120" autocomplete="off" />
+            <input id="seatspy-ceiling-first" name="ceiling-first" type="number" min="1" step="0.25" placeholder="ex.: 120" autocomplete="off" />
           </div>
         </div>
       </form>
@@ -124,15 +124,15 @@
       <form id="aa-search-form">
         <div class="field">
           <label for="aa-origin">Origem</label>
-          <input id="aa-origin" placeholder="GRU" maxlength="3" required autocomplete="off" />
+          <input id="aa-origin" name="origin" placeholder="GRU" maxlength="3" pattern="[A-Za-z]{3}" title="Código IATA de 3 letras" required autocomplete="off" autocapitalize="characters" spellcheck="false" />
         </div>
         <div class="field">
           <label for="aa-destination">Destino</label>
-          <input id="aa-destination" placeholder="MIA" maxlength="3" required autocomplete="off" />
+          <input id="aa-destination" name="destination" placeholder="MIA" maxlength="3" pattern="[A-Za-z]{3}" title="Código IATA de 3 letras" required autocomplete="off" autocapitalize="characters" spellcheck="false" />
         </div>
         <div class="field">
           <label for="aa-cabin">Cabine</label>
-          <select id="aa-cabin">
+          <select id="aa-cabin" name="cabin">
             <option value="economy">Econômica</option>
             <option value="premium">Premium Economy</option>
             <option value="business">Executiva</option>
@@ -141,7 +141,7 @@
         </div>
         <div class="field">
           <label for="aa-stops">Conexões</label>
-          <select id="aa-stops">
+          <select id="aa-stops" name="stops">
             <option value="">Todos os voos</option>
             <option value="0">Só voo direto</option>
             <option value="1">Até 1 conexão</option>
@@ -151,7 +151,7 @@
              seats for everyone together: pickier, and what a family actually needs. -->
         <div class="field">
           <label for="aa-passengers">Passageiros</label>
-          <select id="aa-passengers">
+          <select id="aa-passengers" name="passengers">
             <option value="1" selected>1</option>
             <option value="2">2</option>
             <option value="3">3</option>
@@ -166,10 +166,10 @@
         <div class="field">
           <!-- AA prices awards per person, so the ceiling keeps its meaning with more passengers. -->
           <label for="aa-ceiling">Teto de milhas (K) por passageiro</label>
-          <input id="aa-ceiling" type="number" min="1" step="0.5" placeholder="ex.: 110" autocomplete="off" />
+          <input id="aa-ceiling" name="ceiling" type="number" min="1" step="0.5" placeholder="ex.: 110" autocomplete="off" />
         </div>
         <label class="checkbox">
-          <input type="checkbox" id="aa-round-trip" checked />
+          <input type="checkbox" id="aa-round-trip" name="round-trip" checked />
           Ida e volta
         </label>
         <button type="submit">Buscar</button>
@@ -187,19 +187,19 @@
       <form id="iberia-search-form">
         <div class="field">
           <label for="iberia-origin">Origem</label>
-          <input id="iberia-origin" placeholder="GRU" maxlength="3" required autocomplete="off" />
+          <input id="iberia-origin" name="origin" placeholder="GRU" maxlength="3" pattern="[A-Za-z]{3}" title="Código IATA de 3 letras" required autocomplete="off" autocapitalize="characters" spellcheck="false" />
         </div>
         <div class="field">
           <label for="iberia-destination">Destino</label>
-          <input id="iberia-destination" placeholder="MAD" maxlength="3" required autocomplete="off" />
+          <input id="iberia-destination" name="destination" placeholder="MAD" maxlength="3" pattern="[A-Za-z]{3}" title="Código IATA de 3 letras" required autocomplete="off" autocapitalize="characters" spellcheck="false" />
         </div>
         <div class="field">
           <label for="iberia-ceiling">Teto de Avios (K) por passageiro</label>
-          <input id="iberia-ceiling" type="number" min="1" step="0.5" placeholder="ex.: 40" autocomplete="off" />
+          <input id="iberia-ceiling" name="ceiling" type="number" min="1" step="0.5" placeholder="ex.: 40" autocomplete="off" />
         </div>
         <div class="field">
           <label for="iberia-detail-days">Quantas datas detalhar voo a voo</label>
-          <select id="iberia-detail-days">
+          <select id="iberia-detail-days" name="detail-days">
             <option value="0" selected>Nenhuma — só a lista de datas (~40s)</option>
             <option value="3">As 3 datas mais baratas (~1 min a mais)</option>
             <option value="5">As 5 mais baratas (~1min30 a mais)</option>
@@ -211,7 +211,7 @@
         </div>
         <div class="field">
           <label for="iberia-stops">Conexões (só filtra as datas detalhadas)</label>
-          <select id="iberia-stops">
+          <select id="iberia-stops" name="stops">
             <option value="">Todos os voos</option>
             <option value="0">Só voo direto</option>
             <option value="1">Até 1 conexão</option>
@@ -220,7 +220,7 @@
         </div>
         <div class="field">
           <label for="iberia-cabin">Cabine (só filtra as datas detalhadas)</label>
-          <select id="iberia-cabin">
+          <select id="iberia-cabin" name="cabin">
             <option value="">Todas</option>
             <option value="ECONOMY">Econômica</option>
             <option value="PREMIUMTOURIST">Premium Economy</option>
@@ -229,26 +229,20 @@
           </select>
         </div>
         <label class="checkbox">
-          <input type="checkbox" id="iberia-round-trip" checked />
+          <input type="checkbox" id="iberia-round-trip" name="round-trip" checked />
           Ida e volta
         </label>
         <button type="submit">Buscar</button>
         <small class="hint">
-          Só as datas detalhadas entram na planilha por voo, com companhia,
-          escalas e vagas. <strong>O preço de cada data é sempre o mais barato do
-          dia, em qualquer cabine</strong> — a Iberia não publica preço por
-          cabine. Só no modo <em>TODAS as datas</em> os filtros de cabine e
-          conexões também reduzem a lista de datas, porque aí todas foram olhadas.
+          <strong>O preço de cada data é o mais barato do dia, em qualquer cabine e
+          qualquer roteamento</strong>, inclusive com escala em parceiras: a Iberia
+          não publica preço por cabine. Para saber o voo e a companhia de cada
+          data, detalhe as datas: cada uma leva cerca de 15 segundos e entra na
+          planilha por voo, com escalas, companhia e vagas. Cabine e conexões só
+          filtram as datas detalhadas, exceto no modo <em>TODAS as datas</em>,
+          em que filtram a lista inteira.
         </small>
       </form>
-
-      <p class="notice" style="display:block">
-        O valor de cada dia é o mais barato daquele dia, seja qual for a cabine
-        ou o roteamento — inclusive itinerários longos com escala em parceiras.
-        Para saber qual voo e qual companhia opera cada data, peça o detalhe
-        abaixo: ele gera a planilha por voo (com escalas, companhia e vagas) e
-        custa cerca de 15 segundos por dia detalhado.
-      </p>
 
       <p id="iberia-notice" class="notice" hidden></p>
 
@@ -261,24 +255,24 @@
       <form id="latam-search-form">
         <div class="field">
           <label for="latam-origin">Origem</label>
-          <input id="latam-origin" placeholder="GRU" maxlength="3" required autocomplete="off" />
+          <input id="latam-origin" name="origin" placeholder="GRU" maxlength="3" pattern="[A-Za-z]{3}" title="Código IATA de 3 letras" required autocomplete="off" autocapitalize="characters" spellcheck="false" />
         </div>
         <div class="field">
           <label for="latam-destination">Destino</label>
-          <input id="latam-destination" placeholder="SCL" maxlength="3" required autocomplete="off" />
+          <input id="latam-destination" name="destination" placeholder="SCL" maxlength="3" pattern="[A-Za-z]{3}" title="Código IATA de 3 letras" required autocomplete="off" autocapitalize="characters" spellcheck="false" />
         </div>
         <div class="field">
           <label for="latam-ceiling">Teto por trecho (R$)</label>
-          <input id="latam-ceiling" type="number" min="1" step="1" placeholder="ex.: 950" autocomplete="off" />
+          <input id="latam-ceiling" name="ceiling" type="number" min="1" step="1" placeholder="ex.: 950" autocomplete="off" />
         </div>
         <label class="checkbox">
-          <input type="checkbox" id="latam-lowest-fare" checked />
+          <input type="checkbox" id="latam-lowest-fare" name="lowest-fare" checked />
           Só as datas de menor tarifa
         </label>
         <!-- Confirms the best pairs with a real miles search and a capture; needs a
              logged-in session (see scripts/import-cookies.sh). -->
         <label class="checkbox">
-          <input type="checkbox" id="latam-confirm-miles" checked />
+          <input type="checkbox" id="latam-confirm-miles" name="confirm-miles" checked />
           Confirmar em milhas
         </label>
         <button type="submit">Buscar</button>
@@ -295,23 +289,23 @@
       <form id="smiles-search-form">
         <div class="field">
           <label for="smiles-origin">Origem</label>
-          <input id="smiles-origin" placeholder="GRU" maxlength="3" required autocomplete="off" />
+          <input id="smiles-origin" name="origin" placeholder="GRU" maxlength="3" pattern="[A-Za-z]{3}" title="Código IATA de 3 letras" required autocomplete="off" autocapitalize="characters" spellcheck="false" />
         </div>
         <div class="field">
           <label for="smiles-destination">Destino</label>
-          <input id="smiles-destination" placeholder="MIA" maxlength="3" required autocomplete="off" />
+          <input id="smiles-destination" name="destination" placeholder="MIA" maxlength="3" pattern="[A-Za-z]{3}" title="Código IATA de 3 letras" required autocomplete="off" autocapitalize="characters" spellcheck="false" />
         </div>
         <label class="checkbox">
-          <input type="checkbox" id="smiles-round-trip" checked />
+          <input type="checkbox" id="smiles-round-trip" name="round-trip" checked />
           Ida e volta
         </label>
         <div class="field">
           <label for="smiles-from">De</label>
-          <input id="smiles-from" type="month" autocomplete="off" />
+          <input id="smiles-from" name="from" type="month" autocomplete="off" />
         </div>
         <div class="field">
           <label for="smiles-until">Até</label>
-          <input id="smiles-until" type="month" autocomplete="off" />
+          <input id="smiles-until" name="until" type="month" autocomplete="off" />
         </div>
 
         <button type="submit">Buscar</button>
@@ -322,15 +316,15 @@
         <div class="ceilings-row">
           <div class="field">
             <label for="smiles-ceiling-economy">Teto Econômica (K)</label>
-            <input id="smiles-ceiling-economy" type="number" min="1" step="0.5" placeholder="ex.: 80" autocomplete="off" />
+            <input id="smiles-ceiling-economy" name="ceiling-economy" type="number" min="1" step="0.5" placeholder="ex.: 80" autocomplete="off" />
           </div>
           <div class="field">
             <label for="smiles-ceiling-premium">Teto Conforto (K)</label>
-            <input id="smiles-ceiling-premium" type="number" min="1" step="0.5" placeholder="ex.: 190" autocomplete="off" />
+            <input id="smiles-ceiling-premium" name="ceiling-premium" type="number" min="1" step="0.5" placeholder="ex.: 190" autocomplete="off" />
           </div>
           <div class="field">
             <label for="smiles-ceiling-business">Teto Executiva (K)</label>
-            <input id="smiles-ceiling-business" type="number" min="1" step="0.5" placeholder="ex.: 250" autocomplete="off" />
+            <input id="smiles-ceiling-business" name="ceiling-business" type="number" min="1" step="0.5" placeholder="ex.: 250" autocomplete="off" />
           </div>
         </div>
       </form>

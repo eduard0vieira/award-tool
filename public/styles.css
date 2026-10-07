@@ -1180,8 +1180,12 @@ button:disabled {
   margin-top: var(--e3);
 }
 
-.alert-gallery img,
-.confirmation-gallery img {
+/* The portal's card is always 1080px wide but its height follows the content,
+   so this ratio only reserves roughly the right space until the image loads. */
+.alert-gallery img {
+  width: 220px;
+  height: auto;
+  aspect-ratio: auto 1080 / 1150;
   max-width: 220px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
