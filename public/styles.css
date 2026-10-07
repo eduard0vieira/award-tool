@@ -1524,13 +1524,11 @@ select {
 
 /* Login */
 
+/* Anchored at a fixed height instead of centered: a centered card moved up
+   whenever an error made it taller, so the field being fixed jumped away. */
 .login-page main {
   max-width: 400px;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  padding-top: var(--e5);
+  padding-top: clamp(var(--e7), 18vh, 160px);
   padding-bottom: var(--e7);
 }
 
@@ -1551,6 +1549,60 @@ select {
 .login-form button[type="submit"] {
   width: 100%;
   margin-left: 0;
+}
+
+.login-form .field input[aria-invalid="true"] {
+  border-color: var(--error);
+}
+
+.field-error {
+  margin: 0;
+  padding-top: 2px;
+  font-size: var(--text-sm);
+  color: var(--error);
+}
+
+.login-actions {
+  display: flex;
+  flex-direction: column;
+}
+
+.login-actions .login-error {
+  margin-bottom: var(--e3);
+}
+
+/* Messages open by growing into place, so what sits below slides down instead
+   of jumping. The inner wrapper clips, keeping padding out of the closed row. */
+.reveal {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    grid-template-rows 180ms ease-out,
+    margin-top 180ms ease-out,
+    opacity 180ms ease-out,
+    visibility 0s linear 180ms;
+}
+
+.reveal > div {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.reveal.is-open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  visibility: visible;
+  transition:
+    grid-template-rows 180ms ease-out,
+    margin-top 180ms ease-out,
+    opacity 180ms ease-out;
+}
+
+/* Inside a field the column gap would leave an empty line under every input. */
+.field > .reveal:not(.is-open) {
+  margin-top: calc(var(--e1) * -1);
 }
 
 @media (max-width: 720px) {

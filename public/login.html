@@ -16,14 +16,24 @@
       <h2>Entrar</h2>
       <div class="field">
         <label for="login-user">Usuário</label>
-        <input id="login-user" name="user" autocomplete="username" autocapitalize="none" spellcheck="false" required autofocus />
+        <input id="login-user" name="user" autocomplete="username" autocapitalize="none" spellcheck="false" aria-required="true" autofocus />
+        <div class="reveal" data-error-for="login-user">
+          <div><p class="field-error" id="login-user-error">Informe o usuário.</p></div>
+        </div>
       </div>
       <div class="field">
         <label for="login-pass">Senha</label>
-        <input id="login-pass" name="pass" type="password" autocomplete="current-password" required />
+        <input id="login-pass" name="pass" type="password" autocomplete="current-password" aria-required="true" />
+        <div class="reveal" data-error-for="login-pass">
+          <div><p class="field-error" id="login-pass-error">Informe a senha.</p></div>
+        </div>
       </div>
-      <p id="login-error" class="login-error" role="alert" hidden></p>
-      <button type="submit">Entrar</button>
+      <div class="login-actions">
+        <div class="reveal" id="login-error-reveal">
+          <div><p id="login-error" class="login-error" role="alert"></p></div>
+        </div>
+        <button type="submit">Entrar</button>
+      </div>
     </form>
   </main>
   <script src="/login.js"></script>
