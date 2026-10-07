@@ -522,11 +522,8 @@ function createHistoryItem(item) {
     removeWithUndo({
       kind: "history",
       message: `${item.origin} → ${item.destination} removido do histórico`,
-      hide: () => (row.hidden = true),
-      restore: () => {
-        row.hidden = false;
-        deleteButton.focus();
-      },
+      element: row,
+      returnFocusTo: deleteButton,
       commit: () => removeFromHistory(item.timestamps || [item.timestamp]),
     }),
   );
@@ -553,35 +550,50 @@ function announce(message) {
 const UNDO_MS = 6000;
 const toastEl = document.getElementById("toast");
 const toastTextEl = toastEl.querySelector(".toast-text");
+const toastUndoButton = toastEl.querySelector(".toast-undo");
 let pendingRemoval = null;
 
 // Removing only becomes final when the toast expires, so a click on the wrong
 // Remover can be taken back. A new removal finalizes the previous one first.
-function removeWithUndo({ kind, message, hide, restore, commit }) {
+function removeWithUndo({ kind, message, element, returnFocusTo, commit }) {
   finishPendingRemoval();
-  hide();
-  pendingRemoval = { kind, restore, commit, timer: setTimeout(finishPendingRemoval, UNDO_MS) };
+  // The focused button disappears with its element; a keyboard user would be
+  // dropped at the top of the page, so focus waits on Desfazer instead.
+  const focusWasInside = element.contains(document.activeElement);
+  element.hidden = true;
+  pendingRemoval = {
+    kind,
+    element,
+    returnFocusTo,
+    commit,
+    panel: element.closest('[role="tabpanel"]'),
+    timer: setTimeout(finishPendingRemoval, UNDO_MS),
+  };
   toastTextEl.textContent = message;
   toastEl.hidden = false;
+  if (focusWasInside) toastUndoButton.focus();
   announce(`${message}. Use Desfazer para trazer de volta.`);
 }
 
 function finishPendingRemoval() {
   if (!pendingRemoval) return;
-  const { commit, timer } = pendingRemoval;
+  const { commit, timer, panel } = pendingRemoval;
   pendingRemoval = null;
   clearTimeout(timer);
+  const undoHadFocus = toastEl.contains(document.activeElement);
   toastEl.hidden = true;
   commit();
+  if (undoHadFocus) panel?.focus();
 }
 
-toastEl.querySelector(".toast-undo").addEventListener("click", () => {
+toastUndoButton.addEventListener("click", () => {
   if (!pendingRemoval) return;
-  const { restore, timer } = pendingRemoval;
+  const { element, returnFocusTo, timer } = pendingRemoval;
   pendingRemoval = null;
   clearTimeout(timer);
   toastEl.hidden = true;
-  restore();
+  element.hidden = false;
+  returnFocusTo.focus();
 });
 
 window.addEventListener("pagehide", finishPendingRemoval);
@@ -722,11 +734,8 @@ function createJobCard(queueEl, { program, detail, origin, destination, roundTri
     removeWithUndo({
       kind: "search",
       message: `Busca ${card.spokenTitle} removida`,
-      hide: () => (root.hidden = true),
-      restore: () => {
-        root.hidden = false;
-        card.removeButton.focus();
-      },
+      element: root,
+      returnFocusTo: card.removeButton,
       commit: () => {
         const id = root.dataset.searchId;
         if (id) saveSearches(loadSearches().filter((search) => search.id !== id));
@@ -1363,7 +1372,10 @@ function renderColumn(columnEl, section, colorClass) {
     chipsEl.hidden = editing;
     editButton.setAttribute("aria-pressed", String(editing));
     setError("");
-    if (!editing) return;
+    if (!editing) {
+      if (editor.contains(document.activeElement)) editButton.focus();
+      return;
+    }
     setColumnExpanded(columnEl, true);
     textArea.value = keptSection(section).text;
     textArea.rows = Math.max(3, textArea.value.split("\n").length + 1);

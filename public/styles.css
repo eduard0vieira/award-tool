@@ -424,6 +424,11 @@ button[type="submit"]:hover:not(:disabled) {
 
 /* Forms */
 
+/* Only focused by script, as a landing spot after a removal; not a control. */
+.panel:focus {
+  outline: none;
+}
+
 .panel {
   display: flex;
   flex-direction: column;

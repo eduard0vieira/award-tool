@@ -27,7 +27,7 @@
 
     <!-- Every source has its own form and queue; switching tabs only toggles
          hidden, so a running search in one tab keeps its progress. -->
-    <section id="panel-tap" class="panel" role="tabpanel" aria-labelledby="tab-tap">
+    <section id="panel-tap" class="panel" role="tabpanel" aria-labelledby="tab-tap" tabindex="-1">
       <form id="tap-search-form">
         <div class="field">
           <label for="tap-origin">Origem</label>
@@ -61,7 +61,7 @@
       <div id="tap-queue" class="search-queue"></div>
     </section>
 
-    <section id="panel-seatspy" class="panel" role="tabpanel" aria-labelledby="tab-seatspy" hidden>
+    <section id="panel-seatspy" class="panel" role="tabpanel" aria-labelledby="tab-seatspy" tabindex="-1" hidden>
       <form id="seatspy-search-form">
         <div class="field">
           <label for="seatspy-program">Programa</label>
@@ -121,7 +121,7 @@
       <div id="seatspy-queue" class="search-queue"></div>
     </section>
 
-    <section id="panel-aa" class="panel" role="tabpanel" aria-labelledby="tab-aa" hidden>
+    <section id="panel-aa" class="panel" role="tabpanel" aria-labelledby="tab-aa" tabindex="-1" hidden>
       <form id="aa-search-form">
         <div class="field">
           <label for="aa-origin">Origem</label>
@@ -184,7 +184,7 @@
     <!-- The Avios calendar returns ONE value per day, the cheapest, without saying
          which cabin it is: cabin and stops only act on the detailed dates.
          See docs/recon/iberia.md, section 15. -->
-    <section id="panel-iberia" class="panel" role="tabpanel" aria-labelledby="tab-iberia" hidden>
+    <section id="panel-iberia" class="panel" role="tabpanel" aria-labelledby="tab-iberia" tabindex="-1" hidden>
       <form id="iberia-search-form">
         <div class="field">
           <label for="iberia-origin">Origem</label>
@@ -252,7 +252,7 @@
 
     <!-- Cash fares in economy, no login. The calendar returns both directions,
          so one search brings both legs. -->
-    <section id="panel-latam" class="panel" role="tabpanel" aria-labelledby="tab-latam" hidden>
+    <section id="panel-latam" class="panel" role="tabpanel" aria-labelledby="tab-latam" tabindex="-1" hidden>
       <form id="latam-search-form">
         <div class="field">
           <label for="latam-origin">Origem</label>
@@ -286,7 +286,7 @@
 
     <!-- No login: the call goes out from inside the bot's browser (see
          smiles.scraper.ts). One direction per search, three cabins together. -->
-    <section id="panel-smiles" class="panel" role="tabpanel" aria-labelledby="tab-smiles" hidden>
+    <section id="panel-smiles" class="panel" role="tabpanel" aria-labelledby="tab-smiles" tabindex="-1" hidden>
       <form id="smiles-search-form">
         <div class="field">
           <label for="smiles-origin">Origem</label>
@@ -335,7 +335,7 @@
       <div id="smiles-queue" class="search-queue"></div>
     </section>
 
-    <section id="panel-history" class="panel" role="tabpanel" aria-labelledby="tab-history" hidden>
+    <section id="panel-history" class="panel" role="tabpanel" aria-labelledby="tab-history" tabindex="-1" hidden>
       <div id="history-top" class="history-top" hidden>
         <p id="history-summary" class="history-summary"></p>
         <button type="button" id="clear-history-button" class="clear-button">Limpar histórico</button>
