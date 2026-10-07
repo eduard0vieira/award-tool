@@ -236,6 +236,23 @@ function latestSearchOf(origin, destination, program) {
   return sameRoute.reduce((newest, item) => (item.timestamp > newest.timestamp ? item : newest));
 }
 
+// Facts sit side by side with space between them instead of " · " joins.
+function setFacts(element, facts) {
+  element.classList.add("facts");
+  element.replaceChildren(
+    ...facts.filter(Boolean).map((fact) => {
+      const span = document.createElement("span");
+      if (typeof fact === "string") {
+        span.textContent = fact;
+      } else {
+        span.textContent = fact.text;
+        span.className = fact.className;
+      }
+      return span;
+    }),
+  );
+}
+
 function plural(count, one, other) {
   return `${count} ${count === 1 ? one : other}`;
 }
@@ -389,9 +406,12 @@ function renderHistory() {
     }),
   ).size;
   const withinTolerance = history.filter((item) => Date.now() - item.timestamp < TOLERANCE_MS).length;
-  historySummary.textContent =
-    `${plural(history.length, "busca", "buscas")} · ${plural(uniqueRoutes, "trecho diferente", "trechos diferentes")} · ` +
-    `${withinTolerance} dentro da tolerância de ${TOLERANCE_DAYS} dias · última ${formatRelativeTime(history[0].timestamp)}`;
+  setFacts(historySummary, [
+    plural(history.length, "busca", "buscas"),
+    plural(uniqueRoutes, "trecho diferente", "trechos diferentes"),
+    `${withinTolerance} dentro da tolerância de ${TOLERANCE_DAYS} dias`,
+    `última ${formatRelativeTime(history[0].timestamp)}`,
+  ]);
 
   const groups = new Map();
   for (const item of history) {
@@ -413,7 +433,7 @@ function renderHistory() {
 
     const subtitle = document.createElement("span");
     subtitle.className = "day-subtitle";
-    subtitle.textContent = `${new Date(items[0].timestamp).toLocaleDateString("pt-BR")} · ${plural(items.length, "busca", "buscas")}`;
+    setFacts(subtitle, [new Date(items[0].timestamp).toLocaleDateString("pt-BR"), plural(items.length, "busca", "buscas")]);
 
     header.append(label, subtitle);
     group.appendChild(header);
@@ -429,7 +449,7 @@ function historyCabins(item) {
   if (item.program === "SMILES") return [["Econômica", "cabin-economy"], ["Conforto", "cabin-premium"], ["Executiva", "cabin-business"]];
   if (item.program === "AA") {
     // Passengers only show when more than one, to tell it apart from the regular entry of the same route.
-    const label = (AA_CABIN_LABELS[item.cabin] || "Cabine n/d") + (item.passengers > 1 ? ` · ${item.passengers} pax` : "");
+    const label = (AA_CABIN_LABELS[item.cabin] || "Cabine n/d") + (item.passengers > 1 ? `, ${item.passengers} pax` : "");
     return [[label, AA_CABIN_CLASSES[item.cabin] || "cabin-economy"]];
   }
   return [["Econômica", "cabin-economy"], ["Premium", "cabin-premium"], ["Executiva", "cabin-business"], ["Primeira", "cabin-first"]];
@@ -1095,7 +1115,7 @@ function runOnServer(card, body, progressLabel, session) {
       } else if (event.type === "progress") {
         updateBar(card.barEl, event.fraction);
       } else if (event.type === "window") {
-        card.progressWindowEl.textContent = `Janela ${event.current} de ${event.total} · ${event.start} – ${event.end}`;
+        setFacts(card.progressWindowEl, [`Janela ${event.current} de ${event.total}`, `${event.start} – ${event.end}`]);
         card.noticeEl.hidden = true;
       } else if (event.type === "notice") {
         // Transient (e.g. AwardTool's rate-limit cooldown): cleared by the next window or progress.
@@ -1260,8 +1280,11 @@ function renderColumn(columnEl, section, colorClass) {
     const kept = keptSection(section);
     const removed = section.days.length - kept.days.length;
     const range = kept.min != null ? `${format(kept.min)}–${format(kept.max)}` : "Preço não informado";
-    summaryEl.textContent =
-      `${range} · ${plural(kept.days.length, "dia", "dias")}` + (removed > 0 ? ` · ${removed} fora do alerta` : "");
+    setFacts(summaryEl, [
+      { text: range, className: "fact-lead" },
+      plural(kept.days.length, "dia", "dias"),
+      removed > 0 && { text: `${removed} fora do alerta`, className: "fact-excluded" },
+    ]);
     copyButton.disabled = kept.days.length === 0;
   };
   renderSummary();
@@ -1511,8 +1534,11 @@ async function startTapSearch(origin, destination, roundTrip, ceilings, session)
     );
     const outboundReport = outbound.result;
     if (outbound.appliedCeilings) {
-      card.ceilingsEl.textContent =
-        `Teto aplicado: Executiva ${outbound.appliedCeilings.businessK}K · Econômica ${outbound.appliedCeilings.economyK}K`;
+      setFacts(card.ceilingsEl, [
+        { text: "Teto aplicado", className: "fact-lead" },
+        `Executiva ${outbound.appliedCeilings.businessK}K`,
+        `Econômica ${outbound.appliedCeilings.economyK}K`,
+      ]);
       card.ceilingsEl.hidden = false;
     }
     if (outbound.partialNotice) partialNotices.push(outbound.partialNotice);
@@ -1876,7 +1902,7 @@ function showAaBookingShortcut(card, legs) {
 
     const dates = document.createElement("span");
     dates.className = "pair-dates";
-    dates.textContent = `${label} · ${formatShortDate(day.date)}`;
+    setFacts(dates, [label, formatShortDate(day.date)]);
 
     const link = document.createElement("a");
     link.className = "pair-open";
