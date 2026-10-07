@@ -143,8 +143,9 @@ powershell -ExecutionPolicy Bypass -File C:\bot\award-tool\scripts\block-local-i
 
 Try it first with `-TestMinutes 2`: it unblocks on its own after 2 minutes, so a
 remote session that turns out to be blocked too is not locked out. To stop it,
-close its window from the remote session. Ctrl+Alt+Del on the notebook is never
-blocked. A desktop shortcut with the line above as its target makes it one click.
+press **Ctrl+Alt+D on the notebook's own keyboard** (for whoever sits at it), or
+close its window from the remote session. Ctrl+Alt+Del is never blocked. A
+desktop shortcut with the line above as its target makes it one click.
 
 ## Updating
 

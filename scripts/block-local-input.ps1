@@ -6,8 +6,8 @@
 #   powershell -ExecutionPolicy Bypass -File C:\bot\award-tool\scripts\block-local-input.ps1
 #   powershell -ExecutionPolicy Bypass -File C:\bot\award-tool\scripts\block-local-input.ps1 -TestMinutes 2
 #
-# Stop it by closing this window (from the remote session). Ctrl+Alt+Del on the
-# notebook itself is never blocked, so the keyboard can always get back in.
+# Stop it by closing this window (from the remote session) or by pressing
+# Ctrl+Alt+D on the notebook itself. Ctrl+Alt+Del is never blocked either.
 
 param([int]$TestMinutes = 0)
 
@@ -22,6 +22,11 @@ public static class PhysicalInputBlocker {
     const int WH_MOUSE_LL = 14;
     const uint LLKHF_INJECTED = 0x10;
     const uint LLMHF_INJECTED = 0x01;
+    const int WM_KEYDOWN = 0x100;
+    const int WM_KEYUP = 0x101;
+    const int WM_SYSKEYDOWN = 0x104;
+    const int WM_SYSKEYUP = 0x105;
+    const uint VK_D = 0x44;
 
     [StructLayout(LayoutKind.Sequential)]
     struct KBDLLHOOKSTRUCT { public uint vkCode; public uint scanCode; public uint flags; public uint time; public IntPtr dwExtraInfo; }
@@ -46,15 +51,35 @@ public static class PhysicalInputBlocker {
     static readonly HookProc mouseProc = OnMouse;
     static IntPtr keyboardHook = IntPtr.Zero;
     static IntPtr mouseHook = IntPtr.Zero;
+    static bool ctrlDown;
+    static bool altDown;
+    public static bool UnlockedByKeyboard;
     public static long BlockedKeys;
     public static long BlockedMouse;
 
     static IntPtr OnKeyboard(int nCode, IntPtr wParam, IntPtr lParam) {
         if (nCode >= 0) {
             var info = (KBDLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(KBDLLHOOKSTRUCT));
-            if ((info.flags & LLKHF_INJECTED) == 0) { BlockedKeys++; return (IntPtr)1; }
+            if ((info.flags & LLKHF_INJECTED) == 0) {
+                TrackUnlockChord(info.vkCode, (int)wParam);
+                BlockedKeys++;
+                return (IntPtr)1;
+            }
         }
         return CallNextHookEx(keyboardHook, nCode, wParam, lParam);
+    }
+
+    // The keys are still seen here before being dropped, which is what lets the
+    // physical keyboard ask for its own release.
+    static void TrackUnlockChord(uint vk, int message) {
+        bool down = message == WM_KEYDOWN || message == WM_SYSKEYDOWN;
+        bool up = message == WM_KEYUP || message == WM_SYSKEYUP;
+        if (vk == 0xA2 || vk == 0xA3 || vk == 0x11) { if (down) ctrlDown = true; if (up) ctrlDown = false; }
+        if (vk == 0xA4 || vk == 0xA5 || vk == 0x12) { if (down) altDown = true; if (up) altDown = false; }
+        if (vk == VK_D && down && ctrlDown && altDown) {
+            UnlockedByKeyboard = true;
+            Application.ExitThread();
+        }
     }
 
     static IntPtr OnMouse(int nCode, IntPtr wParam, IntPtr lParam) {
@@ -98,9 +123,10 @@ Write-Host "Teclado e touchpad do notebook bloqueados. O acesso remoto continua 
 if ($TestMinutes -gt 0) {
   Write-Host "Modo de teste: desbloqueia sozinho em $TestMinutes min."
 } else {
-  Write-Host "Para desbloquear, feche esta janela pelo acesso remoto."
+  Write-Host "Para desbloquear: Ctrl+Alt+D no teclado do notebook, ou feche esta janela pelo acesso remoto."
 }
 
 [PhysicalInputBlocker]::Run($TestMinutes)
 
+if ([PhysicalInputBlocker]::UnlockedByKeyboard) { Write-Host "Desbloqueado pelo Ctrl+Alt+D." }
 Write-Host ("Desbloqueado. Teclas ignoradas: {0}. Movimentos/cliques ignorados: {1}." -f [PhysicalInputBlocker]::BlockedKeys, [PhysicalInputBlocker]::BlockedMouse)
