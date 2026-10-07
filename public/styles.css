@@ -1471,6 +1471,32 @@ button:disabled {
   border-top: 2px solid var(--color, var(--border));
 }
 
+.toast {
+  position: fixed;
+  bottom: var(--e5);
+  left: 50%;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: var(--e4);
+  padding: var(--e3) var(--e4);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--text);
+  transform: translateX(-50%);
+}
+
+.toast-undo {
+  padding: 6px var(--e3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
 @media (max-width: 720px) {
   main {
     padding: var(--e4) var(--e4) var(--e6);

@@ -358,6 +358,8 @@ function removeFromHistory(timestamps) {
 }
 
 function renderHistory() {
+  // A re-render would bring back the row hidden while its undo is pending.
+  if (pendingRemoval?.kind === "history") finishPendingRemoval();
   clearNotice(historyNotice);
   const history = groupForDisplay(loadHistory().slice().sort((a, b) => b.timestamp - a.timestamp));
   historyList.innerHTML = "";
@@ -491,7 +493,18 @@ function createHistoryItem(item) {
   deleteButton.title = "Remover este trecho do histórico";
   deleteButton.setAttribute("aria-label", `Remover ${spokenRoute} do histórico`);
   deleteButton.innerHTML = ICONS.close;
-  deleteButton.addEventListener("click", () => removeFromHistory(item.timestamps || [item.timestamp]));
+  deleteButton.addEventListener("click", () =>
+    removeWithUndo({
+      kind: "history",
+      message: `${item.origin} → ${item.destination} removido do histórico`,
+      hide: () => (row.hidden = true),
+      restore: () => {
+        row.hidden = false;
+        deleteButton.focus();
+      },
+      commit: () => removeFromHistory(item.timestamps || [item.timestamp]),
+    }),
+  );
 
   row.append(main, cabins, right, repeatButton, deleteButton);
   return row;
@@ -511,6 +524,42 @@ function announce(message) {
   announcer.textContent = "";
   setTimeout(() => (announcer.textContent = message), 50);
 }
+
+const UNDO_MS = 6000;
+const toastEl = document.getElementById("toast");
+const toastTextEl = toastEl.querySelector(".toast-text");
+let pendingRemoval = null;
+
+// Removing only becomes final when the toast expires, so a click on the wrong
+// Remover can be taken back. A new removal finalizes the previous one first.
+function removeWithUndo({ kind, message, hide, restore, commit }) {
+  finishPendingRemoval();
+  hide();
+  pendingRemoval = { kind, restore, commit, timer: setTimeout(finishPendingRemoval, UNDO_MS) };
+  toastTextEl.textContent = message;
+  toastEl.hidden = false;
+  announce(`${message}. Use Desfazer para trazer de volta.`);
+}
+
+function finishPendingRemoval() {
+  if (!pendingRemoval) return;
+  const { commit, timer } = pendingRemoval;
+  pendingRemoval = null;
+  clearTimeout(timer);
+  toastEl.hidden = true;
+  commit();
+}
+
+toastEl.querySelector(".toast-undo").addEventListener("click", () => {
+  if (!pendingRemoval) return;
+  const { restore, timer } = pendingRemoval;
+  pendingRemoval = null;
+  clearTimeout(timer);
+  toastEl.hidden = true;
+  restore();
+});
+
+window.addEventListener("pagehide", finishPendingRemoval);
 
 function showNotice(noticeEl, message) {
   noticeEl.textContent = message;
@@ -638,11 +687,22 @@ function createJobCard(queueEl, routeTitle) {
 
   // Remove takes the card off the screen AND out of storage; otherwise it would
   // come back on the next reload, which is exactly what persistence does.
-  card.removeButton.addEventListener("click", () => {
-    const id = root.dataset.searchId;
-    if (id) saveSearches(loadSearches().filter((search) => search.id !== id));
-    root.remove();
-  });
+  card.removeButton.addEventListener("click", () =>
+    removeWithUndo({
+      kind: "search",
+      message: `Busca ${card.routeEl.textContent} removida`,
+      hide: () => (root.hidden = true),
+      restore: () => {
+        root.hidden = false;
+        card.removeButton.focus();
+      },
+      commit: () => {
+        const id = root.dataset.searchId;
+        if (id) saveSearches(loadSearches().filter((search) => search.id !== id));
+        root.remove();
+      },
+    }),
+  );
 
   queueEl.prepend(root);
   return card;
