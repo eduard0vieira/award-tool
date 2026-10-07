@@ -448,15 +448,7 @@ function createHistoryItem(item) {
 
   const route = document.createElement("span");
   route.className = "history-item-route";
-  const from = document.createElement("strong");
-  from.textContent = item.origin;
-  const arrow = document.createElement("span");
-  arrow.className = item.roundTrip ? "route-arrow route-arrow-round-trip" : "route-arrow";
-  arrow.textContent = item.roundTrip ? "⇄" : "→";
-  arrow.title = item.roundTrip ? "Ida e volta" : "Somente ida";
-  const to = document.createElement("strong");
-  to.textContent = item.destination;
-  route.append(from, arrow, to);
+  appendRoute(route, item.origin, item.destination, item.roundTrip);
 
   main.append(programTag, route);
 
@@ -593,13 +585,15 @@ let cardCount = 0;
 
 // Every search gets its own card, so several run in parallel without one
 // disturbing another's progress or result.
-function createJobCard(queueEl, routeTitle) {
+// `title` names the program; `detail` (cabin, passengers) only when it tells
+// two cards of the same route apart.
+function createJobCard(queueEl, { program, detail, origin, destination, roundTrip }) {
   const fragment = jobTemplate.content.cloneNode(true);
   const root = fragment.querySelector(".search-job");
 
   const card = {
     root,
-    routeEl: root.querySelector(".job-route"),
+    spokenTitle: `${program}${detail ? ` (${detail})` : ""}, ${origin} para ${destination}${roundTrip ? ", ida e volta" : ""}`,
     statusEl: root.querySelector(".job-status"),
     progressEl: root.querySelector(".progress"),
     progressLabelEl: root.querySelector(".progress-label"),
@@ -624,7 +618,11 @@ function createJobCard(queueEl, routeTitle) {
     copyLegs: [],
   };
 
-  card.routeEl.textContent = routeTitle;
+  root.querySelector(".job-program-name").textContent = program;
+  const detailEl = root.querySelector(".job-detail");
+  detailEl.textContent = detail || "";
+  detailEl.hidden = !detail;
+  appendRoute(root.querySelector(".job-route"), origin, destination, roundTrip);
 
   const cardId = `card-${++cardCount}`;
   const [datesTab, upgradeTab] = card.subtabButtons;
@@ -658,7 +656,7 @@ function createJobCard(queueEl, routeTitle) {
     if (className === "status-error") card.actionsEl.hidden = false;
     // Cards restored on page load would read out a burst of "Pronto".
     if (!card.restored && (className === "status-done" || className === "status-error")) {
-      announce(`${card.routeEl.textContent}: ${text}`);
+      announce(`${card.spokenTitle}: ${text}`);
     }
   };
 
@@ -703,7 +701,7 @@ function createJobCard(queueEl, routeTitle) {
   card.removeButton.addEventListener("click", () =>
     removeWithUndo({
       kind: "search",
-      message: `Busca ${card.routeEl.textContent} removida`,
+      message: `Busca ${card.spokenTitle} removida`,
       hide: () => (root.hidden = true),
       restore: () => {
         root.hidden = false;
@@ -756,7 +754,32 @@ const ICONS = {
   check: svgIcon('<path d="M20 6 9 17l-5-5"/>'),
   sheet: svgIcon('<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/>'),
   file: svgIcon('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>'),
+  oneWay: svgIcon('<path d="M4 12h16"/><path d="m14 6 6 6-6 6"/>'),
+  roundTrip: svgIcon('<path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/>'),
 };
+
+// The arrow is drawn, so screen readers get the words it stands for instead.
+function appendRoute(target, origin, destination, roundTrip) {
+  const from = document.createElement("strong");
+  from.textContent = origin;
+  const arrow = document.createElement("span");
+  arrow.className = "route-arrow";
+  arrow.title = roundTrip ? "Ida e volta" : "Somente ida";
+  arrow.innerHTML = roundTrip ? ICONS.roundTrip : ICONS.oneWay;
+  const spokenArrow = document.createElement("span");
+  spokenArrow.className = "visually-hidden";
+  spokenArrow.textContent = " para ";
+  arrow.append(spokenArrow);
+  const to = document.createElement("strong");
+  to.textContent = destination;
+  target.append(from, arrow, to);
+  if (roundTrip) {
+    const spokenRoundTrip = document.createElement("span");
+    spokenRoundTrip.className = "visually-hidden";
+    spokenRoundTrip.textContent = ", ida e volta";
+    target.append(spokenRoundTrip);
+  }
+}
 
 function setIconLabel(element, iconName, text) {
   element.innerHTML = ICONS[iconName];
@@ -1476,8 +1499,7 @@ function showPartialNotices(card, notices) {
 
 async function startTapSearch(origin, destination, roundTrip, ceilings, session) {
   session = session || newSession("tap", [origin, destination, roundTrip, ceilings]);
-  const arrow = roundTrip ? "⇄" : "→";
-  const card = createJobCard(tapQueue, `TAP: ${origin} ${arrow} ${destination}`);
+  const card = createJobCard(tapQueue, { program: "TAP", origin, destination, roundTrip });
   const partialNotices = [];
 
   try {
@@ -1547,8 +1569,7 @@ async function startTapSearch(origin, destination, roundTrip, ceilings, session)
 // One SeatSpy search already brings both legs (and spends a single credit).
 async function startSeatspySearch(program, origin, destination, roundTrip, showSeats, session) {
   session = session || newSession("seatspy", [program, origin, destination, roundTrip, showSeats]);
-  const arrow = roundTrip ? "⇄" : "→";
-  const card = createJobCard(seatspyQueue, `${PROGRAM_LABELS[program] || program}: ${origin} ${arrow} ${destination}`);
+  const card = createJobCard(seatspyQueue, { program: PROGRAM_LABELS[program] || program, origin, destination, roundTrip });
 
   try {
     const { result: legs } = await runOnServer(
@@ -1622,8 +1643,7 @@ function showSpreadsheetLink(card, url, label) {
 // One direction per job (the endpoint is one-way), all three cabins together.
 async function startSmilesSearch(origin, destination, ceilings, roundTrip, period, session) {
   session = session || newSession("smiles", [origin, destination, ceilings, roundTrip, period]);
-  const arrow = roundTrip ? "⇄" : "→";
-  const card = createJobCard(smilesQueue, `Smiles: ${origin} ${arrow} ${destination}`);
+  const card = createJobCard(smilesQueue, { program: "Smiles", origin, destination, roundTrip });
   const partialNotices = [];
   const baseBody = { source: "smiles", ceilings, period };
 
@@ -1882,11 +1902,16 @@ function cheapestDayWithLink(section) {
 // One cabin per search, one job per direction; no Upgrade tab (a single cabin never crosses another).
 async function startAaSearch(origin, destination, cabin, maxStops, ceiling, roundTrip, passengers = 1, session) {
   session = session || newSession("aa", [origin, destination, cabin, maxStops, ceiling, roundTrip, passengers]);
-  const arrow = roundTrip ? "⇄" : "→";
   const cabinLabel = AA_CABIN_LABELS[cabin] || cabin;
   // One passenger is the common case; the title only mentions it when there are more.
   const passengersLabel = passengers > 1 ? `, ${passengers} passageiros` : "";
-  const card = createJobCard(aaQueue, `American Airlines (${cabinLabel}${passengersLabel}): ${origin} ${arrow} ${destination}`);
+  const card = createJobCard(aaQueue, {
+    program: "American Airlines",
+    detail: `${cabinLabel}${passengersLabel}`,
+    origin,
+    destination,
+    roundTrip,
+  });
   const partialNotices = [];
   const baseBody = { source: "aa", cabin, maxStops, ceiling, passengers };
 
@@ -2085,7 +2110,7 @@ function showLatamAlertButton(card, origin, destination, legs, confirmation) {
 // The alert comes from the miles confirmation, where the number the client pays shows up.
 async function startLatamSearch(origin, destination, ceilings, confirmMiles, session) {
   session = session || newSession("latam", [origin, destination, ceilings, confirmMiles]);
-  const card = createJobCard(latamQueue, `LATAM: ${origin} ⇄ ${destination}`);
+  const card = createJobCard(latamQueue, { program: "LATAM", origin, destination, roundTrip: true });
 
   try {
     const { result: legs, partialNotice, confirmation } = await runOnServer(
@@ -2209,8 +2234,7 @@ latamForm.addEventListener("submit", (event) => {
 // without saying which cabin it is, so there is nothing to choose.
 async function startIberiaSearch(origin, destination, ceilingAvios, roundTrip, detailDays = 0, maxStops = null, cabin = "", session) {
   session = session || newSession("iberia", [origin, destination, ceilingAvios, roundTrip, detailDays, maxStops, cabin]);
-  const arrow = roundTrip ? "⇄" : "→";
-  const card = createJobCard(iberiaQueue, `Iberia (Avios): ${origin} ${arrow} ${destination}`);
+  const card = createJobCard(iberiaQueue, { program: "Iberia", detail: "Avios", origin, destination, roundTrip });
   const partialNotices = [];
   const baseBody = { source: "iberia", ceiling: ceilingAvios, detailDays, maxStops, cabins: cabin ? [cabin] : [] };
 
