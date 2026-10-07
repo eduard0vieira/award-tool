@@ -154,3 +154,20 @@ Two things worth remembering:
 `openResultsPage()` (the step that plants the bot's cookies) uses the same URL
 function. There the page only serves to open the session, and the calendar
 request is what filters.
+
+## Fresh profile from a Brazilian IP (2026-10-07, Windows notebook)
+
+The notebook's bot profile had no AA cookies (`import-cookies.sh` does not run
+on Windows). Measured with a throwaway profile and real Chrome:
+
+- Warm-up on `https://www.aa.com/` goes `301 → homePage.do →
+  internationalSplashSubmit.do → aa.com.br/homePage.do?locale=pt_BR`. That page
+  loads itself a second time a few seconds later, and that reload aborts the
+  deep link: `page.goto: net::ERR_ABORTED`. On the Mac the imported cookies
+  already carried the region, so the redirect never happened.
+- Warm-up on `https://www.aa.com/homePage.do?locale=en_US` stays on aa.com, and
+  the deep link reaches `choose-flights` normally.
+- On that fresh profile the results page shows Akamai's captcha
+  (`Challenge Validation`, `/challenge-assets/v7/captcha.html`), but the in-page
+  calendar `fetch` still answered **200** with real data (GRU–MIA business,
+  Nov/2026). The captcha does not block the sweep.
