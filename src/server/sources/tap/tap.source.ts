@@ -24,6 +24,15 @@ export class TapSource implements SearchSource<TapSearchDto> {
   readonly id = "tap";
   readonly requestDto = TapSearchDto;
 
+  identity(request: TapSearchDto) {
+    return {
+      origin: request.origin,
+      destination: request.destination,
+      business: request.ceilings?.business ?? null,
+      economy: request.ceilings?.economy ?? null,
+    };
+  }
+
   constructor(
     @Inject(TAP_POOL) private readonly pool: SessionPool<TapSession>,
     private readonly runner: JobRunner,

@@ -48,6 +48,18 @@ export class LatamSource implements SearchSource<LatamSearchDto> {
   readonly id = "latam";
   readonly requestDto = LatamSearchDto;
 
+  identity(request: LatamSearchDto) {
+    return {
+      origin: request.origin,
+      destination: request.destination,
+      maxReais: request.ceilings?.maxReais ?? null,
+      lowestFareOnly: request.ceilings?.lowestFareOnly ?? null,
+      confirmMiles: request.confirmMiles ?? null,
+      outboundMarginReais: request.outboundMarginReais ?? null,
+      returnMarginReais: request.returnMarginReais ?? null,
+    };
+  }
+
   constructor(
     @Inject(LATAM_POOL) private readonly pool: SessionPool<LatamSession>,
     private readonly runner: JobRunner,

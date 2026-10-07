@@ -54,6 +54,18 @@ export class SmilesSource implements SearchSource<SmilesSearchDto> {
   readonly id = "smiles";
   readonly requestDto = SmilesSearchDto;
 
+  identity(request: SmilesSearchDto) {
+    return {
+      origin: request.origin,
+      destination: request.destination,
+      economy: request.ceilings?.economy ?? null,
+      premium: request.ceilings?.premium ?? null,
+      business: request.ceilings?.business ?? null,
+      // Normalized, so "2026-11" and "2026-11-01" are the same period.
+      period: toPeriod(request.period),
+    };
+  }
+
   constructor(
     @Inject(SMILES_POOL) private readonly pool: SessionPool<SmilesSession>,
     private readonly runner: JobRunner,

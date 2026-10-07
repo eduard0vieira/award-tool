@@ -37,6 +37,10 @@ class FakeSource implements SearchSource<FakeSearchDto> {
     private readonly jobs: JobStore,
   ) {}
 
+  identity(request: FakeSearchDto) {
+    return { origin: request.origin, destination: request.destination };
+  }
+
   start(jobId: string, request: FakeSearchDto) {
     return this.runner.run(this.pool, jobId, async () => {
       const job = this.jobs.callbacks(jobId);

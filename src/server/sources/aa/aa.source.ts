@@ -15,6 +15,17 @@ export class AaSource implements SearchSource<AaSearchDto> {
   readonly id = "aa";
   readonly requestDto = AaSearchDto;
 
+  identity(request: AaSearchDto) {
+    return {
+      origin: request.origin,
+      destination: request.destination,
+      cabin: request.cabin,
+      maxStops: request.maxStops ?? null,
+      ceiling: request.ceiling ?? null,
+      passengers: request.passengers ?? null,
+    };
+  }
+
   constructor(
     @Inject(AA_POOL) private readonly pool: SessionPool<AaSession>,
     private readonly runner: JobRunner,

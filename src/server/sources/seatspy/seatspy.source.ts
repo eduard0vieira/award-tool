@@ -16,6 +16,20 @@ export class SeatspySource implements SearchSource<SeatspySearchDto> {
   readonly id = "seatspy";
   readonly requestDto = SeatspySearchDto;
 
+  identity(request: SeatspySearchDto) {
+    return {
+      origin: request.origin,
+      destination: request.destination,
+      airline: request.airline,
+      roundTrip: request.roundTrip ?? null,
+      showSeats: request.showSeats ?? null,
+      economy: request.ceilings?.economy ?? null,
+      premium: request.ceilings?.premium ?? null,
+      business: request.ceilings?.business ?? null,
+      first: request.ceilings?.first ?? null,
+    };
+  }
+
   constructor(
     @Inject(SEATSPY_POOL) private readonly pool: SessionPool<SeatspySession>,
     private readonly runner: JobRunner,

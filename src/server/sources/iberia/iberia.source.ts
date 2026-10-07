@@ -41,6 +41,18 @@ export class IberiaSource implements SearchSource<IberiaSearchDto> {
   readonly id = "iberia";
   readonly requestDto = IberiaSearchDto;
 
+  identity(request: IberiaSearchDto) {
+    return {
+      origin: request.origin,
+      destination: request.destination,
+      ceiling: request.ceiling ?? null,
+      passengers: request.passengers ?? null,
+      detailDays: request.detailDays ?? null,
+      maxStops: request.maxStops ?? null,
+      cabins: [...(request.cabins ?? [])].sort(),
+    };
+  }
+
   constructor(
     @Inject(IBERIA_POOL) private readonly pool: SessionPool<IberiaSession>,
     private readonly runner: JobRunner,
