@@ -10,16 +10,32 @@ function nextPage() {
   return next && next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\") ? next : "/";
 }
 
-function showError(message) {
+function showError(message, invalidInputs = []) {
   errorEl.textContent = message;
   errorEl.hidden = false;
+  for (const input of [userInput, passInput]) {
+    if (invalidInputs.includes(input)) {
+      input.setAttribute("aria-invalid", "true");
+      input.setAttribute("aria-describedby", "login-error");
+    } else {
+      input.removeAttribute("aria-invalid");
+      input.removeAttribute("aria-describedby");
+    }
+  }
+}
+
+function clearError() {
+  showError("");
+  errorEl.hidden = true;
 }
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
-  errorEl.hidden = true;
-  if (!userInput.value || !passInput.value) {
-    showError("Preencha usuário e senha.");
+  clearError();
+  const empty = [userInput, passInput].filter((input) => !input.value);
+  if (empty.length > 0) {
+    showError("Preencha usuário e senha.", empty);
+    empty[0].focus();
     return;
   }
 
@@ -36,7 +52,7 @@ form.addEventListener("submit", async (event) => {
       return;
     }
     const body = await response.json().catch(() => ({}));
-    showError(body.error || "Não foi possível entrar.");
+    showError(body.error || "Não foi possível entrar.", [userInput, passInput]);
     passInput.select();
   } catch {
     showError("Não foi possível conectar ao servidor.");

@@ -1275,13 +1275,14 @@ function renderColumn(columnEl, section, colorClass) {
     return;
   }
 
+  const editorId = `${columnEl.querySelector(".column-body").id}-editor`;
   const editor = document.createElement("div");
   editor.className = "dates-editor";
   editor.hidden = true;
   editor.innerHTML = `
-    <p class="dates-editor-hint">Apague as datas que não vão no alerta. Selecione um trecho ou uma linha inteira para tirar várias de uma vez.</p>
-    <textarea class="dates-editor-text" spellcheck="false"></textarea>
-    <p class="dates-editor-error" hidden></p>
+    <p class="dates-editor-hint" id="${editorId}-hint">Apague as datas que não vão no alerta. Selecione um trecho ou uma linha inteira para tirar várias de uma vez.</p>
+    <textarea class="dates-editor-text" spellcheck="false" aria-describedby="${editorId}-hint ${editorId}-error"></textarea>
+    <p class="dates-editor-error" id="${editorId}-error" role="alert" hidden></p>
     <div class="dates-editor-actions">
       <button type="button" class="action-button dates-editor-apply">Aplicar</button>
       <button type="button" class="action-button dates-editor-restore">Restaurar todas</button>
@@ -1289,13 +1290,20 @@ function renderColumn(columnEl, section, colorClass) {
     </div>`;
   chipsEl.before(editor);
   const textArea = editor.querySelector(".dates-editor-text");
+  textArea.setAttribute("aria-label", `Datas de ${columnEl.querySelector(".column-label").textContent} que vão no alerta`);
   const errorEl = editor.querySelector(".dates-editor-error");
+  const setError = (message) => {
+    errorEl.textContent = message;
+    errorEl.hidden = !message;
+    if (message) textArea.setAttribute("aria-invalid", "true");
+    else textArea.removeAttribute("aria-invalid");
+  };
 
   const setEditing = (editing) => {
     editor.hidden = !editing;
     chipsEl.hidden = editing;
     editButton.setAttribute("aria-pressed", String(editing));
-    errorEl.hidden = true;
+    setError("");
     if (!editing) return;
     setColumnExpanded(columnEl, true);
     textArea.value = keptSection(section).text;
@@ -1306,8 +1314,8 @@ function renderColumn(columnEl, section, colorClass) {
   const apply = () => {
     const parsed = parseKeptDates(textArea.value, section);
     if (parsed.error) {
-      errorEl.textContent = parsed.error;
-      errorEl.hidden = false;
+      setError(parsed.error);
+      textArea.focus();
       return;
     }
     const excluded = new Set(section.days.map((day) => day.date).filter((date) => !parsed.kept.has(date)));
@@ -1325,7 +1333,7 @@ function renderColumn(columnEl, section, colorClass) {
   editor.querySelector(".dates-editor-cancel").onclick = () => setEditing(false);
   editor.querySelector(".dates-editor-restore").onclick = () => {
     textArea.value = section.text;
-    errorEl.hidden = true;
+    setError("");
   };
   textArea.onkeydown = (event) => {
     if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) apply();
