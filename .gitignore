@@ -22,6 +22,7 @@ spreadsheets/
 # LATAM recon: the screenshots come from a logged-in session and may show the
 # holder's name, account number and balance.
 fixtures/latam-rt/
+fixtures/latam-login/
 
 # Recon diagnostic captures show the logged-in screen (holder's name, miles
 # balance). They stay on disk for debugging, never in the repository.
