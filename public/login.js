@@ -40,7 +40,7 @@ form.addEventListener("submit", async (event) => {
   }
 
   submitButton.disabled = true;
-  submitButton.textContent = "Entrando...";
+  submitButton.textContent = "Entrando…";
   try {
     const response = await fetch("/api/login", {
       method: "POST",

@@ -236,6 +236,19 @@ function latestSearchOf(origin, destination, program) {
   return sameRoute.reduce((newest, item) => (item.timestamp > newest.timestamp ? item : newest));
 }
 
+function plural(count, one, other) {
+  return `${count} ${count === 1 ? one : other}`;
+}
+
+const reaisFormat = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 0 });
+const reaisCentsFormat = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+const integerFormat = new Intl.NumberFormat("pt-BR");
+// Search dates are calendar days ("2026-11-08"); read in UTC they never shift a day.
+const shortDateFormat = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", timeZone: "UTC" });
+const fullDateFormat = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" });
+const formatShortDate = (isoDate) => shortDateFormat.format(new Date(`${isoDate}T00:00:00Z`));
+const formatFullDate = (isoDate) => fullDateFormat.format(new Date(`${isoDate}T00:00:00Z`));
+
 function formatDateTime(timestamp) {
   const date = new Date(timestamp);
   const day = date.toLocaleDateString("pt-BR");
@@ -377,7 +390,7 @@ function renderHistory() {
   ).size;
   const withinTolerance = history.filter((item) => Date.now() - item.timestamp < TOLERANCE_MS).length;
   historySummary.textContent =
-    `${history.length} busca(s) · ${uniqueRoutes} trecho(s) diferente(s) · ` +
+    `${plural(history.length, "busca", "buscas")} · ${plural(uniqueRoutes, "trecho diferente", "trechos diferentes")} · ` +
     `${withinTolerance} dentro da tolerância de ${TOLERANCE_DAYS} dias · última ${formatRelativeTime(history[0].timestamp)}`;
 
   const groups = new Map();
@@ -400,7 +413,7 @@ function renderHistory() {
 
     const subtitle = document.createElement("span");
     subtitle.className = "day-subtitle";
-    subtitle.textContent = `${new Date(items[0].timestamp).toLocaleDateString("pt-BR")} · ${items.length} busca(s)`;
+    subtitle.textContent = `${new Date(items[0].timestamp).toLocaleDateString("pt-BR")} · ${plural(items.length, "busca", "buscas")}`;
 
     header.append(label, subtitle);
     group.appendChild(header);
@@ -948,7 +961,7 @@ function showQuestion(card, jobId, { id, message }) {
 
   const answer = async (proceed, button) => {
     actions.querySelectorAll("button").forEach((other) => (other.disabled = true));
-    button.textContent = "...";
+    button.textContent = "…";
     try {
       const response = await apiFetch(`/api/searches/${jobId}/answer`, {
         method: "POST",
@@ -1055,7 +1068,7 @@ function runOnServer(card, body, progressLabel, session) {
       if (event.type === "queued") {
         card.setStatus("Na fila", "status-queued");
       } else if (event.type === "started") {
-        card.setStatus("Buscando...", "status-searching");
+        card.setStatus("Buscando…", "status-searching");
       } else if (event.type === "progress") {
         updateBar(card.barEl, event.fraction);
       } else if (event.type === "window") {
@@ -1072,7 +1085,7 @@ function runOnServer(card, body, progressLabel, session) {
       } else if (event.type === "done") {
         events.close();
         removeQuestion(card);
-        // Otherwise the label stays frozen on the last "Buscando..." after the search ends.
+        // Otherwise the label stays frozen on the last "Buscando…" after the search ends.
         card.progressLabelEl.textContent = "";
         const result = {
           result: event.legs || event.section || event.report,
@@ -1160,7 +1173,7 @@ function renderUpgrade(card) {
 
     block.querySelector(".column-summary").textContent =
       crossed.length > 0
-        ? `${crossed.length} dia(s) com as duas cabines disponíveis.`
+        ? `${plural(crossed.length, "dia", "dias")} com as duas cabines disponíveis.`
         : "Nenhum dia com Executiva e Econômica juntas nesse período.";
 
     if (crossed.length > 0) {
@@ -1219,13 +1232,13 @@ function renderColumn(columnEl, section, colorClass) {
 
   // Miles sources show "123K"; LATAM sends unit "BRL" and becomes "R$ 909". When
   // SeatSpy marks a day available without a price, min/max are null.
-  const format = (value) => (section.unit === "BRL" ? `R$ ${value.toLocaleString("pt-BR")}` : `${value}K`);
+  const format = (value) => (section.unit === "BRL" ? reaisFormat.format(value) : `${value}K`);
   const renderSummary = () => {
     const kept = keptSection(section);
     const removed = section.days.length - kept.days.length;
     const range = kept.min != null ? `${format(kept.min)}–${format(kept.max)}` : "Preço não informado";
     summaryEl.textContent =
-      `${range} · ${kept.days.length} dia(s)` + (removed > 0 ? ` · ${removed} fora do alerta` : "");
+      `${range} · ${plural(kept.days.length, "dia", "dias")}` + (removed > 0 ? ` · ${removed} fora do alerta` : "");
     copyButton.disabled = kept.days.length === 0;
   };
   renderSummary();
@@ -1250,13 +1263,13 @@ function renderColumn(columnEl, section, colorClass) {
         chip.href = link;
         chip.target = "_blank";
         chip.rel = "noopener noreferrer";
-        chip.title = `Abrir a emissão de ${date} no site`;
+        chip.title = `Abrir a emissão de ${formatFullDate(date)} no site`;
       }
       if (seats > 0) {
         const seatsEl = document.createElement("small");
         seatsEl.className = "date-chip-seats";
         seatsEl.textContent = seats;
-        seatsEl.title = `${seats} vaga(s)`;
+        seatsEl.title = plural(seats, "vaga", "vagas");
         chip.appendChild(seatsEl);
       }
       row.appendChild(chip);
@@ -1471,7 +1484,7 @@ async function startTapSearch(origin, destination, roundTrip, ceilings, session)
     const outbound = await runOnServer(
       card,
       { source: "tap", origin, destination, ceilings },
-      roundTrip ? "Buscando ida..." : "Buscando...",
+      roundTrip ? "Buscando ida…" : "Buscando…",
       session,
     );
     const outboundReport = outbound.result;
@@ -1500,7 +1513,7 @@ async function startTapSearch(origin, destination, roundTrip, ceilings, session)
       const inbound = await runOnServer(
         card,
         { source: "tap", origin: destination, destination: origin, ceilings },
-        "Buscando volta...",
+        "Buscando volta…",
         session,
       );
       returnReport = inbound.result;
@@ -1554,7 +1567,7 @@ async function startSeatspySearch(program, origin, destination, roundTrip, showS
           first: ceilingInMiles(seatspyFirstCeilingInput),
         },
       },
-      roundTrip ? "Buscando ida e volta..." : "Buscando...",
+      roundTrip ? "Buscando ida e volta…" : "Buscando…",
       session,
     );
     for (const leg of legs) {
@@ -1618,7 +1631,7 @@ async function startSmilesSearch(origin, destination, ceilings, roundTrip, perio
     const outbound = await runOnServer(
       card,
       { ...baseBody, origin, destination },
-      roundTrip ? "Buscando ida..." : "Buscando...",
+      roundTrip ? "Buscando ida…" : "Buscando…",
       session,
     );
     const outboundLegs = outbound.result;
@@ -1633,7 +1646,7 @@ async function startSmilesSearch(origin, destination, ceilings, roundTrip, perio
       const inbound = await runOnServer(
         card,
         { ...baseBody, origin: destination, destination: origin },
-        "Buscando volta...",
+        "Buscando volta…",
         session,
       );
       returnLegs = inbound.result;
@@ -1841,7 +1854,7 @@ function showAaBookingShortcut(card, legs) {
 
     const dates = document.createElement("span");
     dates.className = "pair-dates";
-    dates.textContent = `${label} · ${day.date.split("-").reverse().slice(0, 2).join("/")}`;
+    dates.textContent = `${label} · ${formatShortDate(day.date)}`;
 
     const link = document.createElement("a");
     link.className = "pair-open";
@@ -1879,7 +1892,7 @@ async function startAaSearch(origin, destination, cabin, maxStops, ceiling, roun
     const outbound = await runOnServer(
       card,
       { ...baseBody, origin, destination },
-      roundTrip ? "Buscando ida..." : "Buscando...",
+      roundTrip ? "Buscando ida…" : "Buscando…",
       session,
     );
     const outboundSection = outbound.result;
@@ -1895,7 +1908,7 @@ async function startAaSearch(origin, destination, cabin, maxStops, ceiling, roun
       const inbound = await runOnServer(
         card,
         { ...baseBody, origin: destination, destination: origin },
-        "Buscando volta...",
+        "Buscando volta…",
         session,
       );
       returnSection = inbound.result;
@@ -1964,20 +1977,16 @@ function showMilesConfirmation(card, confirmation) {
 }
 
 function pairRow(pair) {
-  const number = (value) => value.toLocaleString("pt-BR");
-  const reais = (value) => value.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
-  const shortDate = (iso) => iso.split("-").reverse().slice(0, 2).join("/");
-
   const row = document.createElement("div");
   row.className = "pair-row";
 
   const value = document.createElement("strong");
   value.className = "pair-value";
-  value.textContent = `${number(pair.options[0].miles)} pts + R$ ${reais(pair.options[0].totalReais)}`;
+  value.textContent = `${integerFormat.format(pair.options[0].miles)} pts + ${reaisCentsFormat.format(pair.options[0].totalReais)}`;
 
   const dates = document.createElement("span");
   dates.className = "pair-dates";
-  dates.textContent = `${shortDate(pair.outboundDate)} → ${shortDate(pair.returnDate)}`;
+  dates.textContent = `${formatShortDate(pair.outboundDate)} → ${formatShortDate(pair.returnDate)}`;
 
   row.append(value, dates);
 
@@ -2080,7 +2089,7 @@ async function startLatamSearch(origin, destination, ceilings, confirmMiles, ses
     const { result: legs, partialNotice, confirmation } = await runOnServer(
       card,
       { source: "latam", origin, destination, ceilings, confirmMiles, outboundMarginReais: 100, returnMarginReais: 300 },
-      "Buscando ida e volta...",
+      "Buscando ida e volta…",
       session,
     );
     for (const leg of legs) {
@@ -2207,7 +2216,7 @@ async function startIberiaSearch(origin, destination, ceilingAvios, roundTrip, d
     const outbound = await runOnServer(
       card,
       { ...baseBody, origin, destination },
-      roundTrip ? "Buscando ida..." : "Buscando...",
+      roundTrip ? "Buscando ida…" : "Buscando…",
       session,
     );
     if (outbound.partialNotice) partialNotices.push(outbound.partialNotice);
@@ -2222,7 +2231,7 @@ async function startIberiaSearch(origin, destination, ceilingAvios, roundTrip, d
       inbound = await runOnServer(
         card,
         { ...baseBody, origin: destination, destination: origin },
-        "Buscando volta...",
+        "Buscando volta…",
         session,
       );
       if (inbound.partialNotice) partialNotices.push(inbound.partialNotice);
