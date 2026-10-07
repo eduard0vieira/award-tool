@@ -48,9 +48,13 @@ click search. Each search becomes a card in the tab's queue, with a progress bar
 fed by SSE. Several can run at once (session pool: 3 AwardTool, 3 SeatSpy, 2 AA,
 2 LATAM), and switching tabs does not drop the others' progress.
 
-The server has Basic Auth (`BOT_AUTH_USER`/`BOT_AUTH_PASS`) precisely because,
+The server requires a login (`BOT_AUTH_USER`/`BOT_AUTH_PASS`) precisely because,
 when it is exposed through ngrok, anyone who found the URL could trigger
-searches on the paid accounts.
+searches on the paid accounts. The page at `/login` sets a signed, HttpOnly,
+SameSite=Strict session cookie that lasts 30 days; changing the password ends
+every session. Basic credentials in the header are still accepted, because the
+alert renderer and `scripts/run-server.ts` use them. The cookie is signed with
+`.session-secret` (created on first start, never committed).
 
 **Stack:** TypeScript + Node, NestJS (on Express) running through the SWC
 loader, class-validator on request bodies, Playwright, Prisma (SQLite, no models
@@ -75,7 +79,7 @@ src/
     alerts.ts                  generates the alert image from the result
     spreadsheet.ts             CSV + Google Sheets (one tab per search)
   server/                    NestJS app
-    main.ts                    boots the app; configure-app.ts wires Basic Auth, static files, filter and validation
+    main.ts                    boots the app; configure-app.ts wires the login, static files, filter and validation
     jobs/                      job state, SSE events, pool queue, cancel/answer
     search/                    POST /api/searches: picks the source in the registry and validates with its DTO
     sources/<source>/          one Nest module per source: session pool, DTO and runner
@@ -259,7 +263,7 @@ See `.env.example` for the full list.
 ```
 LOGIN_URL, EMAIL_ACCOUNT, PASSWORD_ACCOUNT        # AwardTool
 SEATSPY_LOGIN_URL, SEATSPY_EMAIL, SEATSPY_PASSWORD
-BOT_AUTH_USER, BOT_AUTH_PASS                      # server Basic Auth
+BOT_AUTH_USER, BOT_AUTH_PASS                      # server login
 *_CONCURRENCY                                     # simultaneous jobs per source
 IDLE_MINUTES                                      # closes an idle session (0 turns it off)
 *_SEARCH_INTERVAL_MS                              # rate limiter

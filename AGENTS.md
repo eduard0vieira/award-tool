@@ -103,8 +103,8 @@ reduce it without asking.
 - Never commit cookies, tokens, client data or API responses containing personal
   information.
 - Test fixtures are anonymized.
-- The server has Basic Auth because it is exposed through a tunnel. Do not
-  remove or weaken it.
+- The server requires a login (session cookie or Basic credentials) because it
+  is exposed through a tunnel. Do not remove or weaken it.
 
 ---
 
