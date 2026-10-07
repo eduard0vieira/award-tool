@@ -42,7 +42,7 @@
   --surface: #ffffff;
   --surface-sunk: #f5f6f6;
   --line: #d5d9dc;
-  --line-strong: #8f979f;
+  --line-strong: #858d95;
 
   --ink: #1b1f23;
   --ink-soft: #545c65;
@@ -502,7 +502,7 @@ textarea {
 
 .field input::placeholder {
   color: var(--ink-soft);
-  opacity: 0.75;
+  opacity: 1;
 }
 
 .field input:hover,
