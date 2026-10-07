@@ -12,6 +12,7 @@ export const FIXTURES_DIR = path.join(ROOT_DIR, "fixtures");
 // Generated outputs, kept out of git (see .gitignore).
 export const ALERTS_DIR = path.join(ROOT_DIR, "alerts");
 export const SPREADSHEETS_DIR = path.join(ROOT_DIR, "spreadsheets");
+export const SESSION_SECRET_FILE = path.join(ROOT_DIR, ".session-secret");
 
 // The alerts portal is another repository, a sibling of this one.
 export const PORTAL_DIST_DIR = path.join(ROOT_DIR, "..", "vcc-alertas-portal", "dist");

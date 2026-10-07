@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <title>Entrar · Bot de Emissões</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body class="login-page">
+  <main>
+    <h1>✈️ Bot de Emissões <span class="version">v1</span></h1>
+
+    <form id="login-form" class="login-form" novalidate>
+      <h2>Entrar</h2>
+      <div class="field">
+        <label for="login-user">Usuário</label>
+        <input id="login-user" name="user" autocomplete="username" autocapitalize="none" spellcheck="false" required autofocus />
+      </div>
+      <div class="field">
+        <label for="login-pass">Senha</label>
+        <input id="login-pass" name="pass" type="password" autocomplete="current-password" required />
+      </div>
+      <p id="login-error" class="login-error" role="alert" hidden></p>
+      <button type="submit">Entrar</button>
+    </form>
+  </main>
+  <script src="/login.js"></script>
+</body>
+</html>

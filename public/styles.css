@@ -134,11 +134,64 @@ main {
   padding: var(--e7) var(--e5) 96px;
 }
 
-main > h1 {
+main > h1,
+.app-header h1 {
   display: flex;
   align-items: center;
   gap: var(--e2);
+}
+
+main > h1,
+.app-header {
   margin-bottom: var(--e5);
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e4);
+}
+
+/* Same vertical rhythm as the main page, centered on a single narrow card. */
+.login-page main {
+  max-width: 400px;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding-top: var(--e5);
+  padding-bottom: var(--e7);
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e4);
+  padding: var(--e5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-raised);
+}
+
+.login-form .field {
+  flex: none;
+}
+
+.login-form button[type="submit"] {
+  width: 100%;
+  margin-left: 0;
+}
+
+.login-error {
+  margin: 0;
+  padding: var(--e2) var(--e3);
+  border: 1px solid rgba(248, 113, 113, 0.3);
+  border-left-width: 3px;
+  border-radius: var(--radius-sm);
+  background: var(--error-bg);
+  color: var(--error);
+  font-size: 13px;
 }
 
 .version {

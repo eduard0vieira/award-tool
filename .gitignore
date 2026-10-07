@@ -33,3 +33,6 @@ fixtures/*.png
 /generated/
 
 .claude/settings.local.json
+
+# Signs the login sessions; never shared, never committed.
+.session-secret

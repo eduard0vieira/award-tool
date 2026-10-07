@@ -1,3 +1,19 @@
+// A 401 means the login session ended (30 days, or the password changed), so
+// the page goes back to the login and returns here afterwards.
+async function apiFetch(url, options) {
+  const response = await fetch(url, options);
+  if (response.status === 401) {
+    location.href = `/login?next=${encodeURIComponent(location.pathname + location.search)}`;
+  }
+  return response;
+}
+
+document.getElementById("logout-button").addEventListener("click", async () => {
+  const response = await fetch("/api/logout", { method: "POST" });
+  if (response.ok) location.href = "/login";
+  else alert("Não foi possível sair. Tente de novo.");
+});
+
 const tapForm = document.getElementById("tap-search-form");
 const tapOriginInput = document.getElementById("tap-origin");
 const tapDestinationInput = document.getElementById("tap-destination");
@@ -531,7 +547,7 @@ function createJobCard(queueEl, routeTitle) {
       return;
     }
     try {
-      const response = await fetch(`/api/searches/${jobId}/cancel`, { method: "POST" });
+      const response = await apiFetch(`/api/searches/${jobId}/cancel`, { method: "POST" });
       if (!response.ok && response.status !== 409) {
         throw new Error((await response.json().catch(() => ({}))).error || "Falha ao parar.");
       }
@@ -714,7 +730,7 @@ async function restoreSearches() {
         steps.push(step);
         continue;
       }
-      const exists = await fetch(`/api/searches/${step.jobId}/state`)
+      const exists = await apiFetch(`/api/searches/${step.jobId}/state`)
         .then((response) => response.ok)
         .catch(() => false);
       if (!exists) {
@@ -753,7 +769,7 @@ function showQuestion(card, jobId, { id, message }) {
     actions.querySelectorAll("button").forEach((other) => (other.disabled = true));
     button.textContent = "...";
     try {
-      const response = await fetch(`/api/searches/${jobId}/answer`, {
+      const response = await apiFetch(`/api/searches/${jobId}/answer`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id, proceed }),
@@ -826,7 +842,7 @@ function runOnServer(card, body, progressLabel, session) {
     if (!jobId) {
       let response;
       try {
-        response = await fetch("/api/searches", {
+        response = await apiFetch("/api/searches", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
@@ -1472,7 +1488,7 @@ function hasDays(section) {
 }
 
 async function requestAlert(body) {
-  const response = await fetch("/api/alerts", {
+  const response = await apiFetch("/api/alerts", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),

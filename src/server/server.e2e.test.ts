@@ -1,5 +1,6 @@
 import "reflect-metadata";
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import { after, before, describe, test } from "node:test";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import { Test } from "@nestjs/testing";
@@ -62,7 +63,7 @@ async function startApp(credentials: Credentials | null) {
     })
     .compile();
   const app = moduleRef.createNestApplication<NestExpressApplication>({ logger: false });
-  configureApp(app, credentials);
+  configureApp(app, credentials, crypto.randomBytes(32));
   await app.listen(0);
   return { app, url: await app.getUrl(), fake: fake! };
 }
@@ -210,17 +211,68 @@ describe("server with auth", () => {
   before(async () => ({ app, url } = await startApp(credentials)));
   after(() => app.close());
 
-  test("guards the page, the API and the generated alerts", async () => {
-    for (const path of ["/", "/api/searches/x/state", "/alerts/x.png", "/portal/index.html"]) {
-      const response = await fetch(`${url}${path}`);
-      assert.equal(response.status, 401, path);
+  const login = (body: unknown) =>
+    fetch(`${url}/api/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  test("sends pages to the login and refuses the API without a session", async () => {
+    for (const path of ["/", "/alerts/x.png", "/portal/index.html"]) {
+      const response = await fetch(`${url}${path}`, { redirect: "manual" });
+      assert.equal(response.status, 302, path);
+      assert.equal(response.headers.get("location"), `/login?next=${encodeURIComponent(path)}`);
     }
+    const api = await fetch(`${url}/api/searches/x/state`);
+    assert.equal(api.status, 401);
+    assert.match((await api.json()).error, /Entre de novo/);
+    assert.equal(api.headers.get("www-authenticate"), null);
   });
 
-  test("serves the page with the right credentials", async () => {
+  test("serves the login page and its assets without a session", async () => {
+    const page = await fetch(`${url}/login`);
+    assert.equal(page.status, 200);
+    assert.match(await page.text(), /id="login-form"/);
+    for (const asset of ["/login.js", "/styles.css"]) assert.equal((await fetch(`${url}${asset}`)).status, 200, asset);
+  });
+
+  test("still serves the page to Basic credentials, which the alert renderer uses", async () => {
     const authorization = `Basic ${Buffer.from(`${credentials.user}:${credentials.pass}`).toString("base64")}`;
     const response = await fetch(`${url}/`, { headers: { authorization } });
     assert.equal(response.status, 200);
     assert.match(await response.text(), /<html/i);
+  });
+
+  test("rejects wrong credentials and an incomplete body", async () => {
+    const wrong = await login({ user: credentials.user, pass: "nope" });
+    assert.equal(wrong.status, 401);
+    assert.equal(wrong.headers.get("set-cookie"), null);
+    assert.equal((await login({ user: credentials.user })).status, 400);
+  });
+
+  test("logs in with a session cookie and logs out", async () => {
+    const response = await login(credentials);
+    assert.equal(response.status, 200);
+    const setCookie = response.headers.get("set-cookie")!;
+    assert.match(setCookie, /^bot_session=[^;]+; Path=\/; HttpOnly; SameSite=Strict; Max-Age=2592000$/);
+    const cookie = setCookie.split(";")[0]!;
+
+    const page = await fetch(`${url}/`, { headers: { cookie } });
+    assert.equal(page.status, 200);
+    const api = await fetch(`${url}/api/searches/missing/state`, { headers: { cookie } });
+    assert.equal(api.status, 404);
+
+    const logout = await fetch(`${url}/api/logout`, { method: "POST", headers: { cookie } });
+    assert.match(logout.headers.get("set-cookie")!, /^bot_session=; .*Max-Age=0/);
+  });
+
+  test("marks the cookie Secure behind the https tunnel", async () => {
+    const response = await fetch(`${url}/api/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-forwarded-proto": "https" },
+      body: JSON.stringify(credentials),
+    });
+    assert.match(response.headers.get("set-cookie")!, /; Secure$/);
   });
 });
