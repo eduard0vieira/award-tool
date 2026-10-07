@@ -501,9 +501,19 @@ clearHistoryButton.addEventListener("click", () => {
   renderHistory();
 });
 
+const announcer = document.getElementById("announcer");
+
+// A notice that was display:none when its text changed is not read by screen
+// readers, so messages also go through this live region, which never hides.
+function announce(message) {
+  announcer.textContent = "";
+  setTimeout(() => (announcer.textContent = message), 50);
+}
+
 function showNotice(noticeEl, message) {
   noticeEl.textContent = message;
   noticeEl.hidden = false;
+  announce(message);
 }
 
 function clearNotice(noticeEl) {
@@ -582,6 +592,10 @@ function createJobCard(queueEl, routeTitle) {
     // A search ending in error never reaches updateCardActions: without this the
     // card is a dead block with no Remove or Minimize until a reload.
     if (className === "status-error") card.actionsEl.hidden = false;
+    // Cards restored on page load would read out a burst of "Pronto".
+    if (!card.restored && (className === "status-done" || className === "status-error")) {
+      announce(`${card.routeEl.textContent}: ${text}`);
+    }
   };
 
   card.copyOutboundButton.addEventListener("click", () => copyLeg(card, 0, card.copyOutboundButton, "Copiar ida"));
@@ -616,8 +630,7 @@ function createJobCard(queueEl, routeTitle) {
       }
     } catch (err) {
       card.stopButton.disabled = false;
-      card.noticeEl.textContent = err.message || "Falha ao parar a busca.";
-      card.noticeEl.hidden = false;
+      showNotice(card.noticeEl, err.message || "Falha ao parar a busca.");
     }
   });
 
@@ -706,6 +719,7 @@ async function copyToClipboard(button, text, idleLabel) {
     console.error("Falha ao copiar:", err);
   }
   button.textContent = copied ? "Copiado!" : "Não foi possível copiar";
+  announce(copied ? "Copiado" : "Não foi possível copiar");
   setTimeout(() => (button.textContent = idleLabel), copied ? 1500 : 4000);
 }
 
@@ -898,6 +912,7 @@ function runOnServer(card, body, progressLabel, session) {
     if (session) card.root.dataset.searchId = session.record.id;
 
     if (step?.result) {
+      card.restored = true;
       card.setStatus("Pronto", "status-done");
       updateBar(card.barEl, 1);
       card.progressLabelEl.textContent = "Recuperado";
@@ -1328,14 +1343,12 @@ function ceilingInMiles(input) {
 
 function showFailure(card, err) {
   card.setStatus("Erro", "status-error");
-  card.noticeEl.textContent = err.message || "Erro inesperado.";
-  card.noticeEl.hidden = false;
+  showNotice(card.noticeEl, err.message || "Erro inesperado.");
 }
 
 function showPartialNotices(card, notices) {
   if (notices.length === 0) return;
-  card.noticeEl.textContent = [...new Set(notices)].join(" ");
-  card.noticeEl.hidden = false;
+  showNotice(card.noticeEl, [...new Set(notices)].join(" "));
 }
 
 async function startTapSearch(origin, destination, roundTrip, ceilings, session) {
@@ -1609,8 +1622,7 @@ function showAlertButtons(card, source, origin, destination, options) {
         button.textContent = `✓ ${option.cabinClass}`;
       } catch (err) {
         button.textContent = `📢 ${option.cabinClass}`;
-        card.noticeEl.textContent = err.message || "Falha ao gerar o alerta.";
-        card.noticeEl.hidden = false;
+        showNotice(card.noticeEl, err.message || "Falha ao gerar o alerta.");
       } finally {
         button.disabled = false;
       }
@@ -1936,8 +1948,7 @@ function showLatamAlertButton(card, origin, destination, legs, confirmation) {
       button.textContent = "✓ Econômica";
     } catch (err) {
       button.textContent = "📢 Econômica";
-      card.noticeEl.textContent = err.message || "Falha ao gerar o alerta.";
-      card.noticeEl.hidden = false;
+      showNotice(card.noticeEl, err.message || "Falha ao gerar o alerta.");
     } finally {
       button.disabled = false;
     }
