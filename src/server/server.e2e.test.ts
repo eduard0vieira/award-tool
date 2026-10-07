@@ -70,8 +70,8 @@ async function startApp(credentials: Credentials | null) {
 
 type Event = { type: string; [field: string]: unknown };
 
-async function* readEvents(url: string): AsyncGenerator<Event> {
-  const response = await fetch(url);
+async function* readEvents(url: string, cookie?: string): AsyncGenerator<Event> {
+  const response = await fetch(url, cookie ? { headers: { cookie } } : {});
   assert.equal(response.status, 200);
   const decoder = new TextDecoder();
   let buffer = "";
@@ -207,8 +207,9 @@ describe("server with auth", () => {
   const credentials = { user: "agent", pass: "secret" };
   let app: NestExpressApplication;
   let url: string;
+  let fake: FakeSource;
 
-  before(async () => ({ app, url } = await startApp(credentials)));
+  before(async () => ({ app, url, fake } = await startApp(credentials)));
   after(() => app.close());
 
   const login = (body: unknown) =>
@@ -265,6 +266,21 @@ describe("server with auth", () => {
 
     const logout = await fetch(`${url}/api/logout`, { method: "POST", headers: { cookie } });
     assert.match(logout.headers.get("set-cookie")!, /^bot_session=; .*Max-Age=0/);
+  });
+
+  test("still reads JSON bodies on every route once the login is on", async () => {
+    const cookie = (await login(credentials)).headers.get("set-cookie")!.split(";")[0]!;
+    const started = await fetch(`${url}/api/searches`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", cookie },
+      body: JSON.stringify({ source: "fake", origin: "GRU", destination: "MIA" }),
+    });
+    assert.equal(started.status, 200);
+    const { jobId } = (await started.json()) as { jobId: string };
+    const events = readEvents(`${url}/api/searches/${jobId}/events`, cookie);
+    await nextEvent(events, "progress");
+    fake.release();
+    await nextEvent(events, "done");
   });
 
   test("marks the cookie Secure behind the https tunnel", async () => {

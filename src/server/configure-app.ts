@@ -21,8 +21,14 @@ export function configureApp(
       if (req.method === "GET" && req.path === "/login") res.sendFile(path.join(PUBLIC_DIR, "login.html"));
       else next();
     });
-    app.use("/api/login", express.json(), (req: Request, res: Response, next: NextFunction) =>
-      req.method === "POST" ? auth.login(req, res) : next(),
+    // Wrapped on purpose: Nest skips its own global JSON parser when it finds a
+    // handler named "jsonParser" already mounted, and every other JSON body
+    // (searches, alerts) then arrived empty.
+    const parseLoginBody = express.json();
+    app.use(
+      "/api/login",
+      (req: Request, res: Response, next: NextFunction) => parseLoginBody(req, res, next),
+      (req: Request, res: Response, next: NextFunction) => (req.method === "POST" ? auth.login(req, res) : next()),
     );
     app.use("/api/logout", (req: Request, res: Response, next: NextFunction) =>
       req.method === "POST" ? auth.logout(req, res) : next(),
