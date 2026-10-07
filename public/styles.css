@@ -536,7 +536,7 @@ textarea {
   padding: 0 var(--e3);
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-control);
-  background: var(--surface);
+  background-color: var(--surface);
   transition: border-color var(--transition);
 }
 
@@ -598,13 +598,15 @@ input[type="number"] {
   border-color: var(--error);
 }
 
-select {
+/* Same selector weight as ".field select" above on purpose: a plain "select"
+   rule lost to its background and the arrow vanished. */
+.field select {
   appearance: none;
-  padding-right: var(--e6) !important;
-  background-image: url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath fill='%231b1f23' d='M6 8.5 2 4.5h8z'/%3E%3C/svg%3E");
+  padding-right: var(--e6);
+  background-image: url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%231b1f23' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right var(--e3) center;
-  background-size: 10px;
+  background-size: 14px;
   cursor: pointer;
 }
 
