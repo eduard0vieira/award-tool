@@ -87,8 +87,34 @@ Copy the main machine's `.env` to `C:\bot\award-tool\.env`, then change:
   ```
 
 - `GOOGLE_CREDENTIALS` to the Windows path of the copied credentials file;
-- keep `BOT_AUTH_USER` and `BOT_AUTH_PASS` set: the tunnel makes the server
-  public.
+- keep `BOT_AUTH_USER` and `BOT_AUTH_PASS` set: they are the machine
+  credential the alert renderer and the supervisor use;
+- `SEED_USERS` with one `name:password` per person, comma separated
+  (`eduardo:...,thiago:...,rony:...`). The server creates the missing users on
+  every start and never resets an existing password, so it can stay there.
+
+## Users
+
+- Each person logs in at `/login` with their own name and password.
+- To change a password (do it once the generic one has been handed out),
+  from PowerShell in `C:\bot\award-tool`:
+
+  ```powershell
+  npx tsx scripts/set-password.ts thiago
+  ```
+
+  It asks for the new password twice without showing it and logs that person
+  out everywhere else.
+- A new colleague: add `name:password` to `SEED_USERS` and restart the task.
+
+## Database
+
+- SQLite in `C:\bot\award-tool\data\bot.db`: users and the shared search
+  history. The server creates it and applies pending migrations on every start.
+- Backup: copy that file, ideally with the task stopped.
+- `better-sqlite3` is a native module. `npm ci` normally downloads a prebuilt
+  binary for Windows; if it says it has to compile, install the Visual Studio
+  Build Tools ("Desktop development with C++") and run `npm ci` again.
 
 ## 5. First run, by hand
 
@@ -155,6 +181,8 @@ desktop shortcut with the line above as its target makes it one click.
 - A change to `scripts/run-server.ts` itself only applies after the task
   restarts (log off and on, or reboot); the log says so.
 - `.env` never comes through git: edit it on the notebook and restart the task.
+- A database change comes as a migration in `prisma/migrations` and is applied
+  by the server itself when it restarts after the pull.
 
 ## Known gaps on Windows
 

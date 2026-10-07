@@ -48,17 +48,20 @@ click search. Each search becomes a card in the tab's queue, with a progress bar
 fed by SSE. Several can run at once (session pool: 3 AwardTool, 3 SeatSpy, 2 AA,
 2 LATAM), and switching tabs does not drop the others' progress.
 
-The server requires a login (`BOT_AUTH_USER`/`BOT_AUTH_PASS`) precisely because,
-when it is exposed through ngrok, anyone who found the URL could trigger
-searches on the paid accounts. The page at `/login` sets a signed, HttpOnly,
-SameSite=Strict session cookie that lasts 30 days; changing the password ends
-every session. Basic credentials in the header are still accepted, because the
-alert renderer and `scripts/run-server.ts` use them. The cookie is signed with
-`.session-secret` (created on first start, never committed).
+The server requires a login precisely because, when it is exposed through
+ngrok, anyone who found the URL could trigger searches on the paid accounts.
+Each person has a user in the database (`SEED_USERS` in `.env` creates the
+missing ones on start; `scripts/set-password.ts` changes a password). The page
+at `/login` sets a signed, HttpOnly, SameSite=Strict session cookie that lasts
+30 days; changing someone's password ends only that person's sessions. The
+`BOT_AUTH_USER`/`BOT_AUTH_PASS` pair is the machine credential, accepted only as
+Basic in the header, because the alert renderer and `scripts/run-server.ts`
+use it. The cookie is signed with `.session-secret` (created on first start,
+never committed). `LOGIN_DISABLED=true` turns the login off for local work.
 
 **Stack:** TypeScript + Node, NestJS (on Express) running through the SWC
-loader, class-validator on request bodies, Playwright, Prisma (SQLite, no models
-yet). The front is plain HTML + JS, no framework, no bundler:
+loader, class-validator on request bodies, Playwright, Prisma 7 on SQLite
+(`better-sqlite3` driver adapter). The front is plain HTML + JS, no framework, no bundler:
 `public/index.html` + `public/app.js`.
 
 ```
@@ -100,19 +103,34 @@ three, and `core/` imports nothing.
 
 ---
 
-## 3. Storage: no database yet
+## 3. Storage
 
+- **SQLite in `data/bot.db`** (Prisma, schema in `prisma/schema.prisma`). The
+  server applies pending migrations on every start, so a pulled migration is in
+  place before anything queries it. Backup is copying that file.
+  - `User`: one row per person, scrypt password hash.
+  - `Search`: every search started, with who started it, its normalized request,
+    status (`queued`, `running`, `done`, `partial`, `error`, `cancelled`) and the
+    final result. Read through `GET /api/history` and `GET /api/history/:id`.
+    Results older than `SEARCH_RESULT_RETENTION_DAYS` (30) lose the payload and
+    keep the row.
+- **Identical searches.** Each source declares an `identity()`; with the
+  source and the day in São Paulo it forms the search key. A request whose key
+  is already running joins that job instead of starting another. With
+  `reuseRecent: true` in the body, a finished, non-partial identical search from
+  the last `SEARCH_REUSE_HOURS` (6) comes back as an already finished job; the
+  current front never sends it, so this waits for the front's "search again"
+  button.
 - **Jobs in memory**: a `Map<jobId, {...}>` in the process. Restart the server
-  and everything that was running is gone.
-- **Search history in the browser's `localStorage`.** It is what warns me "you
-  already searched this route less than 5 days ago" (it matters because the paid
-  sources have a query limit). Clearing the browser wipes it.
+  and everything that was running is gone; the history marks those as errors.
+- **The front's own history** still lives in the browser's `localStorage`
+  until the front reads `/api/history`.
 - **Alert images on disk**, in `./alerts/<timestamp>-<class>/`.
 - **Search log** in `./spreadsheets/buscas.csv`, one row per day found, and in
   Google Sheets when configured.
 - No record of what was sent, when, at what price. **"Is this route cheaper
   than last month?" cannot be answered**: the data is gone once I close the tab.
-  That is what Prisma is here for.
+  The `Search` table now keeps the results; nothing reads them for that yet.
 
 ---
 
@@ -263,12 +281,14 @@ See `.env.example` for the full list.
 ```
 LOGIN_URL, EMAIL_ACCOUNT, PASSWORD_ACCOUNT        # AwardTool
 SEATSPY_LOGIN_URL, SEATSPY_EMAIL, SEATSPY_PASSWORD
-BOT_AUTH_USER, BOT_AUTH_PASS                      # server login
+BOT_AUTH_USER, BOT_AUTH_PASS                      # machine credential (alerts, supervisor)
+SEED_USERS                                        # people's users, created on start if missing
+LOGIN_DISABLED                                    # true turns the login off (local only)
+SEARCH_REUSE_HOURS, SEARCH_RESULT_RETENTION_DAYS  # identical-search reuse and history size
 *_CONCURRENCY                                     # simultaneous jobs per source
 IDLE_MINUTES                                      # closes an idle session (0 turns it off)
 *_SEARCH_INTERVAL_MS                              # rate limiter
 AA_CHROME_PROFILE, AA_CDP_PORT                    # the bot Chrome's profile/port
-DATABASE_URL                                      # Prisma
 ```
 
 ## AA: calendar code 309
