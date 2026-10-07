@@ -118,13 +118,15 @@ three, and `core/` imports nothing.
   source and the day in São Paulo it forms the search key. A request whose key
   is already running joins that job instead of starting another. With
   `reuseRecent: true` in the body, a finished, non-partial identical search from
-  the last `SEARCH_REUSE_HOURS` (6) comes back as an already finished job; the
-  current front never sends it, so this waits for the front's "search again"
-  button.
+  the last `SEARCH_REUSE_HOURS` (6) comes back as an already finished job. The
+  front always asks for it and shows "Buscar de novo" on such a card, which
+  repeats the search with `reuseRecent: false`. A card that joined someone
+  else's job hides its stop button, so nobody stops another person's search.
 - **Jobs in memory**: a `Map<jobId, {...}>` in the process. Restart the server
   and everything that was running is gone; the history marks those as errors.
-- **The front's own history** still lives in the browser's `localStorage`
-  until the front reads `/api/history`.
+- **The Histórico tab and the repeat warning** read `/api/history`, so they
+  show everyone's searches with who ran them. The browser's `localStorage` now
+  only keeps the last day's cards to restore them after a reload.
 - **Alert images on disk**, in `./alerts/<timestamp>-<class>/`.
 - **Search log** in `./spreadsheets/buscas.csv`, one row per day found, and in
   Google Sheets when configured.
