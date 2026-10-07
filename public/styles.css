@@ -433,6 +433,22 @@ button[type="submit"]:hover:not(:disabled) {
   font-weight: 600;
 }
 
+.tab-button:disabled {
+  background: transparent;
+  color: var(--line-strong);
+  cursor: not-allowed;
+}
+
+.tab-soon {
+  margin-left: var(--e1);
+  padding: 1px var(--e1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-chip);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
 /* Forms */
 
 /* Only focused by script, as a landing spot after a removal; not a control. */

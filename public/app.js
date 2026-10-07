@@ -152,7 +152,7 @@ function markSelectedTab(buttons, selected) {
 // Arrow keys move between tabs and Tab leaves the list, the keyboard pattern
 // screen readers announce for role="tablist".
 function onTabListKeydown(event, buttons, select) {
-  const list = [...buttons];
+  const list = [...buttons].filter((button) => !button.disabled);
   const index = list.indexOf(event.currentTarget);
   const target = { ArrowRight: index + 1, ArrowLeft: index - 1, Home: 0, End: list.length - 1 }[event.key];
   if (target === undefined) return;
@@ -165,6 +165,7 @@ function onTabListKeydown(event, buttons, select) {
 // Tabs only toggle hidden: nothing is destroyed or recreated, so running search
 // cards in one tab keep going and stay visible when you come back.
 function selectTab(button) {
+  if (button.disabled) return;
   markSelectedTab(tabButtons, button);
   const tab = button.dataset.tab;
   for (const [name, panel] of Object.entries(panels)) panel.hidden = name !== tab;
@@ -320,6 +321,8 @@ function repeatSearch(item) {
     latamDestinationInput.value = item.destination;
     activateTab("latam");
     latamOriginInput.focus();
+  } else if (item.program === "IBERIA" && document.getElementById("tab-iberia").disabled) {
+    showNotice(historyNotice, "A busca direta na Iberia ainda não está disponível.");
   } else if (item.program === "IBERIA") {
     iberiaOriginInput.value = item.origin;
     iberiaDestinationInput.value = item.destination;
