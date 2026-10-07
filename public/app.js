@@ -32,6 +32,7 @@ const seatspyRoundTripCheckbox = document.getElementById("seatspy-round-trip");
 const seatspyEconomyCeilingInput = document.getElementById("seatspy-ceiling-economy");
 const seatspyPremiumCeilingInput = document.getElementById("seatspy-ceiling-premium");
 const seatspyBusinessCeilingInput = document.getElementById("seatspy-ceiling-business");
+const seatspyFirstCeilingInput = document.getElementById("seatspy-ceiling-first");
 const seatspyNotice = document.getElementById("seatspy-notice");
 const seatspyQueue = document.getElementById("seatspy-queue");
 
@@ -1357,6 +1358,7 @@ async function startSeatspySearch(program, origin, destination, roundTrip, showS
           economy: ceilingInMiles(seatspyEconomyCeilingInput),
           premium: ceilingInMiles(seatspyPremiumCeilingInput),
           business: ceilingInMiles(seatspyBusinessCeilingInput),
+          first: ceilingInMiles(seatspyFirstCeilingInput),
         },
       },
       roundTrip ? "Buscando ida e volta..." : "Buscando...",
