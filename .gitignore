@@ -30,6 +30,7 @@ fixtures/*.png
 # Prisma: local SQLite database and the generated client.
 *.db
 *.db-journal
+/data/
 /generated/
 
 .claude/settings.local.json

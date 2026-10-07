@@ -6,3 +6,34 @@ generator client {
 datasource db {
   provider = "sqlite"
 }
+
+model User {
+  id           Int      @id @default(autoincrement())
+  username     String   @unique
+  // scrypt, "salt:hash" in hex (src/server/auth/passwords.ts)
+  passwordHash String
+  createdAt    DateTime @default(now())
+  searches     Search[]
+}
+
+model Search {
+  // Same id as the job, so a running search and its row are one thing.
+  id          String    @id
+  user        User?     @relation(fields: [userId], references: [id])
+  // Null when a machine credential (alert renderer, supervisor) started it.
+  userId      Int?
+  source      String
+  origin      String
+  destination String
+  requestKey  String
+  request     String
+  // queued | running | done | partial | error | cancelled
+  status      String
+  result      String?
+  error       String?
+  createdAt   DateTime  @default(now())
+  finishedAt  DateTime?
+
+  @@index([requestKey, createdAt])
+  @@index([createdAt])
+}

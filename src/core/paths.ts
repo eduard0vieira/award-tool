@@ -13,6 +13,8 @@ export const FIXTURES_DIR = path.join(ROOT_DIR, "fixtures");
 export const ALERTS_DIR = path.join(ROOT_DIR, "alerts");
 export const SPREADSHEETS_DIR = path.join(ROOT_DIR, "spreadsheets");
 export const SESSION_SECRET_FILE = path.join(ROOT_DIR, ".session-secret");
+// prisma.config.ts repeats this path for the CLI; change both together.
+export const DATABASE_FILE = path.join(ROOT_DIR, "data", "bot.db");
 
 // The alerts portal is another repository, a sibling of this one.
 export const PORTAL_DIST_DIR = path.join(ROOT_DIR, "..", "vcc-alertas-portal", "dist");
