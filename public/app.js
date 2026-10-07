@@ -633,12 +633,24 @@ function keptSection(section) {
   };
 }
 
-async function copyLeg(card, index, button, originalLabel) {
+// The clipboard refuses outside a secure context or without focus; saying
+// "Copiado!" then sent an empty paste to the group.
+async function copyToClipboard(button, text, idleLabel) {
+  let copied = false;
+  try {
+    await navigator.clipboard.writeText(text);
+    copied = true;
+  } catch (err) {
+    console.error("Falha ao copiar:", err);
+  }
+  button.textContent = copied ? "Copiado!" : "Não foi possível copiar";
+  setTimeout(() => (button.textContent = idleLabel), copied ? 1500 : 4000);
+}
+
+function copyLeg(card, index, button, originalLabel) {
   const text = legText(card.copyLegs[index]);
   if (!text) return;
-  await navigator.clipboard.writeText(text);
-  button.textContent = "Copiado!";
-  setTimeout(() => (button.textContent = originalLabel), 1500);
+  copyToClipboard(button, text, originalLabel);
 }
 
 function updateCardActions(card) {
@@ -988,9 +1000,7 @@ function renderUpgrade(card) {
         // Keeps the click on the button (inside <summary>) from also collapsing the block.
         event.preventDefault();
         event.stopPropagation();
-        navigator.clipboard.writeText(datesTextByMonth(crossed.map((item) => item.date)));
-        copyButton.textContent = "Copiado!";
-        setTimeout(() => (copyButton.textContent = "Copiar datas"), 1500);
+        copyToClipboard(copyButton, datesTextByMonth(crossed.map((item) => item.date)), "Copiar datas");
       };
       header.appendChild(copyButton);
     }
@@ -1109,9 +1119,7 @@ function renderColumn(columnEl, section, colorClass) {
   copyButton.onclick = (event) => {
     event.preventDefault();
     event.stopPropagation();
-    navigator.clipboard.writeText(keptSection(section).text);
-    copyButton.textContent = "Copiado!";
-    setTimeout(() => (copyButton.textContent = "Copiar"), 1500);
+    copyToClipboard(copyButton, keptSection(section).text, "Copiar");
   };
 
   editButton.hidden = false;
@@ -1592,11 +1600,7 @@ function alertBlock(title, images, caption) {
   copyButton.type = "button";
   copyButton.className = "copy-button";
   copyButton.textContent = "Copiar legenda";
-  copyButton.addEventListener("click", () => {
-    navigator.clipboard.writeText(caption);
-    copyButton.textContent = "Copiado!";
-    setTimeout(() => (copyButton.textContent = "Copiar legenda"), 1500);
-  });
+  copyButton.addEventListener("click", () => copyToClipboard(copyButton, caption, "Copiar legenda"));
   block.appendChild(copyButton);
 
   return block;
@@ -1769,11 +1773,7 @@ function showMilesConfirmation(card, confirmation) {
         `${pair.outboundDate} → ${pair.returnDate}`,
     )
     .join("\n");
-  copyButton.addEventListener("click", () => {
-    navigator.clipboard.writeText(text);
-    copyButton.textContent = "Copiado!";
-    setTimeout(() => (copyButton.textContent = "Copiar"), 1500);
-  });
+  copyButton.addEventListener("click", () => copyToClipboard(copyButton, text, "Copiar"));
   block.appendChild(copyButton);
   // Price near the top: it is the number people look for, and at the bottom it sat behind a year of dates.
   card.root.querySelector(".job-header").after(block);
