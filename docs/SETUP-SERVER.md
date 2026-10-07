@@ -129,6 +129,23 @@ schtasks /Create /TN "Award Tool tunnel" /TR "ngrok http --url=<fixed domain> 55
 The fixed domain (one comes with the free plan) keeps the colleagues' URL from
 changing.
 
+## Blocking the notebook's own keyboard and touchpad
+
+With the lid closed, this notebook's keyboard presses keys by itself, and those
+keys land in whatever window has focus, the bot's Chrome included.
+`scripts/block-local-input.ps1` drops every key and touchpad event that comes
+from the hardware and lets through input flagged as injected, which is how
+Chrome Remote Desktop delivers yours. Start it when you leave the notebook:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File C:\bot\award-tool\scripts\block-local-input.ps1
+```
+
+Try it first with `-TestMinutes 2`: it unblocks on its own after 2 minutes, so a
+remote session that turns out to be blocked too is not locked out. To stop it,
+close its window from the remote session. Ctrl+Alt+Del on the notebook is never
+blocked. A desktop shortcut with the line above as its target makes it one click.
+
 ## Updating
 
 - Code: `git push` to `main` on the main machine. Within ~5 min, and as soon as
