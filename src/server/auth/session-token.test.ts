@@ -2,31 +2,34 @@ import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import { describe, test } from "node:test";
 import { safeNext } from "./auth.ts";
-import { issueSession, isValidSession, SESSION_TTL_MS } from "./session-token.ts";
+import { issueSession, isValidSession, SESSION_TTL_MS, sessionUserId } from "./session-token.ts";
 
 const secret = crypto.randomBytes(32);
-const credentials = { user: "agent", pass: "secret" };
+const user = { id: 7, passwordHash: "salt:hash" };
 
 describe("login session token", () => {
-  test("accepts its own token until it expires", () => {
-    const token = issueSession(secret, credentials, 1_000);
-    assert.equal(isValidSession(secret, credentials, token, 2_000), true);
-    assert.equal(isValidSession(secret, credentials, token, 1_000 + SESSION_TTL_MS), false);
+  test("accepts its own token until it expires and names its user", () => {
+    const token = issueSession(secret, user, 1_000);
+    assert.equal(sessionUserId(token), 7);
+    assert.equal(isValidSession(secret, user, token, 2_000), true);
+    assert.equal(isValidSession(secret, user, token, 1_000 + SESSION_TTL_MS), false);
   });
 
-  test("rejects a token after the password changes", () => {
-    const token = issueSession(secret, credentials, 1_000);
-    assert.equal(isValidSession(secret, { ...credentials, pass: "new" }, token, 2_000), false);
+  test("rejects the token after that user's password changes, or for another user", () => {
+    const token = issueSession(secret, user, 1_000);
+    assert.equal(isValidSession(secret, { ...user, passwordHash: "salt:other" }, token, 2_000), false);
+    assert.equal(isValidSession(secret, { ...user, id: 8 }, token, 2_000), false);
   });
 
   test("rejects a token signed with another secret or with a pushed expiry", () => {
-    const token = issueSession(secret, credentials, 1_000);
-    assert.equal(isValidSession(crypto.randomBytes(32), credentials, token, 2_000), false);
-    const [, signature] = token.split(".");
-    assert.equal(isValidSession(secret, credentials, `${Number.MAX_SAFE_INTEGER}.${signature}`, 2_000), false);
-    for (const broken of [undefined, "", "abc", ".x", "1.x"]) {
-      assert.equal(isValidSession(secret, credentials, broken, 0), false);
+    const token = issueSession(secret, user, 1_000);
+    assert.equal(isValidSession(crypto.randomBytes(32), user, token, 2_000), false);
+    const [, id, signature] = token.split(".");
+    assert.equal(isValidSession(secret, user, `${Number.MAX_SAFE_INTEGER}.${id}.${signature}`, 2_000), false);
+    for (const broken of [undefined, "", "abc", "1.x", "1.0.x", "1.-3.x"]) {
+      assert.equal(isValidSession(secret, user, broken, 0), false);
     }
+    assert.equal(sessionUserId("1.-3.x"), null);
   });
 });
 

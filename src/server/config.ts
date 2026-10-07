@@ -20,7 +20,10 @@ function readCredentials(): Credentials | null {
 
 export const config = {
   port: process.env.PORT ? parseInt(process.env.PORT, 10) : 5555,
+  // Machine credentials (alert renderer, supervisor). People log in with the
+  // users in the database.
   credentials: readCredentials(),
+  loginDisabled: process.env.LOGIN_DISABLED === "true",
   // Sessions idle this long are closed to give the RAM back (a SeatSpy session
   // costs ~450 MB); reopening costs ~6s once per burst of searches.
   idleMinutes: readIdleMinutes(),

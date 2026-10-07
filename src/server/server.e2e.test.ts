@@ -7,7 +7,10 @@ import { Test } from "@nestjs/testing";
 import { SessionPool } from "../core/session-pool.ts";
 import { AppModule } from "./app.module.ts";
 import type { Credentials } from "./config.ts";
+import { hashPassword } from "./auth/passwords.ts";
 import { configureApp } from "./configure-app.ts";
+import { PrismaService } from "./db/prisma.service.ts";
+import { createTestDatabase } from "./db/test-database.ts";
 import { JobRunner } from "./jobs/job-runner.service.ts";
 import { JobStore } from "./jobs/job-store.service.ts";
 import { RouteRequestDto } from "./search/request-fields.ts";
@@ -50,9 +53,12 @@ class FakeSource implements SearchSource<FakeSearchDto> {
   }
 }
 
-async function startApp(credentials: Credentials | null) {
+async function startApp(login: { machineCredentials: Credentials | null } | null) {
   let fake: FakeSource | undefined;
+  const database = createTestDatabase();
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+    .overrideProvider(PrismaService)
+    .useValue(database.prisma)
     .overrideProvider(SEARCH_SOURCES)
     .useFactory({
       factory: (runner: JobRunner, jobs: JobStore) => {
@@ -63,9 +69,13 @@ async function startApp(credentials: Credentials | null) {
     })
     .compile();
   const app = moduleRef.createNestApplication<NestExpressApplication>({ logger: false });
-  configureApp(app, credentials, crypto.randomBytes(32));
+  configureApp(app, login, crypto.randomBytes(32));
   await app.listen(0);
-  return { app, url: await app.getUrl(), fake: fake! };
+  const stop = async () => {
+    await app.close();
+    await database.cleanup();
+  };
+  return { app, url: await app.getUrl(), fake: fake!, prisma: database.prisma, stop };
 }
 
 type Event = { type: string; [field: string]: unknown };
@@ -109,8 +119,10 @@ describe("server without auth", () => {
   let url: string;
   let fake: FakeSource;
 
-  before(async () => ({ app, url, fake } = await startApp(null)));
-  after(() => app.close());
+  let stop: () => Promise<void>;
+
+  before(async () => ({ app, url, fake, stop } = await startApp(null)));
+  after(() => stop());
 
   test("runs a search from request to done, streaming its events", async () => {
     const started = await post(`${url}/api/searches`, { source: "fake", origin: "gru", destination: "mia" });
@@ -204,13 +216,22 @@ describe("server without auth", () => {
 });
 
 describe("server with auth", () => {
-  const credentials = { user: "agent", pass: "secret" };
-  let app: NestExpressApplication;
+  const machine = { user: "agent", pass: "secret" };
+  const person = { user: "thiago", pass: "vamoscomclasse" };
   let url: string;
   let fake: FakeSource;
+  let prisma: Awaited<ReturnType<typeof startApp>>["prisma"];
+  let stop: () => Promise<void>;
 
-  before(async () => ({ app, url, fake } = await startApp(credentials)));
-  after(() => app.close());
+  before(async () => {
+    ({ url, fake, prisma, stop } = await startApp({ machineCredentials: machine }));
+    await prisma.user.create({ data: { username: person.user, passwordHash: await hashPassword(person.pass) } });
+  });
+  after(() => stop());
+
+  const basic = (who: { user: string; pass: string }) =>
+    `Basic ${Buffer.from(`${who.user}:${who.pass}`).toString("base64")}`;
+  const sessionCookie = async (who = person) => (await login(who)).headers.get("set-cookie")!.split(";")[0]!;
 
   const login = (body: unknown) =>
     fetch(`${url}/api/login`, {
@@ -238,22 +259,39 @@ describe("server with auth", () => {
     for (const asset of ["/login.js", "/styles.css"]) assert.equal((await fetch(`${url}${asset}`)).status, 200, asset);
   });
 
-  test("still serves the page to Basic credentials, which the alert renderer uses", async () => {
-    const authorization = `Basic ${Buffer.from(`${credentials.user}:${credentials.pass}`).toString("base64")}`;
-    const response = await fetch(`${url}/`, { headers: { authorization } });
-    assert.equal(response.status, 200);
-    assert.match(await response.text(), /<html/i);
+  test("accepts Basic only for the machine credentials, which the alert renderer uses", async () => {
+    const machinePage = await fetch(`${url}/`, { headers: { authorization: basic(machine) } });
+    assert.equal(machinePage.status, 200);
+    assert.match(await machinePage.text(), /<html/i);
+    const personPage = await fetch(`${url}/`, { headers: { authorization: basic(person) }, redirect: "manual" });
+    assert.equal(personPage.status, 302);
   });
 
-  test("rejects wrong credentials and an incomplete body", async () => {
-    const wrong = await login({ user: credentials.user, pass: "nope" });
-    assert.equal(wrong.status, 401);
-    assert.equal(wrong.headers.get("set-cookie"), null);
-    assert.equal((await login({ user: credentials.user })).status, 400);
+  test("rejects a wrong password, an unknown user and an incomplete body the same way", async () => {
+    for (const attempt of [{ user: person.user, pass: "nope" }, { user: "ninguem", pass: person.pass }, machine]) {
+      const response = await login(attempt);
+      assert.equal(response.status, 401, attempt.user);
+      assert.deepEqual(await response.json(), { error: "Usuário ou senha incorretos." });
+      assert.equal(response.headers.get("set-cookie"), null);
+    }
+    assert.equal((await login({ user: person.user })).status, 400);
+  });
+
+  test("logs in with any capitalization of the name and says who is logged in", async () => {
+    const cookie = await sessionCookie({ user: " Thiago ", pass: person.pass });
+    assert.deepEqual(await fetch(`${url}/api/me`, { headers: { cookie } }).then((r) => r.json()), { username: "thiago" });
+  });
+
+  test("ends a user's sessions when that user's password changes", async () => {
+    const cookie = await sessionCookie();
+    assert.equal((await fetch(`${url}/api/me`, { headers: { cookie } })).status, 200);
+    await prisma.user.update({ where: { username: person.user }, data: { passwordHash: await hashPassword("nova") } });
+    assert.equal((await fetch(`${url}/api/me`, { headers: { cookie } })).status, 401);
+    await prisma.user.update({ where: { username: person.user }, data: { passwordHash: await hashPassword(person.pass) } });
   });
 
   test("logs in with a session cookie and logs out", async () => {
-    const response = await login(credentials);
+    const response = await login(person);
     assert.equal(response.status, 200);
     const setCookie = response.headers.get("set-cookie")!;
     assert.match(setCookie, /^bot_session=[^;]+; Path=\/; HttpOnly; SameSite=Strict; Max-Age=2592000$/);
@@ -269,7 +307,7 @@ describe("server with auth", () => {
   });
 
   test("still reads JSON bodies on every route once the login is on", async () => {
-    const cookie = (await login(credentials)).headers.get("set-cookie")!.split(";")[0]!;
+    const cookie = await sessionCookie();
     const started = await fetch(`${url}/api/searches`, {
       method: "POST",
       headers: { "Content-Type": "application/json", cookie },
@@ -287,7 +325,7 @@ describe("server with auth", () => {
     const response = await fetch(`${url}/api/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-forwarded-proto": "https" },
-      body: JSON.stringify(credentials),
+      body: JSON.stringify(person),
     });
     assert.match(response.headers.get("set-cookie")!, /; Secure$/);
   });
