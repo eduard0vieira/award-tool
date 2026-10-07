@@ -1919,15 +1919,37 @@ async function startLatamSearch(origin, destination, ceilings, confirmMiles, ses
   }
 }
 
-function repeatWarning(program, origin, destination, roundTrip) {
-  const routes = roundTrip
+function searchRoutes(origin, destination, roundTrip) {
+  return roundTrip
     ? [
         [origin, destination],
         [destination, origin],
       ]
     : [[origin, destination]];
+}
 
-  for (const [from, to] of routes) {
+// Paid searches only enter the history when they end, so without this a double
+// click on Buscar started the same paid search twice with no warning.
+const runningSearches = new Map();
+
+function trackRunning(program, origin, destination, roundTrip, search) {
+  const keys = searchRoutes(origin, destination, roundTrip).map(([from, to]) => `${program}|${from}|${to}`);
+  for (const key of keys) runningSearches.set(key, (runningSearches.get(key) || 0) + 1);
+  search.finally(() => {
+    for (const key of keys) {
+      const count = runningSearches.get(key) - 1;
+      if (count > 0) runningSearches.set(key, count);
+      else runningSearches.delete(key);
+    }
+  });
+}
+
+function repeatWarning(program, origin, destination, roundTrip) {
+  for (const [from, to] of searchRoutes(origin, destination, roundTrip)) {
+    if (runningSearches.has(`${program}|${from}|${to}`)) {
+      if (!confirm(`A busca ${from} → ${to} ainda está em andamento. Buscar de novo mesmo assim?`)) return false;
+      continue;
+    }
     const previous = latestSearchOf(from, to, program);
     if (previous && Date.now() - previous.timestamp < TOLERANCE_MS) {
       const confirmed = confirm(
@@ -1955,10 +1977,16 @@ tapForm.addEventListener("submit", (event) => {
     const value = parseFloat(input.value);
     return Number.isFinite(value) && value > 0 ? value : null;
   };
-  startTapSearch(origin, destination, roundTrip, {
-    business: inK(tapBusinessCeilingInput),
-    economy: inK(tapEconomyCeilingInput),
-  });
+  trackRunning(
+    "tap",
+    origin,
+    destination,
+    roundTrip,
+    startTapSearch(origin, destination, roundTrip, {
+      business: inK(tapBusinessCeilingInput),
+      economy: inK(tapEconomyCeilingInput),
+    }),
+  );
 });
 
 latamForm.addEventListener("submit", (event) => {
@@ -2117,7 +2145,13 @@ seatspyForm.addEventListener("submit", (event) => {
     return;
   }
   if (!repeatWarning(program, origin, destination, roundTrip)) return;
-  startSeatspySearch(program, origin, destination, roundTrip, seatspyShowSeatsCheckbox.checked);
+  trackRunning(
+    program,
+    origin,
+    destination,
+    roundTrip,
+    startSeatspySearch(program, origin, destination, roundTrip, seatspyShowSeatsCheckbox.checked),
+  );
 });
 
 // Runs last: every source's functions and form elements must already exist.
