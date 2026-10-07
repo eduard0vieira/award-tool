@@ -540,9 +540,16 @@ textarea {
   transition: border-color var(--transition);
 }
 
+/* An example, not a value: regular weight and the body face even inside the
+   bold condensed IATA fields, so an empty field never reads as filled. */
 .field input::placeholder {
   color: var(--ink-soft);
   opacity: 1;
+  font-family: var(--font);
+  font-size: var(--text-md);
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .field input:hover,
@@ -558,7 +565,9 @@ textarea {
   border-color: var(--ink);
 }
 
-.field input:user-invalid {
+/* Only a typed value that is wrong ("GR"): an empty required field the user
+   merely passed through is not an error yet. */
+.field input:user-invalid:not(:placeholder-shown) {
   border-color: var(--error);
 }
 
