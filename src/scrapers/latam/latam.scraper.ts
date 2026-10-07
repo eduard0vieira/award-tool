@@ -350,8 +350,12 @@ export function readRedemptionOptions(body: unknown): { feeReais: number; option
 // No password ever shows up in a log.
 const LOGIN_WAIT_MS = Number(process.env.LATAM_LOGIN_WAIT_MS) || 300_000;
 
+const AUTH_HOST = "auth.latamairlines.com";
+
 export function isAskingForLogin(page: Page): boolean {
-  return /login|iniciar-sesion|signin|sign-in/i.test(page.url());
+  // The host decides: the verification code screen (/u/mfa-email-challenge)
+  // has no "login" in its URL, and the old path test took it as logged in.
+  return new URL(page.url()).host === AUTH_HOST || /login|iniciar-sesion|signin|sign-in/i.test(page.url());
 }
 
 async function fillCredentials(page: Page, onLog: OnLog): Promise<void> {
