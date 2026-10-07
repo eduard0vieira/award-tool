@@ -833,18 +833,32 @@ button:disabled {
   transition: transform var(--transition);
 }
 
-.column[open] .column-header .chevron {
+.column-toggle[aria-expanded="true"] .chevron {
   transform: rotate(90deg);
 }
 
-.column-header .copy-button,
-.column-header .upgrade-title,
-.column-header .edit-dates-button {
-  margin-left: auto;
+.column-title {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
-.column-header .edit-dates-button:not([hidden]) + .copy-button {
-  margin-left: 0;
+.column-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.column-actions {
+  display: flex;
+  gap: var(--e2);
 }
 
 .edit-dates-button[aria-pressed="true"] {

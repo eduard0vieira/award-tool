@@ -400,36 +400,6 @@
     </section>
   </template>
 
-  <!-- Each leg collapses on its own (details): with both legs on screen, reaching
-       the return used to mean scrolling the whole outbound. -->
-  <template id="leg-template">
-    <details class="leg" open>
-      <summary class="leg-title"></summary>
-      <div class="columns">
-        <details class="column column-business" open>
-          <summary class="column-header">
-            <span class="chevron" aria-hidden="true">›</span>
-            <h3>Executiva</h3>
-            <button type="button" class="edit-dates-button" title="Editar datas do alerta" aria-label="Editar datas do alerta" aria-pressed="false"></button>
-            <button type="button" class="copy-button">Copiar</button>
-          </summary>
-          <p class="column-summary"></p>
-          <div class="date-chips"></div>
-        </details>
-        <details class="column column-economy" open>
-          <summary class="column-header">
-            <span class="chevron" aria-hidden="true">›</span>
-            <h3>Econômica</h3>
-            <button type="button" class="edit-dates-button" title="Editar datas do alerta" aria-label="Editar datas do alerta" aria-pressed="false"></button>
-            <button type="button" class="copy-button">Copiar</button>
-          </summary>
-          <p class="column-summary"></p>
-          <div class="date-chips"></div>
-        </details>
-      </div>
-    </details>
-  </template>
-
   <div id="announcer" class="visually-hidden" role="status" aria-live="polite"></div>
 
   <script src="/app.js"></script>

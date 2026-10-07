@@ -88,7 +88,6 @@ const latamNotice = document.getElementById("latam-notice");
 const latamQueue = document.getElementById("latam-queue");
 
 const jobTemplate = document.getElementById("job-template");
-const legTemplate = document.getElementById("leg-template");
 const tabButtons = document.querySelectorAll(".tab-button");
 const panels = {
   tap: document.getElementById("panel-tap"),
@@ -1049,47 +1048,27 @@ function renderUpgrade(card) {
   for (const leg of upgradeLegs) {
     const crossed = computeUpgrade(leg.business, leg.economy);
 
+    const block = createColumn(leg.label, "upgrade-leg");
+    block.querySelector(".edit-dates-button").remove();
+    block.querySelector(".date-chips").remove();
+    const body = block.querySelector(".column-body");
     // Legs without crossed dates are born closed, leaving room for the ones that have them.
-    const block = document.createElement("details");
-    block.className = "upgrade-leg";
-    block.open = crossed.length > 0;
+    setColumnExpanded(block, crossed.length > 0);
 
-    const header = document.createElement("summary");
-    header.className = "column-header";
-
-    const chevron = document.createElement("span");
-    chevron.className = "chevron";
-    chevron.setAttribute("aria-hidden", "true");
-    chevron.textContent = "›";
-    header.appendChild(chevron);
-
-    const title = document.createElement("h3");
-    title.className = "upgrade-title";
-    title.textContent = leg.label;
-    header.appendChild(title);
-
+    const copyButton = block.querySelector(".copy-button");
     if (crossed.length > 0) {
-      const copyButton = document.createElement("button");
-      copyButton.type = "button";
-      copyButton.className = "copy-button";
       copyButton.textContent = "Copiar datas";
-      copyButton.onclick = (event) => {
-        // Keeps the click on the button (inside <summary>) from also collapsing the block.
-        event.preventDefault();
-        event.stopPropagation();
-        copyToClipboard(copyButton, datesTextByMonth(crossed.map((item) => item.date)), "Copiar datas");
-      };
-      header.appendChild(copyButton);
+      copyButton.addEventListener("click", () =>
+        copyToClipboard(copyButton, datesTextByMonth(crossed.map((item) => item.date)), "Copiar datas"),
+      );
+    } else {
+      copyButton.remove();
     }
-    block.appendChild(header);
 
-    const summary = document.createElement("p");
-    summary.className = "column-summary";
-    summary.textContent =
+    block.querySelector(".column-summary").textContent =
       crossed.length > 0
         ? `${crossed.length} dia(s) com as duas cabines disponíveis.`
         : "Nenhum dia com Executiva e Econômica juntas nesse período.";
-    block.appendChild(summary);
 
     if (crossed.length > 0) {
       const dates = document.createElement("div");
@@ -1123,7 +1102,7 @@ function renderUpgrade(card) {
         }
         dates.appendChild(rows);
       }
-      block.appendChild(dates);
+      body.appendChild(dates);
     }
 
     upgradeListEl.appendChild(block);
@@ -1140,10 +1119,10 @@ function renderColumn(columnEl, section, colorClass) {
     summaryEl.textContent = "Sem disponibilidade nesse período.";
     copyButton.hidden = true;
     editButton.hidden = true;
-    columnEl.open = false;
+    setColumnExpanded(columnEl, false);
     return;
   }
-  columnEl.open = true;
+  setColumnExpanded(columnEl, true);
 
   // Miles sources show "123K"; LATAM sends unit "BRL" and becomes "R$ 909". When
   // SeatSpy marks a day available without a price, min/max are null.
@@ -1193,11 +1172,7 @@ function renderColumn(columnEl, section, colorClass) {
   }
 
   copyButton.hidden = false;
-  copyButton.onclick = (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    copyToClipboard(copyButton, keptSection(section).text, "Copiar");
-  };
+  copyButton.onclick = () => copyToClipboard(copyButton, keptSection(section).text, "Copiar");
 
   editButton.hidden = false;
   editButton.innerHTML = PENCIL_ICON;
@@ -1229,7 +1204,7 @@ function renderColumn(columnEl, section, colorClass) {
     editButton.setAttribute("aria-pressed", String(editing));
     errorEl.hidden = true;
     if (!editing) return;
-    columnEl.open = true;
+    setColumnExpanded(columnEl, true);
     textArea.value = keptSection(section).text;
     textArea.rows = Math.max(3, textArea.value.split("\n").length + 1);
     textArea.focus();
@@ -1252,11 +1227,7 @@ function renderColumn(columnEl, section, colorClass) {
     columnEl.dispatchEvent(new CustomEvent("alert-dates-changed", { bubbles: true }));
   };
 
-  editButton.onclick = (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    setEditing(editor.hidden);
-  };
+  editButton.onclick = () => setEditing(editor.hidden);
   editor.querySelector(".dates-editor-apply").onclick = apply;
   editor.querySelector(".dates-editor-cancel").onclick = () => setEditing(false);
   editor.querySelector(".dates-editor-restore").onclick = () => {
@@ -1294,17 +1265,46 @@ function parseKeptDates(text, section) {
   return { kept };
 }
 
-function renderTapLeg(targetEl, label, report) {
-  const fragment = legTemplate.content.cloneNode(true);
-  const root = fragment.querySelector(".leg");
-  root.querySelector(".leg-title").textContent = label;
-  renderColumn(root.querySelector(".column-business"), report.business, "cabin-business");
-  renderColumn(root.querySelector(".column-economy"), report.economy, "cabin-economy");
-  targetEl.appendChild(root);
+let columnCount = 0;
+
+// A disclosure button instead of <details>: the cabin's Copiar and edit buttons
+// sit in the header, and interactive content inside <summary> is invalid; it
+// also kept them reachable while the cabin is collapsed.
+function createColumn(title, extraClass = "") {
+  const column = document.createElement("section");
+  column.className = `column ${extraClass}`.trim();
+  const bodyId = `column-${++columnCount}`;
+  column.innerHTML = `
+    <div class="column-header">
+      <h3 class="column-title">
+        <button type="button" class="column-toggle" aria-expanded="true" aria-controls="${bodyId}">
+          <span class="chevron" aria-hidden="true">›</span>
+          <span class="column-label"></span>
+        </button>
+      </h3>
+      <div class="column-actions">
+        <button type="button" class="edit-dates-button" title="Editar datas do alerta" aria-label="Editar datas do alerta" aria-pressed="false"></button>
+        <button type="button" class="copy-button">Copiar</button>
+      </div>
+    </div>
+    <div class="column-body" id="${bodyId}">
+      <p class="column-summary"></p>
+      <div class="date-chips"></div>
+    </div>`;
+  column.querySelector(".column-label").textContent = title;
+  const toggle = column.querySelector(".column-toggle");
+  toggle.addEventListener("click", () => setColumnExpanded(column, toggle.getAttribute("aria-expanded") !== "true"));
+  return column;
 }
 
-// For sources whose cabins come from the server, so columns are built on the fly.
-function renderLegSections(targetEl, label, sections) {
+function setColumnExpanded(column, expanded) {
+  column.querySelector(".column-toggle").setAttribute("aria-expanded", String(expanded));
+  column.querySelector(".column-body").hidden = !expanded;
+}
+
+// Each leg collapses on its own: with both legs on screen, reaching the return
+// used to mean scrolling the whole outbound.
+function renderLeg(targetEl, label, columnsClass, fillColumns) {
   const root = document.createElement("details");
   root.className = "leg";
   root.open = true;
@@ -1315,25 +1315,34 @@ function renderLegSections(targetEl, label, sections) {
   root.appendChild(title);
 
   const columns = document.createElement("div");
-  columns.className = "columns columns-3";
-  for (const section of sections) {
-    const column = document.createElement("details");
-    column.className = "column";
-    column.innerHTML = `
-      <summary class="column-header">
-        <span class="chevron" aria-hidden="true">›</span>
-        <h3></h3>
-        <button type="button" class="edit-dates-button" title="Editar datas do alerta" aria-label="Editar datas do alerta" aria-pressed="false"></button>
-        <button type="button" class="copy-button">Copiar</button>
-      </summary>
-      <p class="column-summary"></p>
-      <div class="date-chips"></div>`;
-    column.querySelector("h3").textContent = section.label;
-    renderColumn(column, section, section.colorClass);
-    columns.appendChild(column);
-  }
+  columns.className = columnsClass;
+  fillColumns(columns);
   root.appendChild(columns);
   targetEl.appendChild(root);
+}
+
+function renderTapLeg(targetEl, label, report) {
+  renderLeg(targetEl, label, "columns", (columns) => {
+    for (const [title, columnClass, section, colorClass] of [
+      ["Executiva", "column-business", report.business, "cabin-business"],
+      ["Econômica", "column-economy", report.economy, "cabin-economy"],
+    ]) {
+      const column = createColumn(title, columnClass);
+      columns.appendChild(column);
+      renderColumn(column, section, colorClass);
+    }
+  });
+}
+
+// For sources whose cabins come from the server, so columns are built on the fly.
+function renderLegSections(targetEl, label, sections) {
+  renderLeg(targetEl, label, "columns columns-3", (columns) => {
+    for (const section of sections) {
+      const column = createColumn(section.label);
+      columns.appendChild(column);
+      renderColumn(column, section, section.colorClass);
+    }
+  });
 }
 
 function ceilingInMiles(input) {
