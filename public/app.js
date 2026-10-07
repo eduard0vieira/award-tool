@@ -96,6 +96,7 @@ const historyEmpty = document.getElementById("history-empty");
 const historyTop = document.getElementById("history-top");
 const historySummary = document.getElementById("history-summary");
 const clearHistoryButton = document.getElementById("clear-history-button");
+const historyNotice = document.getElementById("history-notice");
 
 const MONTHS_PT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 const HISTORY_KEY = "awardtool.history.v2";
@@ -258,13 +259,26 @@ function repeatSearch(item) {
     aaRoundTripCheckbox.checked = Boolean(item.roundTrip);
     activateTab("aa");
     aaOriginInput.focus();
-  } else {
+  } else if (item.program === "LATAM") {
+    latamOriginInput.value = item.origin;
+    latamDestinationInput.value = item.destination;
+    activateTab("latam");
+    latamOriginInput.focus();
+  } else if (item.program === "IBERIA") {
+    iberiaOriginInput.value = item.origin;
+    iberiaDestinationInput.value = item.destination;
+    iberiaRoundTripCheckbox.checked = Boolean(item.roundTrip);
+    activateTab("iberia");
+    iberiaOriginInput.focus();
+  } else if ([...seatspyProgramSelect.options].some((option) => option.value === item.program)) {
     seatspyProgramSelect.value = item.program;
     seatspyOriginInput.value = item.origin;
     seatspyDestinationInput.value = item.destination;
     seatspyRoundTripCheckbox.checked = Boolean(item.roundTrip);
     activateTab("seatspy");
     seatspyOriginInput.focus();
+  } else {
+    showNotice(historyNotice, `Não há aba para repetir buscas do programa "${item.program}". Preencha a busca na aba do programa.`);
   }
 }
 
@@ -312,6 +326,7 @@ function removeFromHistory(timestamps) {
 }
 
 function renderHistory() {
+  clearNotice(historyNotice);
   const history = groupForDisplay(loadHistory().slice().sort((a, b) => b.timestamp - a.timestamp));
   historyList.innerHTML = "";
   historyEmpty.hidden = history.length > 0;
