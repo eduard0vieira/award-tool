@@ -1,13 +1,32 @@
 import "dotenv/config";
 import "reflect-metadata";
+import { execFileSync } from "node:child_process";
 import { NestFactory } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
+import { ROOT_DIR } from "../core/paths.ts";
 import { AppModule } from "./app.module.ts";
+import { parseSeedUsers, seedUsers } from "./auth/seed-users.ts";
 import { config } from "./config.ts";
 import { configureApp } from "./configure-app.ts";
 import { PrismaService } from "./db/prisma.service.ts";
 
+// On every start, not in the supervisor: the notebook runs whichever supervisor
+// version it booted with, and an old one would start a server on a database
+// without the tables a pulled migration adds.
+execFileSync("npx", ["prisma", "migrate", "deploy"], {
+  cwd: ROOT_DIR,
+  stdio: "inherit",
+  shell: process.platform === "win32",
+});
+
 const app = await NestFactory.create<NestExpressApplication>(AppModule);
+const prisma = app.get(PrismaService);
+
+// Creates only the users still missing, so leaving SEED_USERS in .env is safe.
+if (process.env.SEED_USERS) {
+  const { created } = await seedUsers(prisma, parseSeedUsers(process.env.SEED_USERS));
+  if (created.length > 0) console.log(`Usuários criados a partir do SEED_USERS: ${created.join(", ")}.`);
+}
 
 if (config.loginDisabled) {
   console.warn("Aviso: LOGIN_DISABLED=true. O servidor fica sem senha; nunca exponha essa porta (ex.: via ngrok).");
@@ -18,9 +37,9 @@ if (config.loginDisabled) {
         "não vão conseguir entrar no servidor.",
     );
   }
-  const users = await app.get(PrismaService).user.count();
+  const users = await prisma.user.count();
   if (users === 0) {
-    console.warn("Aviso: nenhum usuário cadastrado, ninguém consegue entrar. Rode `npm run db:seed`.");
+    console.warn("Aviso: nenhum usuário cadastrado, ninguém consegue entrar. Defina SEED_USERS no .env e reinicie.");
   }
 }
 configureApp(app, config.loginDisabled ? null : { machineCredentials: config.credentials });
