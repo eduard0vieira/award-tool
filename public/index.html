@@ -14,19 +14,19 @@
       <button type="button" id="logout-button" class="action-button">Sair</button>
     </header>
 
-    <nav class="tabs">
-      <button type="button" class="tab-button active" data-tab="tap">AwardTool</button>
-      <button type="button" class="tab-button" data-tab="seatspy">SeatSpy</button>
-      <button type="button" class="tab-button" data-tab="aa">American</button>
-      <button type="button" class="tab-button" data-tab="latam">LATAM</button>
-      <button type="button" class="tab-button" data-tab="smiles">Smiles</button>
-      <button type="button" class="tab-button" data-tab="iberia">Iberia</button>
-      <button type="button" class="tab-button" data-tab="history">Histórico</button>
-    </nav>
+    <div class="tabs" role="tablist" aria-label="Programas">
+      <button type="button" role="tab" id="tab-tap" aria-controls="panel-tap" aria-selected="true" class="tab-button active" data-tab="tap">AwardTool</button>
+      <button type="button" role="tab" id="tab-seatspy" aria-controls="panel-seatspy" aria-selected="false" tabindex="-1" class="tab-button" data-tab="seatspy">SeatSpy</button>
+      <button type="button" role="tab" id="tab-aa" aria-controls="panel-aa" aria-selected="false" tabindex="-1" class="tab-button" data-tab="aa">American</button>
+      <button type="button" role="tab" id="tab-latam" aria-controls="panel-latam" aria-selected="false" tabindex="-1" class="tab-button" data-tab="latam">LATAM</button>
+      <button type="button" role="tab" id="tab-smiles" aria-controls="panel-smiles" aria-selected="false" tabindex="-1" class="tab-button" data-tab="smiles">Smiles</button>
+      <button type="button" role="tab" id="tab-iberia" aria-controls="panel-iberia" aria-selected="false" tabindex="-1" class="tab-button" data-tab="iberia">Iberia</button>
+      <button type="button" role="tab" id="tab-history" aria-controls="panel-history" aria-selected="false" tabindex="-1" class="tab-button" data-tab="history">Histórico</button>
+    </div>
 
     <!-- Every source has its own form and queue; switching tabs only toggles
          hidden, so a running search in one tab keeps its progress. -->
-    <section id="panel-tap" class="panel">
+    <section id="panel-tap" class="panel" role="tabpanel" aria-labelledby="tab-tap">
       <form id="tap-search-form">
         <div class="field">
           <label for="tap-origin">Origem</label>
@@ -60,7 +60,7 @@
       <div id="tap-queue" class="search-queue"></div>
     </section>
 
-    <section id="panel-seatspy" class="panel" hidden>
+    <section id="panel-seatspy" class="panel" role="tabpanel" aria-labelledby="tab-seatspy" hidden>
       <form id="seatspy-search-form">
         <div class="field">
           <label for="seatspy-program">Programa</label>
@@ -120,7 +120,7 @@
       <div id="seatspy-queue" class="search-queue"></div>
     </section>
 
-    <section id="panel-aa" class="panel" hidden>
+    <section id="panel-aa" class="panel" role="tabpanel" aria-labelledby="tab-aa" hidden>
       <form id="aa-search-form">
         <div class="field">
           <label for="aa-origin">Origem</label>
@@ -183,7 +183,7 @@
     <!-- The Avios calendar returns ONE value per day, the cheapest, without saying
          which cabin it is: cabin and stops only act on the detailed dates.
          See docs/recon/iberia.md, section 15. -->
-    <section id="panel-iberia" class="panel" hidden>
+    <section id="panel-iberia" class="panel" role="tabpanel" aria-labelledby="tab-iberia" hidden>
       <form id="iberia-search-form">
         <div class="field">
           <label for="iberia-origin">Origem</label>
@@ -257,7 +257,7 @@
 
     <!-- Cash fares in economy, no login. The calendar returns both directions,
          so one search brings both legs. -->
-    <section id="panel-latam" class="panel" hidden>
+    <section id="panel-latam" class="panel" role="tabpanel" aria-labelledby="tab-latam" hidden>
       <form id="latam-search-form">
         <div class="field">
           <label for="latam-origin">Origem</label>
@@ -291,7 +291,7 @@
 
     <!-- No login: the call goes out from inside the bot's browser (see
          smiles.scraper.ts). One direction per search, three cabins together. -->
-    <section id="panel-smiles" class="panel" hidden>
+    <section id="panel-smiles" class="panel" role="tabpanel" aria-labelledby="tab-smiles" hidden>
       <form id="smiles-search-form">
         <div class="field">
           <label for="smiles-origin">Origem</label>
@@ -340,7 +340,7 @@
       <div id="smiles-queue" class="search-queue"></div>
     </section>
 
-    <section id="panel-history" class="panel" hidden>
+    <section id="panel-history" class="panel" role="tabpanel" aria-labelledby="tab-history" hidden>
       <div id="history-top" class="history-top" hidden>
         <p id="history-summary" class="history-summary"></p>
         <button type="button" id="clear-history-button" class="clear-button">Limpar histórico</button>
@@ -381,14 +381,14 @@
       <p class="notice" hidden></p>
       <p class="job-ceilings" hidden></p>
 
-      <nav class="subtabs" hidden>
-        <button type="button" class="subtab-button active" data-subtab="dates">Datas</button>
-        <button type="button" class="subtab-button" data-subtab="upgrade">Upgrade</button>
-      </nav>
+      <div class="subtabs" role="tablist" aria-label="Resultado" hidden>
+        <button type="button" role="tab" aria-selected="true" class="subtab-button active" data-subtab="dates">Datas</button>
+        <button type="button" role="tab" aria-selected="false" tabindex="-1" class="subtab-button" data-subtab="upgrade">Upgrade</button>
+      </div>
 
-      <section class="result" hidden></section>
+      <section class="result" role="tabpanel" hidden></section>
 
-      <section class="upgrade-subpanel" hidden>
+      <section class="upgrade-subpanel" role="tabpanel" hidden>
         <p class="upgrade-explanation">
           Dias em que Econômica e Executiva têm disponibilidade juntas. Nesses dias dá pra
           emitir a passagem em Econômica e usar o upgrade da TAP pra ficar mais barato do que

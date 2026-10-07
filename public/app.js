@@ -134,20 +134,45 @@ const PROGRAM_LABELS = {
 const AA_CABIN_LABELS = { economy: "Econômica", premium: "Premium Economy", business: "Executiva", first: "Primeira Classe" };
 const AA_CABIN_CLASSES = { economy: "cabin-economy", premium: "cabin-premium", business: "cabin-business", first: "cabin-first" };
 
+function markSelectedTab(buttons, selected) {
+  for (const button of buttons) {
+    const isSelected = button === selected;
+    button.classList.toggle("active", isSelected);
+    button.setAttribute("aria-selected", String(isSelected));
+    button.tabIndex = isSelected ? 0 : -1;
+  }
+}
+
+// Arrow keys move between tabs and Tab leaves the list, the keyboard pattern
+// screen readers announce for role="tablist".
+function onTabListKeydown(event, buttons, select) {
+  const list = [...buttons];
+  const index = list.indexOf(event.currentTarget);
+  const target = { ArrowRight: index + 1, ArrowLeft: index - 1, Home: 0, End: list.length - 1 }[event.key];
+  if (target === undefined) return;
+  event.preventDefault();
+  const next = list[(target + list.length) % list.length];
+  select(next);
+  next.focus();
+}
+
 // Tabs only toggle hidden: nothing is destroyed or recreated, so running search
 // cards in one tab keep going and stay visible when you come back.
+function selectTab(button) {
+  markSelectedTab(tabButtons, button);
+  const tab = button.dataset.tab;
+  for (const [name, panel] of Object.entries(panels)) panel.hidden = name !== tab;
+  if (tab === "history") renderHistory();
+  window.history.replaceState(null, "", `#${tab}`);
+}
+
 tabButtons.forEach((button) => {
-  button.addEventListener("click", () => {
-    tabButtons.forEach((other) => other.classList.remove("active"));
-    button.classList.add("active");
-    const tab = button.dataset.tab;
-    for (const [name, panel] of Object.entries(panels)) panel.hidden = name !== tab;
-    if (tab === "history") renderHistory();
-  });
+  button.addEventListener("click", () => selectTab(button));
+  button.addEventListener("keydown", (event) => onTabListKeydown(event, tabButtons, selectTab));
 });
 
 function activateTab(tab) {
-  document.querySelector(`.tab-button[data-tab="${tab}"]`).click();
+  selectTab(document.querySelector(`.tab-button[data-tab="${tab}"]`));
 }
 
 // The history used to live under another key with Portuguese fields. It is
@@ -490,6 +515,8 @@ function updateBar(barEl, fraction) {
   barEl.style.width = `${Math.min(Math.round(fraction * 100), 100)}%`;
 }
 
+let cardCount = 0;
+
 // Every search gets its own card, so several run in parallel without one
 // disturbing another's progress or result.
 function createJobCard(queueEl, routeTitle) {
@@ -525,15 +552,27 @@ function createJobCard(queueEl, routeTitle) {
 
   card.routeEl.textContent = routeTitle;
 
+  const cardId = `card-${++cardCount}`;
+  const [datesTab, upgradeTab] = card.subtabButtons;
+  datesTab.id = `${cardId}-dates-tab`;
+  upgradeTab.id = `${cardId}-upgrade-tab`;
+  card.resultEl.id = `${cardId}-dates`;
+  card.upgradeSubpanelEl.id = `${cardId}-upgrade`;
+  datesTab.setAttribute("aria-controls", card.resultEl.id);
+  upgradeTab.setAttribute("aria-controls", card.upgradeSubpanelEl.id);
+  card.resultEl.setAttribute("aria-labelledby", datesTab.id);
+  card.upgradeSubpanelEl.setAttribute("aria-labelledby", upgradeTab.id);
+
+  const selectSubtab = (button) => {
+    markSelectedTab(card.subtabButtons, button);
+    const subtab = button.dataset.subtab;
+    card.resultEl.hidden = subtab !== "dates";
+    card.upgradeSubpanelEl.hidden = subtab !== "upgrade";
+    if (subtab === "upgrade") renderUpgrade(card);
+  };
   card.subtabButtons.forEach((button) => {
-    button.addEventListener("click", () => {
-      card.subtabButtons.forEach((other) => other.classList.remove("active"));
-      button.classList.add("active");
-      const subtab = button.dataset.subtab;
-      card.resultEl.hidden = subtab !== "dates";
-      card.upgradeSubpanelEl.hidden = subtab !== "upgrade";
-      if (subtab === "upgrade") renderUpgrade(card);
-    });
+    button.addEventListener("click", () => selectSubtab(button));
+    button.addEventListener("keydown", (event) => onTabListKeydown(event, card.subtabButtons, selectSubtab));
   });
 
   card.setStatus = (text, className) => {
@@ -2179,4 +2218,6 @@ seatspyForm.addEventListener("submit", (event) => {
 
 // Runs last: every source's functions and form elements must already exist.
 migrateLegacyHistory();
+const tabFromUrl = location.hash.slice(1);
+if (Object.hasOwn(panels, tabFromUrl)) activateTab(tabFromUrl);
 restoreSearches();
