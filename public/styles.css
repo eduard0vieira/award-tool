@@ -81,6 +81,20 @@ html {
   -webkit-text-size-adjust: 100%;
 }
 
+.icon {
+  flex: none;
+  vertical-align: -0.2em;
+}
+
+.alert-button .icon,
+.spreadsheet-link .icon {
+  margin-right: var(--e1);
+}
+
+.brand-mark {
+  flex: none;
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;

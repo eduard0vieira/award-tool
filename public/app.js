@@ -474,11 +474,13 @@ function createHistoryItem(item) {
 
   right.append(time, relative);
 
+  const spokenRoute = `${item.origin} para ${item.destination}${item.roundTrip ? ", ida e volta" : ""}`;
   const repeatButton = document.createElement("button");
   repeatButton.type = "button";
   repeatButton.className = "repeat-search-button";
   repeatButton.title = "Preencher a busca com esse trecho";
-  repeatButton.textContent = "↻";
+  repeatButton.setAttribute("aria-label", `Repetir a busca ${spokenRoute}`);
+  repeatButton.innerHTML = ICONS.repeat;
   repeatButton.addEventListener("click", () => repeatSearch(item));
 
   // A round-trip entry that came from two entries deletes both, or the leftover
@@ -487,7 +489,8 @@ function createHistoryItem(item) {
   deleteButton.type = "button";
   deleteButton.className = "delete-item-button";
   deleteButton.title = "Remover este trecho do histórico";
-  deleteButton.textContent = "✕";
+  deleteButton.setAttribute("aria-label", `Remover ${spokenRoute} do histórico`);
+  deleteButton.innerHTML = ICONS.close;
   deleteButton.addEventListener("click", () => removeFromHistory(item.timestamps || [item.timestamp]));
 
   row.append(main, cabins, right, repeatButton, deleteButton);
@@ -664,10 +667,40 @@ function legText(sections) {
 // share the same array.
 const excludedDates = new WeakMap();
 
-const PENCIL_ICON =
-  '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" ' +
-  'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-  '<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>';
+function svgIcon(paths, { filled = false } = {}) {
+  const paint = filled ? 'fill="currentColor" stroke="none"' : 'fill="none" stroke="currentColor"';
+  return (
+    `<svg class="icon" viewBox="0 0 24 24" width="16" height="16" ${paint} stroke-width="2" ` +
+    `stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${paths}</svg>`
+  );
+}
+
+const ICONS = {
+  pencil: svgIcon('<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/>'),
+  repeat: svgIcon('<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>'),
+  close: svgIcon('<path d="M18 6 6 18"/><path d="m6 6 12 12"/>'),
+  megaphone: svgIcon('<path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>'),
+  check: svgIcon('<path d="M20 6 9 17l-5-5"/>'),
+  sheet: svgIcon('<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/>'),
+  file: svgIcon('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>'),
+};
+
+function setIconLabel(element, iconName, text) {
+  element.innerHTML = ICONS[iconName];
+  element.append(text);
+}
+
+function setAlertButtonState(button, cabinClass, state) {
+  if (state === "busy") {
+    button.textContent = "Gerando…";
+  } else if (state === "done") {
+    setIconLabel(button, "check", cabinClass);
+    button.title = "Alerta gerado";
+  } else {
+    setIconLabel(button, "megaphone", cabinClass);
+    button.removeAttribute("title");
+  }
+}
 
 function excludedOf(section) {
   return (section && excludedDates.get(section.days)) || new Set();
@@ -1175,7 +1208,7 @@ function renderColumn(columnEl, section, colorClass) {
   copyButton.onclick = () => copyToClipboard(copyButton, keptSection(section).text, "Copiar");
 
   editButton.hidden = false;
-  editButton.innerHTML = PENCIL_ICON;
+  editButton.innerHTML = ICONS.pencil;
   if (!canEditDates(section)) {
     editButton.disabled = true;
     editButton.title = "Edição indisponível: as datas dessa cabine não batem com o texto do alerta.";
@@ -1488,7 +1521,7 @@ function showLocalFile(card, path, label) {
   if (!path) return;
   const block = document.createElement("p");
   block.className = "spreadsheet-link";
-  block.textContent = `💾 Planilha da ${label} em ${path}`;
+  setIconLabel(block, "file", `Planilha da ${label} em ${path}`);
   card.root.appendChild(block);
 }
 
@@ -1500,7 +1533,7 @@ function showSpreadsheetLink(card, url, label) {
   link.href = url;
   link.target = "_blank";
   link.rel = "noopener";
-  link.textContent = `📊 Planilha da ${label}`;
+  setIconLabel(link, "sheet", `Planilha da ${label}`);
   block.append(link);
   card.root.appendChild(block);
 }
@@ -1608,10 +1641,10 @@ function showAlertButtons(card, source, origin, destination, options) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "alert-button";
-    button.textContent = `📢 ${option.cabinClass}`;
+    setAlertButtonState(button, option.cabinClass, "idle");
     button.addEventListener("click", async () => {
       button.disabled = true;
-      button.textContent = "⏳ Gerando...";
+      setAlertButtonState(button, option.cabinClass, "busy");
       try {
         const outbound = keptSection(option.outbound);
         const inbound = keptSection(option.inbound);
@@ -1628,17 +1661,17 @@ function showAlertButtons(card, source, origin, destination, options) {
           returnText: hasDays(inbound) ? inbound.text : "",
         });
         showGeneratedAlert(card, alert);
-        button.textContent = `✓ ${option.cabinClass}`;
+        setAlertButtonState(button, option.cabinClass, "done");
       } catch (err) {
-        button.textContent = `📢 ${option.cabinClass}`;
+        setAlertButtonState(button, option.cabinClass, "idle");
         showNotice(card.noticeEl, err.message || "Falha ao gerar o alerta.");
       } finally {
         button.disabled = false;
       }
     });
-    // The alert already on screen no longer matches the dates: back to 📢 so it gets generated again.
+    // The alert already on screen no longer matches the dates: back to idle so it gets generated again.
     card.root.addEventListener("alert-dates-changed", () => {
-      if (!button.disabled) button.textContent = `📢 ${option.cabinClass}`;
+      if (!button.disabled) setAlertButtonState(button, option.cabinClass, "idle");
     });
     bar.appendChild(button);
   }
@@ -1923,11 +1956,11 @@ function showLatamAlertButton(card, origin, destination, legs, confirmation) {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "alert-button";
-  button.textContent = "📢 Econômica";
+  setAlertButtonState(button, "Econômica", "idle");
   button.title = "Todas as datas do calendário, com os pontos vindos dos pares confirmados";
   button.addEventListener("click", async () => {
     button.disabled = true;
-    button.textContent = "⏳ Gerando...";
+    setAlertButtonState(button, "Econômica", "busy");
     try {
       const outbound = keptSection(outboundSection);
       const inbound = keptSection(inboundSection);
@@ -1954,16 +1987,16 @@ function showLatamAlertButton(card, origin, destination, legs, confirmation) {
         returnText: hasDays(inbound) ? inbound.text : "",
       });
       showGeneratedAlert(card, alert);
-      button.textContent = "✓ Econômica";
+      setAlertButtonState(button, "Econômica", "done");
     } catch (err) {
-      button.textContent = "📢 Econômica";
+      setAlertButtonState(button, "Econômica", "idle");
       showNotice(card.noticeEl, err.message || "Falha ao gerar o alerta.");
     } finally {
       button.disabled = false;
     }
   });
   card.root.addEventListener("alert-dates-changed", () => {
-    if (!button.disabled) button.textContent = "📢 Econômica";
+    if (!button.disabled) setAlertButtonState(button, "Econômica", "idle");
   });
   bar.appendChild(button);
   card.root.querySelector(".job-header").after(bar);
