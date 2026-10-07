@@ -586,7 +586,7 @@ function clearNotice(noticeEl) {
 }
 
 function updateBar(barEl, fraction) {
-  barEl.style.width = `${Math.min(Math.round(fraction * 100), 100)}%`;
+  barEl.style.transform = `scaleX(${Math.min(Math.max(fraction, 0), 1)})`;
 }
 
 let cardCount = 0;
@@ -1452,7 +1452,7 @@ function renderTapLeg(targetEl, label, report) {
 function renderLegSections(targetEl, label, sections) {
   renderLeg(targetEl, label, "columns columns-3", (columns) => {
     for (const section of sections) {
-      const column = createColumn(section.label);
+      const column = createColumn(section.label, section.colorClass?.replace("cabin-", "column-"));
       columns.appendChild(column);
       renderColumn(column, section, section.colorClass);
     }
