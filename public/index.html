@@ -167,16 +167,19 @@
             <option value="9">9</option>
           </select>
         </div>
-        <div class="field">
-          <!-- AA prices awards per person, so the ceiling keeps its meaning with more passengers. -->
-          <label for="aa-ceiling">Teto de milhas (K) por passageiro</label>
-          <input id="aa-ceiling" name="ceiling" type="number" min="1" step="0.5" placeholder="ex.: 110" autocomplete="off" />
-        </div>
         <label class="checkbox">
           <input type="checkbox" id="aa-round-trip" name="round-trip" checked />
           Ida e volta
         </label>
         <button type="submit">Buscar</button>
+
+        <div class="ceilings-row">
+          <div class="field">
+            <!-- AA prices awards per person, so the ceiling keeps its meaning with more passengers. -->
+            <label for="aa-ceiling">Teto de milhas (K) por passageiro</label>
+            <input id="aa-ceiling" name="ceiling" type="number" min="1" step="0.5" placeholder="ex.: 110" autocomplete="off" />
+          </div>
+        </div>
       </form>
 
       <p id="aa-notice" class="notice" hidden></p>
@@ -198,10 +201,6 @@
           <input id="iberia-destination" name="destination" placeholder="MAD" maxlength="3" pattern="[A-Za-z]{3}" title="Código IATA de 3 letras" required autocomplete="off" autocapitalize="characters" spellcheck="false" />
         </div>
         <div class="field">
-          <label for="iberia-ceiling">Teto de Avios (K) por passageiro</label>
-          <input id="iberia-ceiling" name="ceiling" type="number" min="1" step="0.5" placeholder="ex.: 40" autocomplete="off" />
-        </div>
-        <div class="field">
           <label for="iberia-detail-days">Quantas datas detalhar voo a voo</label>
           <select id="iberia-detail-days" name="detail-days">
             <option value="0" selected>Nenhuma — só a lista de datas (~40s)</option>
@@ -213,30 +212,37 @@
             <option value="-1">TODAS as datas — como o bot antigo (pode passar de 1 hora)</option>
           </select>
         </div>
-        <div class="field">
-          <label for="iberia-stops">Conexões (só filtra as datas detalhadas)</label>
-          <select id="iberia-stops" name="stops">
-            <option value="">Todos os voos</option>
-            <option value="0">Só voo direto</option>
-            <option value="1">Até 1 conexão</option>
-            <option value="2">Até 2 conexões</option>
-          </select>
-        </div>
-        <div class="field">
-          <label for="iberia-cabin">Cabine (só filtra as datas detalhadas)</label>
-          <select id="iberia-cabin" name="cabin">
-            <option value="">Todas</option>
-            <option value="ECONOMY">Econômica</option>
-            <option value="PREMIUMTOURIST">Premium Economy</option>
-            <option value="BUSINESS">Executiva</option>
-            <option value="FIRST">Primeira</option>
-          </select>
-        </div>
         <label class="checkbox">
           <input type="checkbox" id="iberia-round-trip" name="round-trip" checked />
           Ida e volta
         </label>
         <button type="submit">Buscar</button>
+
+        <div class="ceilings-row">
+          <div class="field">
+            <label for="iberia-ceiling">Teto de Avios (K) por passageiro</label>
+            <input id="iberia-ceiling" name="ceiling" type="number" min="1" step="0.5" placeholder="ex.: 40" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label for="iberia-stops">Conexões (só filtra as datas detalhadas)</label>
+            <select id="iberia-stops" name="stops">
+              <option value="">Todos os voos</option>
+              <option value="0">Só voo direto</option>
+              <option value="1">Até 1 conexão</option>
+              <option value="2">Até 2 conexões</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="iberia-cabin">Cabine (só filtra as datas detalhadas)</label>
+            <select id="iberia-cabin" name="cabin">
+              <option value="">Todas</option>
+              <option value="ECONOMY">Econômica</option>
+              <option value="PREMIUMTOURIST">Premium Economy</option>
+              <option value="BUSINESS">Executiva</option>
+              <option value="FIRST">Primeira</option>
+            </select>
+          </div>
+        </div>
         <small class="hint">
           <strong>O preço de cada data é o mais barato do dia, em qualquer cabine e
           qualquer roteamento</strong>, inclusive com escala em parceiras: a Iberia
