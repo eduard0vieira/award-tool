@@ -532,7 +532,8 @@ export async function confirmPairInMiles(
       image,
     };
   } catch (err) {
-    if (err instanceof LatamFlowError) await captureFailure(page, screenshotPath, onLog);
+    // Playwright timeouts too: a click that never lands left no trace of what the page showed.
+    await captureFailure(page, screenshotPath, onLog);
     throw err;
   } finally {
     page.off("response", capture);
