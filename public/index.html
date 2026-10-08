@@ -103,11 +103,13 @@
         </div>
         <div class="field">
           <label for="seatspy-origin">Origem</label>
-          <input id="seatspy-origin" name="origin" placeholder="ex.: GRU" maxlength="3" pattern="[A-Za-z]{3}" title="Código IATA de 3 letras" required autocomplete="off" autocapitalize="characters" spellcheck="false" />
+          <input id="seatspy-origin" class="airport-input" name="origin" list="seatspy-origin-options" placeholder="ex.: GRU" maxlength="3" pattern="[A-Za-z]{3}" title="Código IATA de 3 letras" required autocomplete="off" autocapitalize="characters" spellcheck="false" />
+          <datalist id="seatspy-origin-options"></datalist>
         </div>
         <div class="field">
           <label for="seatspy-destination">Destino</label>
-          <input id="seatspy-destination" name="destination" placeholder="ex.: MAD" maxlength="3" pattern="[A-Za-z]{3}" title="Código IATA de 3 letras" required autocomplete="off" autocapitalize="characters" spellcheck="false" />
+          <input id="seatspy-destination" class="airport-input" name="destination" list="seatspy-destination-options" placeholder="ex.: MAD" maxlength="3" pattern="[A-Za-z]{3}" title="Código IATA de 3 letras" required autocomplete="off" autocapitalize="characters" spellcheck="false" />
+          <datalist id="seatspy-destination-options"></datalist>
         </div>
         <label class="checkbox">
           <input type="checkbox" id="seatspy-round-trip" name="round-trip" checked />
@@ -119,6 +121,10 @@
           Mostrar assentos
         </label>
         <button type="submit">Buscar</button>
+
+        <div class="reveal route-hint" id="seatspy-route-hint-reveal">
+          <div><p class="field-hint" id="seatspy-route-hint" role="status"></p></div>
+        </div>
 
         <div class="ceilings-row">
           <div class="field">

@@ -1964,6 +1964,28 @@ input[type="number"] {
   color: var(--error);
 }
 
+/* Advice, not an error: the search still checks the route itself. */
+.field-hint {
+  margin: 0;
+  max-width: 80ch;
+  font-size: var(--text-sm);
+  color: var(--warning-ink);
+}
+
+.route-hint {
+  flex: 1 0 100%;
+}
+
+/* Closed, the full-width line would still cost the form's row gap. */
+.route-hint:not(.is-open) {
+  margin-top: calc(var(--e3) * -1);
+}
+
+/* Suggestions still open while typing; the arrow only ate room in a 3-letter field. */
+.airport-input::-webkit-calendar-picker-indicator {
+  display: none !important;
+}
+
 .login-actions {
   display: flex;
   flex-direction: column;

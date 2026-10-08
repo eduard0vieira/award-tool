@@ -413,6 +413,7 @@ function repeatSearch(item) {
     seatspyDestinationInput.value = item.destination;
     seatspyRoundTripCheckbox.checked = Boolean(item.roundTrip);
     activateTab("seatspy");
+    updateSeatspyHints();
     seatspyOriginInput.focus();
   } else {
     showNotice(historyNotice, `Não há aba para repetir buscas do programa "${item.program}". Preencha a busca na aba do programa.`);
@@ -2890,6 +2891,104 @@ smilesForm.addEventListener("submit", (event) => {
   );
 });
 
+// The form warns about a route the airline does not fly while it is typed, from
+// the map the server reads off SeatSpy's own form. It only advises: the search
+// still checks the live form before spending a credit, and decides.
+const seatspyOriginOptions = document.getElementById("seatspy-origin-options");
+const seatspyDestinationOptions = document.getElementById("seatspy-destination-options");
+const seatspyRoutes = new Map();
+const SHOWN_DESTINATIONS = 12;
+let seatspyHintsRun = 0;
+
+function seatspyRoutesOf(airline) {
+  if (!seatspyRoutes.has(airline)) {
+    const loading = apiFetch(`/api/seatspy/routes/${airline}`)
+      .then(async (response) => {
+        const body = await response.json().catch(() => null);
+        if (!response.ok || !body?.origins) throw new Error(body?.error || `O servidor respondeu ${response.status}.`);
+        return body.origins;
+      })
+      .catch((err) => {
+        console.error(`Mapa de rotas do SeatSpy (${airline}) indisponível; a busca confere a rota sozinha:`, err);
+        // Asked again next time instead of staying without hints until a reload.
+        seatspyRoutes.delete(airline);
+        return null;
+      });
+    seatspyRoutes.set(airline, loading);
+  }
+  return seatspyRoutes.get(airline);
+}
+
+function airportMatches(airport, code) {
+  return airport.iata === code || airport.iatas.split(/[\s,]+/).includes(code);
+}
+
+function fillAirportOptions(datalist, airports) {
+  datalist.replaceChildren(
+    ...airports.map((airport) => {
+      const option = document.createElement("option");
+      option.value = airport.iata;
+      option.label = airport.title;
+      return option;
+    }),
+  );
+}
+
+const seatspyRouteHintReveal = document.getElementById("seatspy-route-hint-reveal");
+const seatspyRouteHint = document.getElementById("seatspy-route-hint");
+
+function setSeatspyHint(input, message) {
+  seatspyRouteHintReveal.classList.toggle("is-open", Boolean(message));
+  if (message) {
+    seatspyRouteHint.textContent = message;
+    input.setAttribute("aria-describedby", seatspyRouteHint.id);
+  } else {
+    input.removeAttribute("aria-describedby");
+  }
+}
+
+async function updateSeatspyHints() {
+  const run = ++seatspyHintsRun;
+  const airline = seatspyProgramSelect.value;
+  const origins = await seatspyRoutesOf(airline);
+  // Typing on while the map loads must not leave a hint about older values.
+  if (run !== seatspyHintsRun) return;
+  setSeatspyHint(seatspyOriginInput, "");
+  setSeatspyHint(seatspyDestinationInput, "");
+  if (!origins) return;
+
+  const airlineName = seatspyProgramSelect.selectedOptions[0].textContent;
+  const origin = seatspyOriginInput.value.trim().toUpperCase();
+  const destination = seatspyDestinationInput.value.trim().toUpperCase();
+  fillAirportOptions(seatspyOriginOptions, Object.values(origins));
+  if (origin.length !== 3) {
+    seatspyDestinationOptions.replaceChildren();
+    return;
+  }
+
+  const from = Object.values(origins).filter((airport) => airportMatches(airport, origin));
+  if (from.length === 0) {
+    seatspyDestinationOptions.replaceChildren();
+    setSeatspyHint(seatspyOriginInput, `A ${airlineName} não tem voos saindo de ${origin} no SeatSpy.`);
+    return;
+  }
+  const destinations = [...new Map(from.flatMap((airport) => airport.destinations).map((airport) => [airport.iata, airport])).values()];
+  fillAirportOptions(seatspyDestinationOptions, destinations);
+  if (destination.length !== 3 || destinations.some((airport) => airportMatches(airport, destination))) return;
+
+  const named = destinations.slice(0, SHOWN_DESTINATIONS).map((airport) => `${airport.iata} (${airport.title})`);
+  const more = destinations.length > SHOWN_DESTINATIONS ? ` e mais ${destinations.length - SHOWN_DESTINATIONS}` : "";
+  setSeatspyHint(
+    seatspyDestinationInput,
+    `A ${airlineName} não voa ${origin} → ${destination} no SeatSpy. De ${origin}, ela voa para: ${named.join(", ")}${more}.`,
+  );
+}
+
+seatspyProgramSelect.addEventListener("change", updateSeatspyHints);
+seatspyOriginInput.addEventListener("input", updateSeatspyHints);
+seatspyDestinationInput.addEventListener("input", updateSeatspyHints);
+document.getElementById("tab-seatspy").addEventListener("click", updateSeatspyHints);
+
 seatspyForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   clearNotice(seatspyNotice);
@@ -2914,6 +3013,7 @@ seatspyForm.addEventListener("submit", async (event) => {
 // Runs last: every source's functions and form elements must already exist.
 const tabFromUrl = location.hash.slice(1);
 if (Object.hasOwn(panels, tabFromUrl)) activateTab(tabFromUrl);
+if (tabFromUrl === "seatspy") updateSeatspyHints();
 restoreSearches();
 // The feed labels cards by who searched, and yours from another device should say "você".
 whoAmI.finally(openFeed);
