@@ -165,7 +165,10 @@ export async function generateAlert(
       images,
       caption: (await page.locator("#render-legenda").textContent()) ?? "",
     };
-    if (request.returnText) {
+    // A return caption only when the portal split the alert into an outbound card
+    // and a return card, sent as two messages. One card already shows both
+    // directions and goes out as one message with one caption.
+    if (request.returnText && cardCount > 1) {
       try {
         alert.returnCaption = mirrorCaption(alert.caption);
       } catch (err) {
