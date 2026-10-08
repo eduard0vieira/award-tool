@@ -57,6 +57,10 @@
   --warning-line: #d9a400;
   --error: #c8102e;
   --error-bg: #fbe9ec;
+  --running: #e8660f;
+  --running-ink: #9a3f07;
+  --running-bg: #fff0e3;
+  --running-line: #f2b483;
 
   --business: #6b3fa0;
   --economy: #0b6aaf;
@@ -1442,12 +1446,30 @@ input[type="number"] {
   gap: var(--e1);
 }
 
+/* The same colored rule that marks each cabin's column in a result. */
 .history-item-cabin {
-  padding: 1px var(--e2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-chip);
+  --cabin: var(--line-strong);
+  padding: 0 var(--e2) 0 6px;
+  border-left: 3px solid var(--cabin);
   font-size: var(--text-xs);
+  line-height: 18px;
   color: var(--ink-soft);
+}
+
+.history-item-cabin.cabin-economy {
+  --cabin: var(--economy);
+}
+
+.history-item-cabin.cabin-premium {
+  --cabin: var(--premium);
+}
+
+.history-item-cabin.cabin-business {
+  --cabin: var(--business);
+}
+
+.history-item-cabin.cabin-first {
+  --cabin: var(--first);
 }
 
 .history-item-right {
@@ -1457,18 +1479,86 @@ input[type="number"] {
   margin-left: auto;
 }
 
-.history-item-user,
-.history-item-status {
+.history-item-user {
   font-size: var(--text-sm);
   color: var(--ink-soft);
   white-space: nowrap;
 }
 
+/* Same marker as a search card's status. Done is the normal case and stays
+   quiet; what still needs attention gets a filled chip. */
 .history-item-status {
+  --status: var(--ok);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 1px var(--e2);
-  border: 1px solid var(--line);
+  border: 1px solid transparent;
   border-radius: var(--radius-chip);
+  color: var(--status);
   font-size: var(--text-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.history-item-right .history-item-status {
+  min-width: 92px;
+}
+
+/* Fixed widths keep the status column aligned whatever "há 1 min" or "há 20 min" says. */
+.history-item-relative {
+  min-width: 64px;
+  text-align: right;
+}
+
+@media (max-width: 560px) {
+  .history-item-cabins {
+    flex-basis: 100%;
+  }
+}
+
+.history-item-status::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 1px;
+  background: var(--status);
+}
+
+.history-status-running {
+  --status: var(--running);
+  border-color: var(--running-line);
+  background: var(--running-bg);
+  color: var(--running-ink);
+}
+
+.history-status-running::before {
+  animation: history-running 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes history-running {
+  to {
+    opacity: 0.25;
+  }
+}
+
+.history-status-partial {
+  --status: var(--warning-line);
+  border-color: var(--warning-line);
+  background: var(--warning-bg);
+  color: var(--warning-ink);
+}
+
+.history-status-queued {
+  --status: var(--line-strong);
+  border-color: var(--line);
+  background: var(--surface-sunk);
+  color: var(--ink-soft);
+}
+
+.history-item-running {
+  border-left: 3px solid var(--running);
+  padding-left: calc(var(--e4) - 2px);
 }
 
 .search-job > .fresh-search-button {
@@ -1482,14 +1572,6 @@ input[type="number"] {
   color: var(--ink-soft);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-}
-
-.recent-dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--ok);
 }
 
 /* Program colors, darkened to read as text on white. */

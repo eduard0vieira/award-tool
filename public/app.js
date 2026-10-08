@@ -508,9 +508,11 @@ function historyCabins(item) {
   return [["Econômica", "cabin-economy"], ["Premium", "cabin-premium"], ["Executiva", "cabin-business"], ["Primeira", "cabin-first"]];
 }
 
+const HISTORY_STATUS_LABELS = { queued: "Na fila", running: "Buscando", done: "Pronta", partial: "Parcial" };
+
 function createHistoryItem(item) {
   const row = document.createElement("div");
-  row.className = `history-item accent-${item.program}`;
+  row.className = `history-item accent-${item.program} history-item-${item.status}`;
 
   const main = document.createElement("div");
   main.className = "history-item-main";
@@ -531,19 +533,6 @@ function createHistoryItem(item) {
     user.className = "history-item-user";
     user.textContent = `por ${who}`;
     main.appendChild(user);
-  }
-  if (item.status === "partial" || item.status === "running" || item.status === "queued") {
-    const status = document.createElement("span");
-    status.className = `history-item-status status-${item.status}`;
-    status.textContent = item.status === "partial" ? "parcial" : "em andamento";
-    main.appendChild(status);
-  }
-
-  if (Date.now() - item.timestamp < TOLERANCE_MS) {
-    const dot = document.createElement("span");
-    dot.className = "recent-dot";
-    dot.title = `Dentro da tolerância de ${TOLERANCE_DAYS} dias. Repetir esse trecho vai gerar aviso.`;
-    main.appendChild(dot);
   }
 
   const cabins = document.createElement("div");
@@ -566,7 +555,11 @@ function createHistoryItem(item) {
   relative.className = "history-item-relative";
   relative.textContent = formatRelativeTime(item.timestamp);
 
-  right.append(time, relative);
+  const status = document.createElement("span");
+  status.className = `history-item-status history-status-${item.status}`;
+  status.textContent = HISTORY_STATUS_LABELS[item.status];
+
+  right.append(status, time, relative);
 
   const spokenRoute = `${item.origin} para ${item.destination}${item.roundTrip ? ", ida e volta" : ""}`;
   const repeatButton = document.createElement("button");
