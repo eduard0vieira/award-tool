@@ -1,5 +1,7 @@
+import { execFileSync } from "node:child_process";
 import { Injectable, type MessageEvent } from "@nestjs/common";
 import { concat, defer, from, interval, map, merge, Subject, type Observable } from "rxjs";
+import { ROOT_DIR } from "../../core/paths.ts";
 import { JobStore } from "../jobs/job-store.service.ts";
 
 // One card on the screen of whoever searched: its legs are separate jobs, and
@@ -8,7 +10,11 @@ export type SearchGroup = { id: string; source: string; args: unknown[]; by: str
 
 export type GroupLeg = { id: string; leg: number; args: unknown[]; source: string; by: string | null };
 
-type FeedEvent = { type: "group"; group: SearchGroup; snapshot?: true } | { type: "history" } | { type: "ping" };
+type FeedEvent =
+  | { type: "hello"; version: string | null }
+  | { type: "group"; group: SearchGroup; snapshot?: true }
+  | { type: "history" }
+  | { type: "ping" };
 
 // ngrok drops a connection that stays silent for too long.
 const PING_MS = 25_000;
@@ -16,10 +22,29 @@ const FORGET_AFTER_MS = 6 * 3_600_000;
 
 type TrackedGroup = { group: SearchGroup; announced: boolean; touchedAt: number };
 
+// The page compares it on every reconnect: a different one means the notebook
+// pulled an update and the open page is running old code.
+function currentVersion(): string | null {
+  try {
+    return execFileSync("git", ["rev-parse", "--short", "HEAD"], {
+      cwd: ROOT_DIR,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch (err) {
+    console.error(
+      "Não deu para ler o commit atual; o aviso de versão nova fica desligado:",
+      err instanceof Error ? err.message : err,
+    );
+    return null;
+  }
+}
+
 @Injectable()
 export class SearchFeed {
   private readonly groups = new Map<string, TrackedGroup>();
   private readonly events = new Subject<FeedEvent>();
+  private readonly version = currentVersion();
 
   constructor(private readonly jobs: JobStore) {}
 
@@ -52,7 +77,10 @@ export class SearchFeed {
 
   stream(): Observable<MessageEvent> {
     // Deferred like JobStore.stream: snapshot and live subscription in the same tick.
-    const feed = defer(() => concat(from(this.snapshot()), this.events));
+    const feed = defer(() => {
+      const hello: FeedEvent = { type: "hello", version: this.version };
+      return concat(from([hello, ...this.snapshot()]), this.events);
+    });
     const pings = interval(PING_MS).pipe(map((): FeedEvent => ({ type: "ping" })));
     return merge(feed, pings).pipe(map((data) => ({ data })));
   }

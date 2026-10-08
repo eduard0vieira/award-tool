@@ -532,6 +532,17 @@ describe("server with auth", () => {
     }
   });
 
+  test("opens the feed saying which commit the server runs", async () => {
+    const abort = new AbortController();
+    try {
+      const hello = (await readEvents(`${url}/api/feed`, await sessionCookie(), abort.signal).next()).value;
+      assert.equal(hello?.type, "hello");
+      assert.match(String(hello?.version), /^[0-9a-f]{7,}$/);
+    } finally {
+      abort.abort();
+    }
+  });
+
   test("refuses the feed without a session and an oversized group", async () => {
     assert.equal((await fetch(`${url}/api/feed`)).status, 401);
     const response = await fetch(`${url}/api/searches`, {
