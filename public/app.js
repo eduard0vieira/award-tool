@@ -1213,6 +1213,8 @@ function openFeed() {
   };
 }
 
+const RECONNECT_MS = 3000;
+
 function runOnServer(card, body, progressLabel, session) {
   return new Promise(async (resolve, reject) => {
     card.progressLabelEl.textContent = progressLabel;
@@ -1298,54 +1300,73 @@ function runOnServer(card, body, progressLabel, session) {
       }
     }
 
-    const events = new EventSource(`/api/searches/${jobId}/events`);
+    // The job lives on the server, so a dropped connection (tunnel hiccup, phone
+    // waking up) only loses the stream: reopening it replays the job's state.
+    let reconnecting = false;
+    const listen = () => {
+      const events = new EventSource(`/api/searches/${jobId}/events`);
 
-    events.onmessage = (message) => {
-      const event = JSON.parse(message.data);
-      if (event.type === "queued") {
-        card.setStatus("Na fila", "status-queued");
-      } else if (event.type === "started") {
-        card.setStatus("Buscando…", "status-searching");
-      } else if (event.type === "progress") {
-        updateBar(card.barEl, event.fraction);
-      } else if (event.type === "window") {
-        setFacts(card.progressWindowEl, [`Janela ${event.current} de ${event.total}`, `${event.start} – ${event.end}`]);
-        card.noticeEl.hidden = true;
-      } else if (event.type === "notice") {
-        // Transient (e.g. AwardTool's rate-limit cooldown): cleared by the next window or progress.
-        card.noticeEl.textContent = event.message;
-        card.noticeEl.hidden = !event.message;
-      } else if (event.type === "question") {
-        showQuestion(card, jobId, event);
-      } else if (event.type === "answered") {
-        removeQuestion(card);
-      } else if (event.type === "done") {
-        events.close();
-        removeQuestion(card);
-        // Otherwise the label stays frozen on the last "Buscando…" after the search ends.
-        card.progressLabelEl.textContent = "";
-        const result = {
-          result: event.legs || event.section || event.report,
-          spreadsheetUrl: event.spreadsheetUrl,
-          localFile: event.localFile,
-          partialNotice: event.partialNotice,
-          appliedCeilings: event.appliedCeilings,
-          confirmation: event.confirmation,
-          stoppedByUser: event.stoppedByUser,
-        };
-        keepResult(result);
-        resolve(result);
-      } else if (event.type === "error") {
-        events.close();
-        removeQuestion(card);
-        reject(new Error(event.message));
-      }
-    };
+      events.onmessage = (message) => {
+        const event = JSON.parse(message.data);
+        if (reconnecting) {
+          reconnecting = false;
+          card.progressLabelEl.textContent = progressLabel;
+        }
+        if (event.type === "queued") {
+          card.setStatus("Na fila", "status-queued");
+        } else if (event.type === "started") {
+          card.setStatus("Buscando…", "status-searching");
+        } else if (event.type === "progress") {
+          updateBar(card.barEl, event.fraction);
+        } else if (event.type === "window") {
+          setFacts(card.progressWindowEl, [`Janela ${event.current} de ${event.total}`, `${event.start} – ${event.end}`]);
+          card.noticeEl.hidden = true;
+        } else if (event.type === "notice") {
+          // Transient (e.g. AwardTool's rate-limit cooldown): cleared by the next window or progress.
+          card.noticeEl.textContent = event.message;
+          card.noticeEl.hidden = !event.message;
+        } else if (event.type === "question") {
+          showQuestion(card, jobId, event);
+        } else if (event.type === "answered") {
+          removeQuestion(card);
+        } else if (event.type === "done") {
+          events.close();
+          removeQuestion(card);
+          // Otherwise the label stays frozen on the last "Buscando…" after the search ends.
+          card.progressLabelEl.textContent = "";
+          const result = {
+            result: event.legs || event.section || event.report,
+            spreadsheetUrl: event.spreadsheetUrl,
+            localFile: event.localFile,
+            partialNotice: event.partialNotice,
+            appliedCeilings: event.appliedCeilings,
+            confirmation: event.confirmation,
+            stoppedByUser: event.stoppedByUser,
+          };
+          keepResult(result);
+          resolve(result);
+        } else if (event.type === "error") {
+          events.close();
+          removeQuestion(card);
+          reject(new Error(event.message));
+        }
+      };
 
-    events.onerror = () => {
-      events.close();
-      reject(new Error("Conexão com o servidor perdida."));
+      events.onerror = async () => {
+        reconnecting = true;
+        card.progressLabelEl.textContent = "Conexão caiu. Reconectando…";
+        // Still CONNECTING: the browser retries on its own.
+        if (events.readyState !== EventSource.CLOSED) return;
+        events.close();
+        const state = await apiFetch(`/api/searches/${jobId}/state`).catch(() => null);
+        if (state?.status === 404) {
+          reject(new Error("O servidor reiniciou e essa busca se perdeu. Busque de novo."));
+          return;
+        }
+        setTimeout(listen, RECONNECT_MS);
+      };
     };
+    listen();
   });
 }
 
