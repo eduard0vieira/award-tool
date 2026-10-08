@@ -11,6 +11,11 @@ export class HistoryController {
     return this.history.list(query.limit ?? 50, query.before ? new Date(query.before) : undefined);
   }
 
+  @Get("groups/:groupId")
+  getGroup(@Param("groupId") groupId: string) {
+    return this.history.getGroup(groupId);
+  }
+
   @Get(":id")
   get(@Param("id") id: string) {
     return this.history.get(id);

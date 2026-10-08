@@ -75,6 +75,7 @@ export class SearchService {
       destination: route.destination,
       requestKey: key,
       request: identity,
+      group: route.group,
     });
     trackLeg(jobId, true);
     void source.start(jobId, request);

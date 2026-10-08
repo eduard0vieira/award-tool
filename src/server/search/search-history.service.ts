@@ -14,6 +14,7 @@ export type NewSearch = {
   destination: string;
   requestKey: string;
   request: Record<string, unknown>;
+  group?: { id: string; leg: number; args: unknown[] } | undefined;
 };
 
 type SearchUpdate = { status: string; result?: string; error?: string; finishedAt?: Date };
@@ -55,9 +56,15 @@ export class SearchHistory implements OnModuleInit {
   }
 
   async record(search: NewSearch) {
-    const { jobId, request, ...fields } = search;
+    const { jobId, request, group, ...fields } = search;
     await this.prisma.search.create({
-      data: { ...fields, id: jobId, request: JSON.stringify(request), status: "queued" },
+      data: {
+        ...fields,
+        id: jobId,
+        request: JSON.stringify(request),
+        status: "queued",
+        ...(group && { groupId: group.id, groupLeg: group.leg, groupArgs: JSON.stringify(group.args) }),
+      },
     });
     this.feed.historyChanged();
     // Chained so the rows follow the job's order even when two updates are in
@@ -95,17 +102,43 @@ export class SearchHistory implements OnModuleInit {
       omit: { result: true },
       include: { user: { select: { username: true } } },
     });
-    return rows.map(({ user, userId: _userId, requestKey: _key, request, ...row }) => ({
+    return rows.map(({ user, userId: _userId, requestKey: _key, groupArgs: _args, request, ...row }) => ({
       ...row,
       user: user?.username ?? null,
       request: JSON.parse(request) as Record<string, unknown>,
     }));
   }
 
+  // Every saved leg of one card, in order, with what rebuilds the card.
+  async getGroup(groupId: string) {
+    const rows = await this.prisma.search.findMany({
+      where: { groupId },
+      orderBy: { groupLeg: "asc" },
+      include: { user: { select: { username: true } } },
+    });
+    const first = rows[0];
+    if (!first?.groupArgs) throw new NotFoundException("Essa busca não está no histórico.");
+    return {
+      id: groupId,
+      source: first.source,
+      args: JSON.parse(first.groupArgs) as unknown[],
+      user: first.user?.username ?? null,
+      createdAt: first.createdAt,
+      legs: rows.map((row) => ({
+        leg: row.groupLeg,
+        id: row.id,
+        status: row.status,
+        error: row.error,
+        // Null once older than SEARCH_RESULT_RETENTION_DAYS, like in get().
+        result: row.result === null ? null : (JSON.parse(row.result) as Record<string, unknown>),
+      })),
+    };
+  }
+
   async get(id: string) {
     const row = await this.prisma.search.findUnique({ where: { id }, include: { user: { select: { username: true } } } });
     if (!row) throw new NotFoundException("Busca não encontrada no histórico.");
-    const { user, userId: _userId, requestKey: _key, request, result, ...rest } = row;
+    const { user, userId: _userId, requestKey: _key, groupArgs: _args, request, result, ...rest } = row;
     return {
       ...rest,
       user: user?.username ?? null,

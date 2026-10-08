@@ -33,7 +33,13 @@ model Search {
   error       String?
   createdAt   DateTime  @default(now())
   finishedAt  DateTime?
+  // The card on the requester's screen this leg belongs to, and the arguments
+  // that rebuild it: what lets the history reopen a whole round trip.
+  groupId     String?
+  groupLeg    Int?
+  groupArgs   String?
 
   @@index([requestKey, createdAt])
   @@index([createdAt])
+  @@index([groupId])
 }

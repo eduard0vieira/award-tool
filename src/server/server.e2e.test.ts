@@ -532,6 +532,35 @@ describe("server with auth", () => {
     }
   });
 
+  test("hands back every leg of a card from the history, with what rebuilds it", async () => {
+    const cookie = await sessionCookie();
+    const group = { id: "card-history", leg: 0, args: ["GRU", "JJJ", true] };
+    const outbound = await startSearch(cookie, { origin: "GRU", destination: "JJJ", group });
+    await runToDone(cookie, outbound.jobId);
+    const inbound = await startSearch(cookie, { origin: "JJJ", destination: "GRU", group: { ...group, leg: 1 } });
+    await runToDone(cookie, inbound.jobId);
+    await historyItem(cookie, inbound.jobId, "done");
+
+    const listed = await historyItem(cookie, outbound.jobId, "done");
+    assert.equal(listed.groupId, "card-history");
+    assert.equal(listed.groupLeg, 0);
+    assert.equal("groupArgs" in listed, false);
+
+    const card = await fetch(`${url}/api/history/groups/card-history`, { headers: { cookie } }).then((r) => r.json());
+    assert.equal(card.source, "fake");
+    assert.equal(card.user, "thiago");
+    assert.deepEqual(card.args, ["GRU", "JJJ", true]);
+    assert.deepEqual(
+      card.legs.map((leg: { leg: number; id: string; status: string }) => [leg.leg, leg.id, leg.status]),
+      [
+        [0, outbound.jobId, "done"],
+        [1, inbound.jobId, "done"],
+      ],
+    );
+    assert.deepEqual(card.legs[1].result.legs, [{ label: "JJJ", sections: [] }]);
+    assert.equal((await fetch(`${url}/api/history/groups/missing`, { headers: { cookie } })).status, 404);
+  });
+
   test("opens the feed saying which commit the server runs", async () => {
     const abort = new AbortController();
     try {
