@@ -5,9 +5,9 @@ import { JobRunner } from "../../jobs/job-runner.service.ts";
 import { JobStore } from "../../jobs/job-store.service.ts";
 import type { SearchSource } from "../../search/search-source.ts";
 import { recordSearch, type Leg } from "../record-search.ts";
+import { SEATSPY_POOL } from "./seatspy-pool.ts";
 import { SeatspySearchDto } from "./seatspy-search.dto.ts";
-
-export const SEATSPY_POOL = Symbol("SEATSPY_POOL");
+import { SeatspyRoutes } from "./seatspy-routes.service.ts";
 
 // A SeatSpy "Return" search brings both legs at once and spends a single
 // credit, so one job resolves the round trip.
@@ -34,6 +34,7 @@ export class SeatspySource implements SearchSource<SeatspySearchDto> {
     @Inject(SEATSPY_POOL) private readonly pool: SessionPool<SeatspySession>,
     private readonly runner: JobRunner,
     private readonly jobs: JobStore,
+    private readonly routes: SeatspyRoutes,
   ) {}
 
   start(jobId: string, request: SeatspySearchDto) {
@@ -54,6 +55,7 @@ export class SeatspySource implements SearchSource<SeatspySearchDto> {
         { airline, origin, destination, roundTrip },
         job.log,
         job.progress,
+        (map) => this.routes.remember(airline, map),
       );
 
       const legs: Leg[] = [

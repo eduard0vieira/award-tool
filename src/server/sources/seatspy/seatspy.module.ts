@@ -3,10 +3,14 @@ import { startSeatspySession, type SeatspySession } from "../../../scrapers/seat
 import { config } from "../../config.ts";
 import { JobsModule } from "../../jobs/jobs.module.ts";
 import { sessionPoolProvider } from "../session-pool.provider.ts";
-import { SEATSPY_POOL, SeatspySource } from "./seatspy.source.ts";
+import { SeatspyRoutesController } from "./seatspy-routes.controller.ts";
+import { SeatspyRoutes } from "./seatspy-routes.service.ts";
+import { SEATSPY_POOL } from "./seatspy-pool.ts";
+import { SeatspySource } from "./seatspy.source.ts";
 
 @Module({
   imports: [JobsModule],
+  controllers: [SeatspyRoutesController],
   providers: [
     sessionPoolProvider<SeatspySession>(SEATSPY_POOL, {
       label: "seatspy",
@@ -16,6 +20,7 @@ import { SEATSPY_POOL, SeatspySource } from "./seatspy.source.ts";
       closeSession: (session) => session.browser.close(),
     }),
     SeatspySource,
+    SeatspyRoutes,
   ],
   exports: [SeatspySource],
 })
