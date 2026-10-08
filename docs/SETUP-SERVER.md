@@ -15,7 +15,8 @@ small fixes on the first day.
   - starts the server and brings it back 10 s after it dies;
   - every 5 min fetches `origin/main` and, when there is a new commit and no
     search is running (`GET /api/searches/active`), fast-forwards, runs `npm ci`
-    if `package-lock.json` changed, and restarts the server.
+    if `package-lock.json` changed (or only `prisma generate` if just
+    `prisma/schema.prisma` did), and restarts the server.
 - ngrok, as a second scheduled task, exposes port 5555 on a fixed domain.
 
 Everything logs to `logs\server.log`.
