@@ -687,14 +687,17 @@ function createJobCard(queueEl, { program, detail, origin, destination, roundTri
   root.addEventListener("alert-dates-changed", () => markAlertsOutdated(card));
 
   card.minimized = false;
-  card.minimizeButton.addEventListener("click", () => {
-    card.minimized = !card.minimized;
+  // Only TAP cards have the Upgrade tab; on the others, expanding must not reveal an empty tab bar.
+  card.hasSubtabs = false;
+  card.setMinimized = (minimized) => {
+    card.minimized = minimized;
     const activeSubtab = root.querySelector(".subtab-button.active")?.dataset.subtab || "dates";
-    card.resultEl.hidden = card.minimized || activeSubtab !== "dates";
-    card.upgradeSubpanelEl.hidden = card.minimized || activeSubtab !== "upgrade";
-    card.subtabsEl.hidden = card.minimized;
-    card.minimizeButton.textContent = card.minimized ? "Expandir" : "Minimizar";
-  });
+    card.resultEl.hidden = minimized || activeSubtab !== "dates";
+    card.upgradeSubpanelEl.hidden = minimized || activeSubtab !== "upgrade";
+    card.subtabsEl.hidden = minimized || !card.hasSubtabs;
+    card.minimizeButton.textContent = minimized ? "Expandir" : "Minimizar";
+  };
+  card.minimizeButton.addEventListener("click", () => card.setMinimized(!card.minimized));
 
   // Stop exists for the wrong click: the search leaves the queue before spending
   // a query, or ends at the next safe point if already running.
@@ -1604,6 +1607,7 @@ async function startTapSearch(origin, destination, roundTrip, ceilings, session)
 
     card.setStatus("Pronto", "status-done");
     card.resultEl.hidden = false;
+    card.hasSubtabs = true;
     card.subtabsEl.hidden = false;
     showPartialNotices(card, partialNotices);
     updateCardActions(card);
