@@ -169,6 +169,14 @@
 .action-button.theme-button {
   width: 32px;
   padding: 0;
+  border-color: transparent;
+  background: transparent;
+  color: var(--ink-soft);
+}
+
+.action-button.theme-button:hover:not(:disabled) {
+  border-color: transparent;
+  color: var(--ink);
 }
 
 @media (pointer: coarse) {
