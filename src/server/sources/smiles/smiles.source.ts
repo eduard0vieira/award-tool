@@ -120,7 +120,9 @@ export class SmilesSource implements SearchSource<SmilesSearchDto> {
           points: flight.miles,
           duration: flight.detail.durationMinutes,
           cabin_category: flight.detail.rawCabin,
-          operation_carriers: flight.detail.airlineCode,
+          // The operators of each leg, not the seller: filtering this column on "AA"
+          // must mean flights American actually flies.
+          operation_carriers: flight.detail.operatingCarriers?.map((carrier) => carrier.code).join(", ") ?? "não informado",
           program: "SMILES",
           source_fare: flight.fare,
           available_seats: flight.seats,
