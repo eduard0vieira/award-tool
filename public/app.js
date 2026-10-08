@@ -2184,10 +2184,11 @@ function addFlightFilter(card, ctx) {
       <div class="field flight-filter-range" role="group" aria-labelledby="${id}-${cabin}-label">
         <span class="flight-filter-range-label" id="${id}-${cabin}-label">${label} (K)</span>
         <div class="flight-filter-range-inputs">
-          <input name="${cabin}-min" type="number" min="1" step="0.25" placeholder="mín." aria-label="${label}, mínimo em mil milhas" autocomplete="off" />
+          <input name="${cabin}-min" type="number" min="1" step="any" placeholder="mín." aria-label="${label}, mínimo em mil milhas" autocomplete="off" />
           <span aria-hidden="true">a</span>
-          <input name="${cabin}-max" type="number" min="1" step="0.25" placeholder="máx." aria-label="${label}, máximo em mil milhas" autocomplete="off" />
+          <input name="${cabin}-max" type="number" min="1" step="any" placeholder="máx." aria-label="${label}, máximo em mil milhas" autocomplete="off" />
         </div>
+        <div class="flight-filter-values" data-cabin="${cabin}" aria-label="Valores dos voos de ${label}"></div>
       </div>`,
   ).join("");
   panel.innerHTML = `
@@ -2286,13 +2287,55 @@ function addFlightFilter(card, ctx) {
     }
   };
 
+  // Like the spreadsheet's filter by values: every price there is, to pick a
+  // limit from. A click makes that value the cabin's maximum.
+  const showMilesValues = (results) => {
+    for (const list of panel.querySelectorAll(".flight-filter-values")) {
+      const cabin = list.dataset.cabin;
+      const byMiles = new Map();
+      for (const option of results.flatMap((result) => result.milesOptions[cabin])) {
+        byMiles.set(option.miles, (byMiles.get(option.miles) ?? 0) + option.flights);
+      }
+      const maxInput = panel.querySelector(`input[name="${cabin}-max"]`);
+      list.replaceChildren(
+        ...[...byMiles.entries()]
+          .sort(([a], [b]) => a - b)
+          .map(([miles, flights]) => {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "flight-filter-value";
+            button.title = "Usar como máximo";
+            const value = document.createElement("span");
+            value.textContent = integerFormat.format(miles);
+            const count = document.createElement("span");
+            count.className = "flight-filter-value-count";
+            count.textContent = plural(flights, "voo", "voos");
+            button.append(value, count);
+            button.addEventListener("click", () => {
+              maxInput.value = String(miles / 1000);
+              maxInput.focus();
+            });
+            return button;
+          }),
+      );
+      if (byMiles.size === 0) {
+        const empty = document.createElement("span");
+        empty.className = "flight-filter-hint";
+        empty.textContent = "Nenhum voo nessa cabine.";
+        list.append(empty);
+      }
+    }
+  };
+
   toggle.addEventListener("click", async () => {
     panel.hidden = !panel.hidden;
     toggle.setAttribute("aria-expanded", String(!panel.hidden));
     if (panel.hidden || card.flightFilterLoaded) return;
     card.flightFilterLoaded = true;
     try {
-      showCarriers(await run({}));
+      const results = await run({});
+      showCarriers(results);
+      showMilesValues(results);
       status.textContent = "";
     } catch (err) {
       card.flightFilterLoaded = false;
@@ -2307,6 +2350,7 @@ function addFlightFilter(card, ctx) {
     try {
       const results = await run(filter);
       redrawSmilesCard(card, ctx, results);
+      showMilesValues(results);
       status.textContent = appliedText;
     } catch (err) {
       status.textContent = err.message;

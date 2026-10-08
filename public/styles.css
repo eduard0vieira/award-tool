@@ -1850,6 +1850,47 @@ input[type="number"] {
   width: 84px;
 }
 
+/* The list of prices, like the spreadsheet's filter by values. */
+.flight-filter-values {
+  display: grid;
+  max-height: 168px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+}
+
+.flight-filter-values:empty {
+  display: none;
+}
+
+.flight-filter-value {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--e3);
+  padding: var(--e1) var(--e2);
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  font-family: var(--font-data);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+  cursor: pointer;
+}
+
+.flight-filter-value:last-child {
+  border-bottom: 0;
+}
+
+.flight-filter-value:hover {
+  background: var(--surface-sunk);
+}
+
+.flight-filter-value-count {
+  color: var(--ink-soft);
+}
+
 .flight-filter-hint {
   margin: var(--e1) 0 0;
   max-width: 80ch;
