@@ -6,6 +6,18 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#eff1f0" />
+  <script>
+    // Before the stylesheet paints, so a dark choice never flashes light first.
+    try {
+      const saved = localStorage.getItem("awardtool.theme");
+      document.documentElement.dataset.theme = saved || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    } catch {
+      document.documentElement.dataset.theme = "light";
+    }
+    if (document.documentElement.dataset.theme === "dark") {
+      document.querySelector('meta[name="theme-color"]').content = "#13171b";
+    }
+  </script>
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body class="login-page">

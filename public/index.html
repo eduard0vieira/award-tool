@@ -6,6 +6,18 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#eff1f0" />
+  <script>
+    // Before the stylesheet paints, so a dark choice never flashes light first.
+    try {
+      const saved = localStorage.getItem("awardtool.theme");
+      document.documentElement.dataset.theme = saved || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    } catch {
+      document.documentElement.dataset.theme = "light";
+    }
+    if (document.documentElement.dataset.theme === "dark") {
+      document.querySelector('meta[name="theme-color"]').content = "#13171b";
+    }
+  </script>
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
@@ -14,6 +26,10 @@
       <h1><img class="brand-mark" src="/favicon.svg" alt="" width="28" height="28" /> Bot de Emissões <span class="version">V2</span></h1>
       <div class="session">
         <span id="current-user" class="current-user" hidden></span>
+        <button type="button" id="theme-button" class="action-button theme-button" aria-pressed="false" aria-label="Tema escuro" title="Tema escuro">
+          <svg class="icon theme-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/></svg>
+          <svg class="icon theme-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+        </button>
         <button type="button" id="logout-button" class="action-button">Sair</button>
       </div>
     </header>

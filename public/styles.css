@@ -57,6 +57,13 @@
   --warning-line: #d9a400;
   --error: #c8102e;
   --error-bg: #fbe9ec;
+  /* A filled control (Buscar, the toast): dark on light, light on dark. */
+  --solid: #1b1f23;
+  --solid-hover: #3a4149;
+  --on-solid: #ffffff;
+  --dialog-shadow: 0 18px 48px rgba(27, 31, 35, 0.28);
+  --scrim: rgba(27, 31, 35, 0.55);
+
   --running: #e8660f;
   --running-ink: #9a3f07;
   --running-bg: #fff0e3;
@@ -97,6 +104,89 @@
     --control-height: 44px;
   }
 }
+
+/* Night apron: graphite instead of grey, and the sign yellow is still the only
+   thing lit. Every color the light theme darkened to read on white comes back
+   lighter here. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #13171b;
+  --surface: #1b2025;
+  --surface-sunk: #171b1f;
+  --line: #2d343b;
+  --line-strong: #5d6670;
+
+  --ink: #e9ecef;
+  --ink-soft: #a1aab3;
+
+  --ok: #4fc48c;
+  --ok-bg: #112a1d;
+  --warning-ink: #f3c75a;
+  --warning-bg: #2e2409;
+  --warning-line: #a77d14;
+  --error: #ff6b80;
+  --error-bg: #3a121a;
+
+  --business: #b393f2;
+  --economy: #5cb2f2;
+  --premium: #ee82b8;
+  --first: #e3b256;
+
+  --solid: #e9ecef;
+  --solid-hover: #ffffff;
+  --on-solid: #13171b;
+  --dialog-shadow: 0 18px 48px rgba(0, 0, 0, 0.6);
+  --scrim: rgba(0, 0, 0, 0.65);
+
+  --running: #ff8a3d;
+  --running-ink: #ffb47e;
+  --running-bg: #36200f;
+  --running-line: #8c4a1d;
+}
+
+/* The open tab becomes an airfield location sign: yellow on black, framed in yellow. */
+:root[data-theme="dark"] .tab-button[aria-selected="true"] {
+  background: #000;
+  box-shadow: inset 0 0 0 1px var(--sign);
+}
+
+:root[data-theme="dark"] .tag-tap { --color: #5cc98e; }
+:root[data-theme="dark"] .tag-AA { --color: #ff7a85; }
+:root[data-theme="dark"] .tag-LATAM { --color: #e58ae6; }
+:root[data-theme="dark"] .tag-SMILES { --color: #ffa35c; }
+:root[data-theme="dark"] .tag-IBERIA,
+:root[data-theme="dark"] .tag-IB { --color: #ff7392; }
+:root[data-theme="dark"] .tag-AF { --color: #8aa9ff; }
+:root[data-theme="dark"] .tag-B6 { --color: #63b8f5; }
+:root[data-theme="dark"] .tag-BA { --color: #a3a5ff; }
+:root[data-theme="dark"] .tag-CX { --color: #4fd1c1; }
+:root[data-theme="dark"] .tag-EY { --color: #e3b256; }
+:root[data-theme="dark"] .tag-KLM { --color: #5ccbe8; }
+:root[data-theme="dark"] .tag-QF { --color: #ff7ab3; }
+:root[data-theme="dark"] .tag-VIR { --color: #c58cff; }
+
+.action-button.theme-button {
+  width: 32px;
+  padding: 0;
+}
+
+@media (pointer: coarse) {
+  .action-button.theme-button {
+    width: 44px;
+  }
+}
+
+.theme-button .icon {
+  width: 16px;
+  height: 16px;
+}
+
+:root[data-theme="dark"] .theme-moon,
+:root:not([data-theme="dark"]) .theme-sun {
+  display: none;
+}
+
 
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -274,15 +364,15 @@ button[type="submit"] {
   padding: 0 var(--e5);
   border: 0;
   border-radius: var(--radius-control);
-  background: var(--ink);
-  color: #fff;
+  background: var(--solid);
+  color: var(--on-solid);
   font-weight: 600;
   cursor: pointer;
   transition: background-color var(--transition);
 }
 
 button[type="submit"]:hover:not(:disabled) {
-  background: #3a4149;
+  background: var(--solid-hover);
 }
 
 .action-button,
@@ -385,9 +475,9 @@ button[type="submit"]:hover:not(:disabled) {
 }
 
 .edit-dates-button[aria-pressed="true"] {
-  border-color: var(--ink);
-  background: var(--ink);
-  color: #fff;
+  border-color: var(--solid);
+  background: var(--solid);
+  color: var(--on-solid);
 }
 
 /* Tabs: the open one is the "you are here" sign, yellow on black. */
@@ -1649,25 +1739,25 @@ input[type="number"] {
   max-width: calc(100vw - var(--e6));
   padding: var(--e2) var(--e2) var(--e2) var(--e4);
   border-radius: var(--radius-control);
-  background: var(--ink);
-  color: #fff;
+  background: var(--solid);
+  color: var(--on-solid);
   font-size: var(--text-sm);
   transform: translateX(-50%);
 }
 
 .toast-undo {
-  border-color: #fff;
+  border-color: var(--on-solid);
   background: transparent;
-  color: #fff;
+  color: var(--on-solid);
   font-weight: 600;
 }
 
 .toast-undo:hover {
-  background: #3a4149;
+  background: var(--solid-hover);
 }
 
 .toast-undo:focus-visible {
-  outline-color: #fff;
+  outline-color: var(--on-solid);
 }
 
 /* Confirmation dialog: the route sign carries the question, the sunk footer the answer. */
@@ -1680,7 +1770,7 @@ input[type="number"] {
   border-radius: var(--radius-panel);
   background: var(--surface);
   color: var(--ink);
-  box-shadow: 0 18px 48px rgba(27, 31, 35, 0.28);
+  box-shadow: var(--dialog-shadow);
 }
 
 .confirm-dialog[open] {
@@ -1688,7 +1778,7 @@ input[type="number"] {
 }
 
 .confirm-dialog::backdrop {
-  background: rgba(27, 31, 35, 0.55);
+  background: var(--scrim);
 }
 
 @keyframes confirm-dialog-in {

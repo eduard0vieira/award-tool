@@ -36,6 +36,26 @@ document.getElementById("logout-button").addEventListener("click", async functio
   }
 });
 
+const THEME_KEY = "awardtool.theme";
+const themeButton = document.getElementById("theme-button");
+
+function showTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  themeButton.setAttribute("aria-pressed", String(theme === "dark"));
+  document.querySelector('meta[name="theme-color"]').content = theme === "dark" ? "#13171b" : "#eff1f0";
+}
+
+showTheme(document.documentElement.dataset.theme === "dark" ? "dark" : "light");
+themeButton.addEventListener("click", () => {
+  const theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  showTheme(theme);
+  try {
+    localStorage.setItem(THEME_KEY, theme);
+  } catch (err) {
+    console.error("Não foi possível guardar o tema escolhido:", err);
+  }
+});
+
 const confirmDialog = document.getElementById("confirm-dialog");
 const confirmDialogTitle = confirmDialog.querySelector(".confirm-dialog-title");
 const confirmDialogRoutes = confirmDialog.querySelector(".confirm-dialog-routes");
