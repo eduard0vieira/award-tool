@@ -22,6 +22,7 @@ the 406 in `docs/CONTEXT.md`).
 | `iberia-monthly-0.json` | Iberia, monthly calendar | saved by hand from a real response |
 | `latam-redemption-options-real.json` | LATAM, the 4 miles+cash combinations of a round-trip pair | `npm run recon:latam GRU JNB <outbound> <return>` (logged-in session) |
 | `seatspy-route-options.json` | SeatSpy, not an API response: the airport options of the search form as the scraper reads them (`key`, `iata`, `iatas`, `title`), after picking the airline and GRU | `npx tsx scripts/recon-seatspy-routes.ts AF GRU MAD` and `IB GRU MAD` (logged-in session, no credit spent) |
+| `seatspy-route-map-AF.json` | SeatSpy, not an API response: every Air France origin in the search form's `#outbound` options with its `destinations`, as the page holds them (DOM references removed) | `ROUTE_MAP=1 npx tsx scripts/recon-seatspy-routes.ts AF GRU MAD` (logged-in session, no credit spent) |
 
 ## Rule before committing a new fixture
 

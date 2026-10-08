@@ -141,6 +141,61 @@ export function routeNotFoundMessage(airlineName: string, origin: string, destin
   );
 }
 
+export type RouteAirport = { iata: string; iatas: string; title: string };
+// Every origin the airline flies from, keyed by IATA, with where it flies from there.
+export type SeatspyRouteMap = Record<string, RouteAirport & { destinations: RouteAirport[] }>;
+
+type RawRouteOption = { iata?: unknown; iatas?: unknown; title?: unknown; destinations?: unknown };
+
+function routeAirport(raw: RawRouteOption, context: string): RouteAirport {
+  for (const field of ["iata", "iatas", "title"] as const) {
+    if (typeof raw[field] !== "string") throw new Error(`Opção de aeroporto do SeatSpy sem o campo "${field}" (${context}).`);
+  }
+  return { iata: raw.iata as string, iatas: raw.iatas as string, title: raw.title as string };
+}
+
+// Reads the #outbound options as the form holds them once the airline is picked:
+// each origin carries its own "destinations", so one read is the whole map.
+export function routeMapFrom(options: [string, RawRouteOption][]): SeatspyRouteMap {
+  const map: SeatspyRouteMap = {};
+  for (const [key, option] of options) {
+    const origin = routeAirport(option, `origem ${key}`);
+    if (typeof option.destinations !== "object" || option.destinations === null) {
+      throw new Error(`Origem ${origin.iata} do SeatSpy sem o campo "destinations".`);
+    }
+    const destinations = Object.values(option.destinations as Record<string, RawRouteOption>);
+    map[origin.iata] = { ...origin, destinations: destinations.map((raw) => routeAirport(raw, `destino de ${origin.iata}`)) };
+  }
+  return map;
+}
+
+async function rawOriginOptions(page: Page): Promise<[string, RawRouteOption][]> {
+  return page.evaluate(() => {
+    const select = document.querySelector("#outbound") as (HTMLSelectElement & { tomselect?: { options: Record<string, Record<string, unknown>> } }) | null;
+    if (!select?.tomselect) throw new Error("O campo #outbound do formulário do SeatSpy não carregou.");
+    const airport = (option: Record<string, unknown>) => ({ iata: option.iata, iatas: option.iatas, title: option.title });
+    return Object.entries(select.tomselect.options).map(([key, option]) => [
+      key,
+      {
+        ...airport(option),
+        destinations:
+          typeof option.destinations === "object" && option.destinations !== null
+            ? Object.fromEntries(
+                Object.entries(option.destinations as Record<string, Record<string, unknown>>).map(([id, destination]) => [id, airport(destination)]),
+              )
+            : undefined,
+      },
+    ]);
+  });
+}
+
+// Costs no credit: it only fills the airline in the search form.
+export async function readRouteMap(page: Page, airline: SeatspyAirline): Promise<SeatspyRouteMap> {
+  await page.goto("https://www.seatspy.com/", { waitUntil: "domcontentloaded" });
+  await selectAirline(page, airline);
+  return routeMapFrom(await rawOriginOptions(page));
+}
+
 async function selectAirport(page: Page, fieldId: "outbound" | "inbound", key: string) {
   await page.evaluate(
     ({ fieldId, key }) => (document.querySelector(`#${fieldId}`) as TomSelectElement).tomselect!.setValue(key),
@@ -247,6 +302,7 @@ export async function searchSeatspy(
   params: SeatspySearchParams,
   onLog: OnLog,
   onProgress: OnProgress,
+  onRouteMap?: (map: SeatspyRouteMap) => void,
 ): Promise<{ outbound: SeatspyDay[]; inbound: SeatspyDay[] | null }> {
   const origin = params.origin.toUpperCase();
   const destination = params.destination.toUpperCase();
@@ -310,6 +366,15 @@ export async function searchSeatspy(
   try {
     const airlineName = AIRLINE_NAMES[params.airline];
     await selectAirline(page, params.airline);
+    if (onRouteMap) {
+      // The form already holds the airline's whole route map; reading it here keeps
+      // the route hints fresh for free. A failure costs only the hints, not the search.
+      try {
+        onRouteMap(routeMapFrom(await rawOriginOptions(page)));
+      } catch (err) {
+        onLog(`Não deu para ler o mapa de rotas da ${airlineName}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
     const originOption = findAirport(await airportOptions(page, "outbound"), origin);
     if (!originOption) {
       throw new Error(`A ${airlineName} não tem voos saindo de ${origin} no SeatSpy. A busca não foi feita e nenhum crédito foi gasto.`);
