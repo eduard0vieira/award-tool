@@ -9,7 +9,7 @@ async function apiFetch(url, options) {
 }
 
 const currentUserEl = document.getElementById("current-user");
-apiFetch("/api/me")
+const whoAmI = apiFetch("/api/me")
   .then((response) => response.json())
   .then(({ username }) => {
     currentUser = username;
@@ -2659,4 +2659,5 @@ seatspyForm.addEventListener("submit", async (event) => {
 const tabFromUrl = location.hash.slice(1);
 if (Object.hasOwn(panels, tabFromUrl)) activateTab(tabFromUrl);
 restoreSearches();
-openFeed();
+// The feed labels cards by who searched, and yours from another device should say "você".
+whoAmI.finally(openFeed);
