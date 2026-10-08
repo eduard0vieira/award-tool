@@ -15,6 +15,7 @@ export type SmilesFlightFilter = {
 };
 
 export type CarrierOption = { code: string; name: string; flights: number };
+export type MilesOption = { miles: number; flights: number; days: number };
 
 export function storedSmilesDays(days: SmilesDayResponse[]): StoredSmilesDay[] {
   return days.map((day) => ({
@@ -44,6 +45,10 @@ function passes(flight: StoredSmilesFlight, filter: SmilesFlightFilter): boolean
 export type FilteredSmiles = {
   sections: (SmilesSection & { carriers: string[] })[];
   carrierOptions: CarrierOption[];
+  // Every miles value per cabin, like the spreadsheet's filter by values, among
+  // the flights that pass the airline and stop choices but ignoring the miles
+  // range, so the whole spread stays visible when picking a limit.
+  milesOptions: Record<SmilesCabin, MilesOption[]>;
   flightsWithoutCarrier: number;
 };
 
@@ -66,6 +71,25 @@ export function filterSmilesFlights(days: StoredSmilesDay[], filter: SmilesFligh
     }
   }
 
+  const milesOptions = { economy: new Map(), premium: new Map(), business: new Map() } as Record<
+    SmilesCabin,
+    Map<number, { flights: number; days: Set<string> }>
+  >;
+  const withoutMiles = { ...filter, miles: undefined };
+  for (const day of days) {
+    for (const flight of day.flights) {
+      if (!passes(flight, withoutMiles)) continue;
+      const option = milesOptions[flight.cabin].get(flight.miles) ?? { flights: 0, days: new Set<string>() };
+      option.flights++;
+      option.days.add(day.date);
+      milesOptions[flight.cabin].set(flight.miles, option);
+    }
+  }
+  const sortedOptions = (cabin: SmilesCabin): MilesOption[] =>
+    [...milesOptions[cabin].entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([miles, option]) => ({ miles, flights: option.flights, days: option.days.size }));
+
   const kept = days.map((day) => ({ date: day.date, flights: day.flights.filter((flight) => passes(flight, filter)) }));
   const sections = buildSmilesReport(kept).map((section) => ({
     ...section,
@@ -75,6 +99,7 @@ export function filterSmilesFlights(days: StoredSmilesDay[], filter: SmilesFligh
   return {
     sections,
     carrierOptions: [...options.values()].sort((a, b) => b.flights - a.flights || a.code.localeCompare(b.code)),
+    milesOptions: { economy: sortedOptions("economy"), premium: sortedOptions("premium"), business: sortedOptions("business") },
     flightsWithoutCarrier,
   };
 }

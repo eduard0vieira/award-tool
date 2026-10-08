@@ -52,4 +52,20 @@ describe("Smiles flight filter", () => {
     assert.equal(af.name, "AIR FRANCE");
     assert.equal(af.flights, days[0]!.flights.filter((flight) => flight.carriers?.some((carrier) => carrier.code === "AF")).length);
   });
+
+  test("lists every miles value per cabin, ignoring the miles range but not the airlines", () => {
+    const economy = days[0]!.flights.filter((flight) => flight.cabin === "economy");
+    const { milesOptions } = filterSmilesFlights(days, { miles: { economy: { max: 1 } } });
+    assert.deepEqual(
+      milesOptions.economy.map((option) => option.miles),
+      [...new Set(economy.map((flight) => flight.miles))].sort((a, b) => a - b),
+    );
+    assert.equal(
+      milesOptions.economy.reduce((total, option) => total + option.flights, 0),
+      economy.length,
+    );
+    const onlyAf = filterSmilesFlights(days, { carriers: ["AF"] }).milesOptions.economy;
+    const afFlights = economy.filter((flight) => flight.carriers?.every((carrier) => carrier.code === "AF"));
+    assert.equal(onlyAf.reduce((total, option) => total + option.flights, 0), afFlights.length);
+  });
 });
