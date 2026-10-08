@@ -929,9 +929,14 @@ const SMILES_CABINS = [
   { field: "business", label: "Executiva", colorClass: "cabin-business" },
 ] as const;
 
-export type SmilesSection = LabeledSection<{ date: string; valueK: number; seats: number }>;
+// `carriers` only when the flights carry their operators (the flight filter):
+// the codes that fly the flight quoted that day, null when it did not say.
+export type SmilesSectionDay = { date: string; valueK: number; seats: number; carriers?: string[] | null };
+export type SmilesSection = LabeledSection<SmilesSectionDay>;
 
-export function buildSmilesReport(days: SmilesDayResponse[], ceilings: SmilesCeilings = {}): SmilesSection[] {
+type ReportFlight = { cabin: SmilesCabin; miles: number; seats: number; carriers?: SmilesCarrier[] | null };
+
+export function buildSmilesReport(days: { date: string; flights: ReportFlight[] }[], ceilings: SmilesCeilings = {}): SmilesSection[] {
   return SMILES_CABINS.map(({ field, label, colorClass }) => {
     const ceiling = ceilings[field];
 
@@ -943,9 +948,11 @@ export function buildSmilesReport(days: SmilesDayResponse[], ceilings: SmilesCei
         const flights = day.flights.filter((flight) => flight.cabin === field && (ceiling == null || flight.miles <= ceiling));
         if (flights.length === 0) return null;
         const cheapest = flights.reduce((a, b) => (a.miles <= b.miles ? a : b));
-        return { date: day.date, valueK: Math.round(cheapest.miles / 10) / 100, seats: cheapest.seats };
+        const quoted: SmilesSectionDay = { date: day.date, valueK: Math.round(cheapest.miles / 10) / 100, seats: cheapest.seats };
+        if (cheapest.carriers !== undefined) quoted.carriers = cheapest.carriers?.map((carrier) => carrier.code) ?? null;
+        return quoted;
       })
-      .filter((day): day is { date: string; valueK: number; seats: number } => day !== null);
+      .filter((day): day is SmilesSectionDay => day !== null);
 
     if (perDay.length === 0) {
       return {
