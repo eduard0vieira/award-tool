@@ -754,6 +754,24 @@ input[type="number"] {
   font-size: var(--text-sm);
 }
 
+.connection-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e2) var(--e4);
+  margin-bottom: var(--e4);
+  padding: var(--e2) var(--e2) var(--e2) var(--e4);
+  border-left: 3px solid var(--warning-line);
+  border-radius: 0 var(--radius-control) var(--radius-control) 0;
+  background: var(--warning-bg);
+  color: var(--warning-ink);
+  font-size: var(--text-sm);
+}
+
+.connection-banner-text {
+  flex: 1 1 260px;
+}
+
 .login-error,
 .dates-editor-error {
   border-left-color: var(--error);

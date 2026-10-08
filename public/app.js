@@ -1217,16 +1217,64 @@ function refreshVisibleHistory() {
   historyRefresh = setTimeout(renderHistory, 500);
 }
 
-function openFeed() {
+const connectionBanner = document.getElementById("connection-banner");
+const connectionBannerText = connectionBanner.querySelector(".connection-banner-text");
+const connectionBannerReload = connectionBanner.querySelector(".connection-banner-reload");
+const UPDATING_MESSAGE = "Sem conexão com o servidor. Se ele estiver atualizando, volta em alguns segundos.";
+// A blip shorter than this (a tunnel hiccup) does not deserve a banner.
+const OFFLINE_BANNER_DELAY_MS = 2000;
+const FEED_RETRY_MS = [2000, 4000, 8000, 15000];
+let serverVersion = null;
+let offlineTimer = null;
+
+connectionBannerReload.addEventListener("click", () => location.reload());
+
+function showConnectionBanner(text, { reload = false } = {}) {
+  connectionBannerText.textContent = text;
+  connectionBannerReload.hidden = !reload;
+  connectionBanner.hidden = false;
+}
+
+function feedOffline() {
+  if (offlineTimer || !connectionBannerReload.hidden) return;
+  offlineTimer = setTimeout(() => showConnectionBanner(UPDATING_MESSAGE), OFFLINE_BANNER_DELAY_MS);
+}
+
+function feedOnline(version) {
+  clearTimeout(offlineTimer);
+  offlineTimer = null;
+  // The page keeps running the app.js it loaded; after an update it must be reloaded.
+  if (serverVersion && version && version !== serverVersion) {
+    showConnectionBanner("O bot foi atualizado. Recarregue a página para usar a versão nova.", { reload: true });
+    return;
+  }
+  serverVersion ??= version;
+  if (connectionBannerReload.hidden) connectionBanner.hidden = true;
+}
+
+function openFeed(attempt = 0) {
   const feed = new EventSource("/api/feed");
   feed.onmessage = (message) => {
     const event = JSON.parse(message.data);
-    if (event.type === "group") followSharedGroup(event.group, event.snapshot === true);
+    if (event.type === "hello") {
+      attempt = 0;
+      feedOnline(event.version);
+    } else if (event.type === "group") followSharedGroup(event.group, event.snapshot === true);
     else if (event.type === "history") refreshVisibleHistory();
+  };
+  feed.onerror = () => {
+    feedOffline();
+    // The browser retries a dropped connection by itself, but gives up for good on
+    // an HTTP error, which is what the tunnel answers while the server restarts.
+    if (feed.readyState !== EventSource.CLOSED) return;
+    feed.close();
+    setTimeout(() => openFeed(attempt + 1), FEED_RETRY_MS[Math.min(attempt, FEED_RETRY_MS.length - 1)]);
   };
 }
 
 const RECONNECT_MS = 3000;
+const SEARCH_NOT_STARTED_MESSAGE =
+  "O servidor não respondeu e a busca não começou. Se ele estiver atualizando, tente de novo em alguns segundos.";
 
 function runOnServer(card, body, progressLabel, session) {
   return new Promise(async (resolve, reject) => {
@@ -1287,13 +1335,14 @@ function runOnServer(card, body, progressLabel, session) {
           }),
         });
       } catch {
-        reject(new Error("Não foi possível conectar ao servidor."));
+        reject(new Error(SEARCH_NOT_STARTED_MESSAGE));
         return;
       }
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
-        reject(new Error(error.error || "Erro ao iniciar a busca."));
+        // Without our JSON body, a 5xx comes from the tunnel while the server is down.
+        reject(new Error(error.error || (response.status >= 500 ? SEARCH_NOT_STARTED_MESSAGE : "Erro ao iniciar a busca.")));
         return;
       }
 
