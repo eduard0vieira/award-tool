@@ -105,9 +105,25 @@ export type SmilesFlightDetail = {
   flightNumbers: string; // "1454, 7462"
   aircraft: string; // "738, 73G"
   serviceClasses: string; // "U, T"
-  airlineCode: string; // "G3"
+  airlineCode: string; // "G3": the airline that SELLS the itinerary
   rawCabin: string; // ECONOMIC / COMFORT / BUSINESS, as the API sends it
+  // Who flies each leg, which differs from the seller: an Air France itinerary
+  // can have KLM, GOL or Air Mauritius legs. Null when a leg does not say, so a
+  // carrier filter never counts an unknown operator as a match.
+  operatingCarriers: SmilesCarrier[] | null;
 };
+
+export type SmilesCarrier = { code: string; name: string };
+
+function operatingCarriers(legs: RawLeg[]): SmilesCarrier[] | null {
+  const carriers: SmilesCarrier[] = [];
+  for (const leg of legs) {
+    const { code, name } = leg.operationAirline ?? {};
+    if (typeof code !== "string" || code === "" || typeof name !== "string") return null;
+    carriers.push({ code, name });
+  }
+  return carriers.length > 0 ? carriers : null;
+}
 
 // `miles: null` means the day is on the calendar without a fare, i.e. no
 // availability that day. Meaningful absence, not a missing field: treating it as
@@ -176,6 +192,7 @@ function searchUrl(route: SmilesRoute, date: string): string {
 type RawFare = { type?: unknown; miles?: unknown; money?: unknown; g3?: { costTax?: unknown } };
 type RawPoint = { date?: unknown; airport?: { code?: unknown } };
 type RawLeg = {
+  operationAirline?: { code?: unknown; name?: unknown };
   flightNumber?: unknown;
   equipment?: unknown;
   classOfService?: unknown;
@@ -240,6 +257,7 @@ function extractDetail(raw: RawFlight, context: string): SmilesFlightDetail {
     serviceClasses: joinLegs(legs, (leg) => leg.classOfService),
     airlineCode: typeof raw.airline?.code === "string" ? raw.airline.code : "",
     rawCabin: typeof raw.cabin === "string" ? raw.cabin : "",
+    operatingCarriers: operatingCarriers(legs),
   };
 }
 

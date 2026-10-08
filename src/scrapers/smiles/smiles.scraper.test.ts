@@ -42,6 +42,10 @@ describe("Smiles response parser", () => {
         serviceClasses: "U, U",
         airlineCode: "G3",
         rawCabin: "ECONOMIC",
+        operatingCarriers: [
+          { code: "G3", name: "GOL (G3)" },
+          { code: "G3", name: "GOL (G3)" },
+        ],
       },
     });
     assert.deepEqual(response.calendar.slice(0, 3), [
@@ -49,6 +53,25 @@ describe("Smiles response parser", () => {
       { date: "2026-10-11", miles: 119000 },
       { date: "2026-10-12", miles: 119000 },
     ]);
+  });
+
+  test("reads who operates each leg, apart from the airline that sells it", () => {
+    const flights = readSmilesResponse(fixture("smiles-real-congener.json"), "2026-10-29")!.flights;
+    const soldByAf = flights.filter((flight) => flight.detail.airlineCode === "AF");
+    const operators = new Set(soldByAf.map((flight) => flight.detail.operatingCarriers!.map((carrier) => carrier.code).join("+")));
+    assert.ok(operators.has("AF+AF"));
+    assert.ok(operators.has("KL+AF+AF"));
+    assert.ok(operators.has("G3+AF+AF"));
+    assert.deepEqual(soldByAf[0]!.detail.operatingCarriers![0], { code: "AF", name: "AIR FRANCE" });
+  });
+
+  test("marks the operator unknown instead of guessing when a leg does not say", () => {
+    const raw = JSON.parse(fixture("smiles-real-congener.json"));
+    const flight = raw.requestedFlightSegmentList[0].flightList[0];
+    delete flight.legList[1].operationAirline;
+    raw.requestedFlightSegmentList[0].flightList = [flight];
+    const [parsed] = readSmilesResponse(JSON.stringify(raw), "2026-10-29")!.flights;
+    assert.equal(parsed!.detail.operatingCarriers, null);
   });
 
   test("keeps a partner flight's fee as null instead of zero", () => {
