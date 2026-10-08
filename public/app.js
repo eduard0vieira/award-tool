@@ -46,9 +46,42 @@ function showTheme(theme) {
 }
 
 showTheme(document.documentElement.dataset.theme === "dark" ? "dark" : "light");
+const THEME_REVEAL_MS = 450;
+const THEME_FADE_MS = 250;
+
+// The new theme spreads in a circle from the button that asked for it. Browsers
+// without view transitions (Firefox) fade the colors instead.
+function switchTheme(theme) {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    showTheme(theme);
+    return;
+  }
+  if (!document.startViewTransition) {
+    const root = document.documentElement;
+    root.classList.add("theme-fading");
+    showTheme(theme);
+    setTimeout(() => root.classList.remove("theme-fading"), THEME_FADE_MS);
+    return;
+  }
+  const { left, top, width, height } = themeButton.getBoundingClientRect();
+  const x = left + width / 2;
+  const y = top + height / 2;
+  const radius = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
+  document.startViewTransition(() => showTheme(theme)).ready.then(
+    () => {
+      document.documentElement.animate(
+        { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${radius}px at ${x}px ${y}px)`] },
+        { duration: THEME_REVEAL_MS, easing: "cubic-bezier(0.2, 0, 0, 1)", pseudoElement: "::view-transition-new(root)" },
+      );
+    },
+    // A hidden tab or a second click skips the transition; the theme is applied anyway.
+    (err) => console.debug("Transição de tema pulada:", err.message),
+  );
+}
+
 themeButton.addEventListener("click", () => {
   const theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
-  showTheme(theme);
+  switchTheme(theme);
   try {
     localStorage.setItem(THEME_KEY, theme);
   } catch (err) {
