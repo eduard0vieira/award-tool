@@ -4,10 +4,12 @@ import { closeChromeSession, isSessionAlive } from "../../../core/chrome-session
 import { config } from "../../config.ts";
 import { JobsModule } from "../../jobs/jobs.module.ts";
 import { sessionPoolProvider } from "../session-pool.provider.ts";
+import { SmilesFlightsController } from "./smiles-flights.controller.ts";
 import { SMILES_POOL, SmilesSource } from "./smiles.source.ts";
 
 @Module({
   imports: [JobsModule],
+  controllers: [SmilesFlightsController],
   providers: [
     // No login, but each year sweep is ~112 requests from inside the browser.
     sessionPoolProvider<SmilesSession>(SMILES_POOL, {

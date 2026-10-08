@@ -16,6 +16,11 @@ import { JobRunner } from "./jobs/job-runner.service.ts";
 import { JobStore } from "./jobs/job-store.service.ts";
 import { RouteRequestDto } from "./search/request-fields.ts";
 import { SEARCH_SOURCES, type SearchSource } from "./search/search-source.ts";
+import { filterSmilesFlights, storedSmilesDays } from "../scrapers/smiles/smiles-flights.ts";
+import { readSmilesResponse } from "../scrapers/smiles/smiles.scraper.ts";
+import { FIXTURES_DIR } from "../core/paths.ts";
+import fs from "node:fs";
+import path from "node:path";
 
 class FakeSearchDto extends RouteRequestDto {}
 
@@ -51,6 +56,7 @@ class FakeSource implements SearchSource<FakeSearchDto> {
       await new Promise<void>((resolve) => (this.release = resolve));
       if (job.shouldStop()) throw new Error("stopped");
       if (request.origin === "ASK" && !(await job.ask("Continuar?"))) throw new Error("refused");
+      if (request.origin === "FLT") this.jobs.keepFlights(jobId, [{ date: "2026-11-05", flights: [] }]);
       this.jobs.complete(jobId, {
         legs: [{ label: request.origin, sections: [] }],
         localFile: "spreadsheets/voos.csv",
@@ -366,7 +372,7 @@ describe("server with auth", () => {
     assert.match(response.headers.get("set-cookie")!, /; Secure$/);
   });
 
-  type Started = { jobId: string; joined?: { by: string | null }; reused?: { by: string | null } };
+  type Started = { jobId: string; joined?: { by: string | null }; reused?: { by: string | null; id: string } };
   const startSearch = async (cookie: string, body: Record<string, unknown>) => {
     const response = await fetch(`${url}/api/searches`, {
       method: "POST",
@@ -433,6 +439,7 @@ describe("server with auth", () => {
     const reused = await startSearch(cookie, { origin: "GRU", destination: "CCC", reuseRecent: true });
     assert.notEqual(reused.jobId, jobId);
     assert.equal(reused.reused?.by, "thiago");
+    assert.equal(reused.reused?.id, jobId);
     assert.equal(fake.starts, before);
     const events = readEvents(`${url}/api/searches/${reused.jobId}/events`, cookie);
     assert.match(String((await nextEvent(events, "notice")).message), /Resultado de uma busca de thiago/);
@@ -559,6 +566,45 @@ describe("server with auth", () => {
     );
     assert.deepEqual(card.legs[1].result.legs, [{ label: "JJJ", sections: [] }]);
     assert.equal((await fetch(`${url}/api/history/groups/missing`, { headers: { cookie } })).status, 404);
+  });
+
+  test("keeps a search's flights apart from its result and the history list", async () => {
+    const cookie = await sessionCookie();
+    const { jobId } = await startSearch(cookie, { origin: "FLT", destination: "KKK" });
+    await runToDone(cookie, jobId);
+    await historyItem(cookie, jobId, "done");
+    const row = await prisma.search.findUnique({ where: { id: jobId } });
+    assert.deepEqual(JSON.parse(row!.flights!), [{ date: "2026-11-05", flights: [] }]);
+    const listed = (await fetch(`${url}/api/history`, { headers: { cookie } }).then((r) => r.json())) as Record<string, unknown>[];
+    assert.ok(listed.every((item) => !("flights" in item)));
+    const single = (await fetch(`${url}/api/history/${jobId}`, { headers: { cookie } }).then((r) => r.json())) as Record<string, unknown>;
+    assert.equal("flights" in single, false);
+  });
+
+  test("filters a saved smiles search's flights with the search's own rules", async () => {
+    const cookie = await sessionCookie();
+    const raw = fs.readFileSync(path.join(FIXTURES_DIR, "smiles-real-congener.json"), "utf8");
+    const days = storedSmilesDays([readSmilesResponse(raw, "2026-10-29")!]);
+    const base = { source: "smiles", origin: "GRU", destination: "CDG", requestKey: "k", request: "{}", status: "done" };
+    await prisma.search.create({ data: { ...base, id: "smiles-flights", flights: JSON.stringify(days) } });
+    await prisma.search.create({ data: { ...base, id: "smiles-without-flights" } });
+    await prisma.search.create({ data: { ...base, id: "aa-flights", source: "aa", flights: "[]" } });
+    const filter = (id: string, body: unknown) =>
+      fetch(`${url}/api/smiles/flights/${id}/filter`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", cookie },
+        body: JSON.stringify(body),
+      });
+
+    const body = { carriers: ["AF"], maxStops: 1, miles: { economy: { min: 1000 } } };
+    const response = await filter("smiles-flights", body);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), JSON.parse(JSON.stringify(filterSmilesFlights(days, body))));
+
+    assert.equal((await filter("aa-flights", {})).status, 400);
+    assert.equal((await filter("smiles-without-flights", {})).status, 404);
+    assert.equal((await filter("missing", {})).status, 404);
+    assert.equal((await filter("smiles-flights", { carriers: ["american"] })).status, 400);
   });
 
   test("opens the feed saying which commit the server runs", async () => {
