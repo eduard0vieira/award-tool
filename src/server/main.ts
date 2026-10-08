@@ -1,23 +1,33 @@
 import "dotenv/config";
 import "reflect-metadata";
 import { execFileSync } from "node:child_process";
+import path from "node:path";
 import { NestFactory } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
-import { ROOT_DIR } from "../core/paths.ts";
+import { DATABASE_FILE, ROOT_DIR } from "../core/paths.ts";
 import { AppModule } from "./app.module.ts";
 import { parseSeedUsers, seedUsers } from "./auth/seed-users.ts";
 import { config } from "./config.ts";
 import { configureApp } from "./configure-app.ts";
+import { hasPendingMigrations } from "./db/pending-migrations.ts";
 import { PrismaService } from "./db/prisma.service.ts";
 
 // On every start, not in the supervisor: the notebook runs whichever supervisor
 // version it booted with, and an old one would start a server on a database
 // without the tables a pulled migration adds.
-execFileSync("npx", ["prisma", "migrate", "deploy"], {
-  cwd: ROOT_DIR,
-  stdio: "inherit",
-  shell: process.platform === "win32",
-});
+let migrationsPending = true;
+try {
+  migrationsPending = hasPendingMigrations(DATABASE_FILE, path.join(ROOT_DIR, "prisma", "migrations"));
+} catch (err) {
+  console.error("Não deu para conferir as migrações pendentes; rodando o prisma migrate deploy:", err);
+}
+if (migrationsPending) {
+  execFileSync("npx", ["prisma", "migrate", "deploy"], {
+    cwd: ROOT_DIR,
+    stdio: "inherit",
+    shell: process.platform === "win32",
+  });
+}
 
 const app = await NestFactory.create<NestExpressApplication>(AppModule);
 const prisma = app.get(PrismaService);
