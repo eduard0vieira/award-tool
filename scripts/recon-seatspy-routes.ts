@@ -1,12 +1,13 @@
 // Answers "does SeatSpy know this route before searching?" without spending a
 // credit: logs in, fills the form like the scraper and never clicks search.
-// Usage: npx tsx scripts/recon-seatspy-routes.ts AF GRU MAD [outDir]
+// Usage: npx tsx scripts/recon-seatspy-routes.ts AF GRU MAD [outDir] (default: the system temp dir)
 // ROUTE_MAP=1 also saves every origin the airline offers, with its destinations.
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { startSeatspySession } from "../src/scrapers/seatspy/seatspy.scraper.ts";
 
-const [airline = "AF", origin = "GRU", destination = "MAD", outDir = "."] = process.argv.slice(2);
+const [airline = "AF", origin = "GRU", destination = "MAD", outDir = os.tmpdir()] = process.argv.slice(2);
 
 type TomSelectElement = HTMLSelectElement & {
   tomselect?: { options: Record<string, Record<string, unknown>>; setValue: (value: string) => void };
@@ -14,13 +15,11 @@ type TomSelectElement = HTMLSelectElement & {
 
 const session = await startSeatspySession(true);
 const { page } = session;
-const requests: { url: string; status: number; body?: string }[] = [];
-page.on("response", async (response) => {
+// URLs and statuses only: one of these responses is the account's search history.
+const requests: { url: string; status: number }[] = [];
+page.on("response", (response) => {
   const type = response.request().resourceType();
-  if (type !== "xhr" && type !== "fetch") return;
-  const entry: { url: string; status: number; body?: string } = { url: response.url(), status: response.status() };
-  if (response.url().includes("seatspy.com")) entry.body = (await response.text().catch(() => "")).slice(0, 20000);
-  requests.push(entry);
+  if (type === "xhr" || type === "fetch") requests.push({ url: response.url(), status: response.status() });
 });
 
 const options = (fieldId: string) =>
