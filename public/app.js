@@ -1200,14 +1200,25 @@ function removeQuestion(card) {
 // card is touched; cards running in parallel are unaffected.
 // The result came from someone's recent identical search; one click runs the
 // whole search again with data from now.
+const REPEAT_WARNING_ARGS = {
+  tap: ([origin, destination, roundTrip]) => ["tap", origin, destination, roundTrip],
+  seatspy: ([program, origin, destination, roundTrip]) => [program, origin, destination, roundTrip],
+};
+
 function offerFreshSearch(card, session) {
   if (card.freshSearchButton) return;
   const button = document.createElement("button");
   button.type = "button";
   button.className = "action-button fresh-search-button";
   button.textContent = "Buscar de novo";
-  button.addEventListener("click", () => {
+  button.addEventListener("click", async () => {
     button.disabled = true;
+    // The paid sources warn before repeating a recent search, here as on their forms.
+    const warning = REPEAT_WARNING_ARGS[session.record.source]?.(session.record.args);
+    if (warning && !(await repeatWarning(...warning))) {
+      button.disabled = false;
+      return;
+    }
     const fresh = newSession(session.record.source, session.record.args);
     fresh.forceFresh = true;
     RESUME_BY_SOURCE[session.record.source](...session.record.args, fresh);
