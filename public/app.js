@@ -673,7 +673,7 @@ async function openFromHistory(item, button) {
     session.viewing = { by: card.user, at: Date.parse(card.createdAt) };
     for (const leg of card.legs) {
       session.record.steps[leg.leg] = leg.result
-        ? { result: resultFromEvent(leg.result) }
+        ? { result: { ...resultFromEvent(leg.result), searchId: leg.id } }
         : { error: leg.error || "Essa parte da busca não terminou." };
     }
     RESUME_BY_SOURCE[card.source](...card.args, session);
@@ -1455,6 +1455,8 @@ function runOnServer(card, body, progressLabel, session) {
     };
 
     let jobId = step?.jobId;
+    // The history row behind this leg, where the flight filter finds its flights.
+    let searchId = step?.searchId ?? jobId;
     if (jobId) card.root.dataset.jobId = jobId;
     if (!jobId) {
       let response;
@@ -1485,6 +1487,8 @@ function runOnServer(card, body, progressLabel, session) {
 
       const started = await response.json();
       jobId = started.jobId;
+      // A reused result has no row of its own; the original search's row holds its flights.
+      searchId = started.reused?.id ?? jobId;
       card.root.dataset.jobId = jobId;
       if (started.joined) {
         card.sharedJob = true;
@@ -1494,7 +1498,7 @@ function runOnServer(card, body, progressLabel, session) {
       }
       if (started.reused && session) offerFreshSearch(card, session);
       if (session) {
-        session.record.steps[session.index - 1] = { jobId };
+        session.record.steps[session.index - 1] = { jobId, searchId };
         persistSession(session);
       }
     }
@@ -1533,7 +1537,7 @@ function runOnServer(card, body, progressLabel, session) {
           removeQuestion(card);
           // Otherwise the label stays frozen on the last "Buscando…" after the search ends.
           card.progressLabelEl.textContent = "";
-          const result = resultFromEvent(event);
+          const result = { ...resultFromEvent(event), searchId };
           keepResult(result);
           resolve(result);
         } else if (event.type === "error") {
@@ -2094,6 +2098,7 @@ async function startSmilesSearch(origin, destination, ceilings, roundTrip, perio
 
     let returnLegs = null;
     let returnSpreadsheetUrl = null;
+    let returnSearchId = null;
     if (roundTrip) {
       const inbound = await runOnServer(
         card,
@@ -2103,6 +2108,7 @@ async function startSmilesSearch(origin, destination, ceilings, roundTrip, perio
       );
       returnLegs = inbound.result;
       returnSpreadsheetUrl = inbound.spreadsheetUrl;
+      returnSearchId = inbound.searchId;
       if (inbound.partialNotice) partialNotices.push(inbound.partialNotice);
       renderLegSections(card.resultEl, `Volta: ${destination} → ${origin}`, returnLegs[0].sections);
       recordLegForCopy(card, returnLegs[0].sections);
@@ -2115,17 +2121,221 @@ async function startSmilesSearch(origin, destination, ceilings, roundTrip, perio
     showSpreadsheetLink(card, outbound.spreadsheetUrl, roundTrip ? "ida" : "busca");
     showSpreadsheetLink(card, returnSpreadsheetUrl, "volta");
 
-    const sectionOf = (legs, label) => legs?.[0]?.sections.find((section) => section.label === label);
-    showAlertButtons(card, "SMILES", origin, destination, [
-      { cabinClass: "Econômica", outbound: sectionOf(outboundLegs, "Econômica"), inbound: sectionOf(returnLegs, "Econômica") },
-      { cabinClass: "Premium Economy", outbound: sectionOf(outboundLegs, "Conforto"), inbound: sectionOf(returnLegs, "Conforto") },
-      { cabinClass: "Executiva", outbound: sectionOf(outboundLegs, "Executiva"), inbound: sectionOf(returnLegs, "Executiva") },
-    ]);
+    showAlertButtons(card, "SMILES", origin, destination, smilesAlertOptions(outboundLegs[0].sections, returnLegs?.[0].sections));
+
+    const legs = [{ label: roundTrip ? `Ida: ${origin} → ${destination}` : `${origin} → ${destination}`, searchId: outbound.searchId }];
+    if (roundTrip) legs.push({ label: `Volta: ${destination} → ${origin}`, searchId: returnSearchId });
+    if (legs.every((leg) => leg.searchId)) addFlightFilter(card, { origin, destination, ceilings, legs });
   } catch (err) {
     showFailure(card, err);
   } finally {
     card.progressEl.hidden = true;
   }
+}
+
+// The portal calls Smiles' "Conforto" by its own name, "Premium Economy".
+function smilesAlertOptions(outboundSections, returnSections) {
+  const sectionOf = (sections, label) => sections?.find((section) => section.label === label);
+  return [
+    { cabinClass: "Econômica", outbound: sectionOf(outboundSections, "Econômica"), inbound: sectionOf(returnSections, "Econômica") },
+    { cabinClass: "Premium Economy", outbound: sectionOf(outboundSections, "Conforto"), inbound: sectionOf(returnSections, "Conforto") },
+    { cabinClass: "Executiva", outbound: sectionOf(outboundSections, "Executiva"), inbound: sectionOf(returnSections, "Executiva") },
+  ];
+}
+
+// Replaces the spreadsheet step: filter the search's flights by who operates
+// them, stops and miles, and the card's dates, copy text and alerts follow. The
+// server filters and rebuilds the dates with the search's own rules.
+const SMILES_FILTER_CABINS = [
+  ["economy", "Econômica"],
+  ["premium", "Conforto"],
+  ["business", "Executiva"],
+];
+let flightFilterCount = 0;
+
+async function filterSmilesLeg(searchId, filter) {
+  const response = await apiFetch(`/api/smiles/flights/${encodeURIComponent(searchId)}/filter`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(filter),
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok || !body) throw new Error(body?.error || "Não deu para filtrar os voos dessa busca.");
+  return body;
+}
+
+function addFlightFilter(card, ctx) {
+  const id = `flight-filter-${++flightFilterCount}`;
+  const toggle = document.createElement("button");
+  toggle.type = "button";
+  toggle.className = "action-button";
+  toggle.textContent = "Filtrar voos";
+  toggle.setAttribute("aria-expanded", "false");
+  toggle.setAttribute("aria-controls", id);
+  card.minimizeButton.before(toggle);
+
+  const panel = document.createElement("form");
+  panel.id = id;
+  panel.className = "flight-filter";
+  panel.noValidate = true;
+  panel.hidden = true;
+  const milesFields = SMILES_FILTER_CABINS.map(
+    ([cabin, label]) => `
+      <div class="field flight-filter-range" role="group" aria-labelledby="${id}-${cabin}-label">
+        <span class="flight-filter-range-label" id="${id}-${cabin}-label">${label} (K)</span>
+        <div class="flight-filter-range-inputs">
+          <input name="${cabin}-min" type="number" min="1" step="0.25" placeholder="mín." aria-label="${label}, mínimo em mil milhas" autocomplete="off" />
+          <span aria-hidden="true">a</span>
+          <input name="${cabin}-max" type="number" min="1" step="0.25" placeholder="máx." aria-label="${label}, máximo em mil milhas" autocomplete="off" />
+        </div>
+      </div>`,
+  ).join("");
+  panel.innerHTML = `
+    <fieldset class="flight-filter-carriers">
+      <legend>Operado por</legend>
+      <div class="flight-filter-options"><span class="flight-filter-hint">Carregando as companhias…</span></div>
+      <p class="flight-filter-hint">Sem nenhuma marcada, valem todas. Com alguma marcada, só entram voos em que todos os trechos são operados por elas.</p>
+    </fieldset>
+    <div class="flight-filter-fields">
+      <div class="field">
+        <label for="${id}-stops">Conexões</label>
+        <select id="${id}-stops" name="maxStops">
+          <option value="">Qualquer</option>
+          <option value="0">Só voo direto</option>
+          <option value="1">Até 1 conexão</option>
+          <option value="2">Até 2 conexões</option>
+        </select>
+      </div>
+      ${milesFields}
+    </div>
+    <p class="flight-filter-hint flight-filter-ceiling" hidden></p>
+    <div class="flight-filter-actions">
+      <button type="submit">Aplicar filtro</button>
+      <button type="button" class="action-button flight-filter-clear">Limpar</button>
+      <span class="flight-filter-status" role="status"></span>
+    </div>`;
+  card.noticeEl.before(panel);
+
+  const options = panel.querySelector(".flight-filter-options");
+  const status = panel.querySelector(".flight-filter-status");
+  const ceilingNote = panel.querySelector(".flight-filter-ceiling");
+  const searchCeilings = SMILES_FILTER_CABINS.filter(([cabin]) => ctx.ceilings?.[cabin]).map(
+    ([cabin, label]) => `${label} ${ctx.ceilings[cabin] / 1000}K`,
+  );
+  if (searchCeilings.length) {
+    // The sweep only fetched the flights of days under the search's ceiling.
+    ceilingNote.textContent = `A busca só detalhou os dias abaixo do teto dela (${searchCeilings.join(", ")}). Um máximo acima disso não traz dias novos.`;
+    ceilingNote.hidden = false;
+  }
+
+  const readFilter = () => {
+    const form = new FormData(panel);
+    const carriers = form.getAll("carrier");
+    const filter = {};
+    if (carriers.length) filter.carriers = carriers;
+    if (form.get("maxStops") !== "") filter.maxStops = Number(form.get("maxStops"));
+    const miles = {};
+    for (const [cabin] of SMILES_FILTER_CABINS) {
+      const range = {};
+      for (const bound of ["min", "max"]) {
+        const value = parseFloat(form.get(`${cabin}-${bound}`));
+        if (Number.isFinite(value) && value > 0) range[bound] = Math.round(value * 1000);
+      }
+      if (Object.keys(range).length) miles[cabin] = range;
+    }
+    if (Object.keys(miles).length) filter.miles = miles;
+    return filter;
+  };
+
+  const run = async (filter) => {
+    status.textContent = "Filtrando…";
+    const results = await Promise.all(ctx.legs.map((leg) => filterSmilesLeg(leg.searchId, filter)));
+    return results;
+  };
+
+  const showCarriers = (results) => {
+    const byCode = new Map();
+    for (const option of results.flatMap((result) => result.carrierOptions)) {
+      const known = byCode.get(option.code);
+      byCode.set(option.code, { ...option, flights: (known?.flights ?? 0) + option.flights });
+    }
+    options.replaceChildren(
+      ...[...byCode.values()]
+        .sort((a, b) => b.flights - a.flights)
+        .map((option) => {
+          const label = document.createElement("label");
+          label.className = "flight-filter-carrier";
+          const input = document.createElement("input");
+          input.type = "checkbox";
+          input.name = "carrier";
+          input.value = option.code;
+          const code = document.createElement("strong");
+          code.textContent = option.code;
+          const name = document.createElement("span");
+          name.textContent = `${option.name} (${plural(option.flights, "voo", "voos")})`;
+          label.append(input, code, name);
+          return label;
+        }),
+    );
+    const unknown = results.reduce((total, result) => total + result.flightsWithoutCarrier, 0);
+    if (unknown > 0) {
+      const note = document.createElement("span");
+      note.className = "flight-filter-hint";
+      note.textContent = `${plural(unknown, "voo veio", "voos vieram")} sem operador informado e só entram sem companhia marcada.`;
+      options.append(note);
+    }
+  };
+
+  toggle.addEventListener("click", async () => {
+    panel.hidden = !panel.hidden;
+    toggle.setAttribute("aria-expanded", String(!panel.hidden));
+    if (panel.hidden || card.flightFilterLoaded) return;
+    card.flightFilterLoaded = true;
+    try {
+      showCarriers(await run({}));
+      status.textContent = "";
+    } catch (err) {
+      card.flightFilterLoaded = false;
+      options.replaceChildren();
+      status.textContent = err.message;
+    }
+  });
+
+  const apply = async (filter, appliedText) => {
+    const submit = panel.querySelector('button[type="submit"]');
+    submit.disabled = true;
+    try {
+      const results = await run(filter);
+      redrawSmilesCard(card, ctx, results);
+      status.textContent = appliedText;
+    } catch (err) {
+      status.textContent = err.message;
+    } finally {
+      submit.disabled = false;
+    }
+  };
+
+  panel.addEventListener("submit", (event) => {
+    event.preventDefault();
+    apply(readFilter(), "Filtro aplicado. As datas, a cópia e os alertas abaixo seguem o filtro; datas tiradas à mão voltaram.");
+  });
+  panel.querySelector(".flight-filter-clear").addEventListener("click", () => {
+    panel.reset();
+    apply({}, "Sem filtro: todas as datas da busca.");
+  });
+}
+
+function redrawSmilesCard(card, ctx, results) {
+  card.resultEl.replaceChildren();
+  card.copyLegs = [];
+  ctx.legs.forEach((leg, index) => {
+    renderLegSections(card.resultEl, leg.label, results[index].sections);
+    recordLegForCopy(card, results[index].sections);
+  });
+  card.root.querySelector(":scope > .alert-actions")?.remove();
+  markAlertsOutdated(card);
+  showAlertButtons(card, "SMILES", ctx.origin, ctx.destination, smilesAlertOptions(results[0].sections, results[1]?.sections));
+  updateCardActions(card);
 }
 
 // After a search, each cabin with availability becomes a "generate alert"
@@ -2203,7 +2413,7 @@ function showAlertButtons(card, source, origin, destination, options) {
     });
     // The alert already on screen no longer matches the dates: back to idle so it gets generated again.
     card.root.addEventListener("alert-dates-changed", () => {
-      if (!button.disabled) setAlertButtonState(button, option.cabinClass, "idle");
+      if (button.isConnected && !button.disabled) setAlertButtonState(button, option.cabinClass, "idle");
     });
     bar.appendChild(button);
   }

@@ -1777,6 +1777,102 @@ input[type="number"] {
   font-weight: 600;
 }
 
+/* Flight filter (Smiles): sits between the alerts and the dates it changes. */
+.flight-filter {
+  display: grid;
+  gap: var(--e3);
+  padding: var(--e4) var(--e5);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-sunk);
+}
+
+.flight-filter-carriers {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.flight-filter-carriers legend {
+  margin-bottom: var(--e2);
+  padding: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.flight-filter-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e2);
+}
+
+.flight-filter-carrier {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: var(--e1) var(--e3) var(--e1) var(--e2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.flight-filter-carrier:has(input:checked) {
+  border-color: var(--ink);
+}
+
+.flight-filter-carrier strong {
+  font-family: var(--font-data);
+}
+
+.flight-filter-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e3) var(--e4);
+}
+
+.flight-filter-range-label {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--ink-soft);
+}
+
+.flight-filter-range-inputs {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  font-size: var(--text-sm);
+  color: var(--ink-soft);
+}
+
+.flight-filter-range-inputs input {
+  width: 84px;
+}
+
+.flight-filter-hint {
+  margin: var(--e1) 0 0;
+  max-width: 80ch;
+  font-size: var(--text-sm);
+  color: var(--ink-soft);
+}
+
+.flight-filter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e3);
+}
+
+.flight-filter-actions button[type="submit"] {
+  margin-left: 0;
+}
+
+.flight-filter-status {
+  font-size: var(--text-sm);
+  color: var(--ink-soft);
+}
+
 /* Undo toast */
 
 .toast {
