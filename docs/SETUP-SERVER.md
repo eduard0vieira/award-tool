@@ -110,7 +110,10 @@ Copy the main machine's `.env` to `C:\bot\award-tool\.env`, then change:
 ## Database
 
 - SQLite in `C:\bot\award-tool\data\bot.db`: users and the shared search
-  history. The server creates it and applies pending migrations on every start.
+  history. The server creates it and, when a pulled commit brings a migration,
+  applies it on start; otherwise it skips the step to restart faster.
+- `data\seatspy-routes.json` caches the SeatSpy route map behind the form's
+  route hints. Deleting it is harmless: it is read again from SeatSpy.
 - Backup: copy that file, ideally with the task stopped.
 - `better-sqlite3` is a native module. `npm ci` normally downloads a prebuilt
   binary for Windows; if it says it has to compile, install the Visual Studio
@@ -181,6 +184,9 @@ desktop shortcut with the line above as its target makes it one click.
 - A change to `scripts/run-server.ts` itself only applies after the task
   restarts (log off and on, or reboot); the log says so.
 - `.env` never comes through git: edit it on the notebook and restart the task.
+- While the server restarts, open pages show "Sem conexão com o servidor" and,
+  once it is back on a new commit, "O bot foi atualizado" with a reload button.
+  Pages opened before 2026-10-08 lack that banner: reload them once by hand.
 - A database change comes as a migration in `prisma/migrations` and is applied
   by the server itself when it restarts after the pull.
 

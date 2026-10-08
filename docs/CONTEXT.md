@@ -105,13 +105,20 @@ three, and `core/` imports nothing.
 
 ## 3. Storage
 
-- **SQLite in `data/bot.db`** (Prisma, schema in `prisma/schema.prisma`). The
-  server applies pending migrations on every start, so a pulled migration is in
-  place before anything queries it. Backup is copying that file.
+- **SQLite in `data/bot.db`** (Prisma, schema in `prisma/schema.prisma`). On
+  every start the server compares the folders in `prisma/migrations` with the
+  applied ones and runs `prisma migrate deploy` only when one is missing, so a
+  pulled migration is in place before anything queries it without paying the
+  `npx` start on every restart. Backup is copying that file.
   - `User`: one row per person, scrypt password hash.
   - `Search`: every search started, with who started it, its normalized request,
     status (`queued`, `running`, `done`, `partial`, `error`, `cancelled`) and the
     final result. Read through `GET /api/history` and `GET /api/history/:id`.
+    Each row also keeps the card it belongs to (`groupId`, `groupLeg`,
+    `groupArgs`, sent by the front as `group` on every leg), and
+    `GET /api/history/groups/:groupId` returns all its legs: the Histórico's
+    "Abrir" rebuilds the whole card from that without searching again. Rows from
+    before 2026-10-08 have no card and cannot be opened.
     Results older than `SEARCH_RESULT_RETENTION_DAYS` (30) lose the payload and
     keep the row.
 - **Identical searches.** Each source declares an `identity()`; with the
@@ -127,6 +134,11 @@ three, and `core/` imports nothing.
 - **The Histórico tab and the repeat warning** read `/api/history`, so they
   show everyone's searches with who ran them. The browser's `localStorage` now
   only keeps the last day's cards to restore them after a reload.
+- **SeatSpy route map** in `data/seatspy-routes.json`: per airline, every
+  origin with its destinations, read off SeatSpy's own search form (no credit).
+  Each SeatSpy search refreshes its airline; `GET /api/seatspy/routes/:airline`
+  reads a missing or week-old one, waiting for a free SeatSpy session. The
+  form only uses it to advise; the search checks the live form itself.
 - **Alert images on disk**, in `./alerts/<timestamp>-<class>/`.
 - **Search log** in `./spreadsheets/buscas.csv`, one row per day found, and in
   Google Sheets when configured.
