@@ -166,21 +166,21 @@
 :root[data-theme="dark"] .tag-QF { --color: #ff7ab3; }
 :root[data-theme="dark"] .tag-VIR { --color: #c58cff; }
 
-/* The circle in switchTheme draws the change; the default cross-fade would blur it. */
+/* Theme switch (see switchTheme): the browser's own cross-fade, only slower. */
 ::view-transition-old(root),
 ::view-transition-new(root) {
-  animation: none;
-  mix-blend-mode: normal;
+  animation-duration: 300ms;
+  animation-timing-function: ease-in-out;
 }
 
 :root.theme-fading,
 :root.theme-fading * {
   transition:
-    background-color 250ms ease,
-    border-color 250ms ease,
-    color 250ms ease,
-    fill 250ms ease,
-    stroke 250ms ease !important;
+    background-color 300ms ease-in-out,
+    border-color 300ms ease-in-out,
+    color 300ms ease-in-out,
+    fill 300ms ease-in-out,
+    stroke 300ms ease-in-out !important;
 }
 
 .action-button.theme-button {
