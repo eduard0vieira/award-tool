@@ -6,6 +6,7 @@ import { validateBody } from "../validation.ts";
 import { requestKey, searchDay } from "./request-key.ts";
 import type { RouteRequestDto } from "./request-fields.ts";
 import { SEARCH_SOURCES, type SearchSource, type SearchSourceRegistry } from "./search-source.ts";
+import { SearchFeed } from "./search-feed.service.ts";
 import { SearchHistory } from "./search-history.service.ts";
 
 export type StartedSearch = {
@@ -15,6 +16,8 @@ export type StartedSearch = {
   // A finished identical search was handed back instead of a new one.
   reused?: { by: string | null; finishedAt: string };
 };
+
+const MAX_GROUP_ARGS_LENGTH = 4000;
 
 function timeInSaoPaulo(date: Date): string {
   return new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" }).format(date);
@@ -26,6 +29,7 @@ export class SearchService {
     @Inject(SEARCH_SOURCES) private readonly sources: SearchSourceRegistry,
     private readonly jobs: JobStore,
     private readonly history: SearchHistory,
+    private readonly feed: SearchFeed,
   ) {}
 
   async start(body: Record<string, unknown> | undefined, actor?: Actor): Promise<StartedSearch> {
@@ -34,9 +38,19 @@ export class SearchService {
     const route = request as RouteRequestDto;
     const identity = source.identity(request);
     const key = requestKey(source.id, identity, searchDay());
+    const requestedBy = actor?.kind === "user" ? actor.username : null;
+    const trackLeg = (jobId: string, startedNew: boolean) => {
+      if (route.group) this.feed.addLeg({ ...route.group, source: source.id, by: requestedBy }, jobId, startedNew);
+    };
+    if (route.group && JSON.stringify(route.group.args).length > MAX_GROUP_ARGS_LENGTH) {
+      throw new BadRequestException("O campo group.args é grande demais.");
+    }
 
     const active = this.jobs.findActive(key);
-    if (active) return { jobId: active.jobId, joined: { by: active.requestedBy } };
+    if (active) {
+      trackLeg(active.jobId, false);
+      return { jobId: active.jobId, joined: { by: active.requestedBy } };
+    }
 
     if (route.reuseRecent === true) {
       const since = new Date(Date.now() - config.searchReuseHours * 3_600_000);
@@ -47,11 +61,11 @@ export class SearchService {
           `Resultado de uma busca${by ? ` de ${by}` : ""} feita às ${timeInSaoPaulo(recent.finishedAt)}. ` +
           "Para dados de agora, busque de novo.";
         const jobId = this.jobs.createFinished(JSON.parse(recent.result) as Record<string, unknown>, notice);
+        trackLeg(jobId, false);
         return { jobId, reused: { by, finishedAt: recent.finishedAt.toISOString() } };
       }
     }
 
-    const requestedBy = actor?.kind === "user" ? actor.username : null;
     const jobId = this.jobs.create({ requestKey: key, requestedBy });
     await this.history.record({
       jobId,
@@ -62,6 +76,7 @@ export class SearchService {
       requestKey: key,
       request: identity,
     });
+    trackLeg(jobId, true);
     void source.start(jobId, request);
     return { jobId };
   }

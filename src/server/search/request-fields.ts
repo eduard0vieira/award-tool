@@ -1,6 +1,21 @@
 import { applyDecorators } from "@nestjs/common";
 import { Transform, Type } from "class-transformer";
-import { IsBoolean, IsInt, IsNotEmpty, IsNumber, IsObject, IsOptional, IsPositive, IsString, Max, Min, ValidateNested } from "class-validator";
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsBoolean,
+  IsInt,
+  IsNotEmpty,
+  IsNumber,
+  IsObject,
+  IsOptional,
+  IsPositive,
+  IsString,
+  Matches,
+  Max,
+  Min,
+  ValidateNested,
+} from "class-validator";
 
 export function AirportField(name: string) {
   return applyDecorators(
@@ -36,6 +51,21 @@ export function OptionalNestedField(name: string, type: () => new () => object) 
   );
 }
 
+export class SearchGroupDto {
+  @IsString({ message: "O campo group.id deve ser texto." })
+  @Matches(/^[A-Za-z0-9-]{1,64}$/, { message: "O campo group.id deve ter até 64 letras, números ou hífens." })
+  id!: string;
+
+  @IsInt({ message: "O campo group.leg deve ser um inteiro entre 0 e 9." })
+  @Min(0, { message: "O campo group.leg deve ser um inteiro entre 0 e 9." })
+  @Max(9, { message: "O campo group.leg deve ser um inteiro entre 0 e 9." })
+  leg!: number;
+
+  @IsArray({ message: "O campo group.args deve ser uma lista." })
+  @ArrayMaxSize(10, { message: "O campo group.args aceita no máximo 10 itens." })
+  args!: unknown[];
+}
+
 export class RouteRequestDto {
   @AirportField("origin")
   origin!: string;
@@ -47,4 +77,9 @@ export class RouteRequestDto {
   // what makes two searches the same.
   @OptionalBooleanField("reuseRecent")
   reuseRecent?: boolean;
+
+  // Which card on the requester's screen this leg belongs to, so other people
+  // can follow the same card live. Not part of what makes two searches the same.
+  @OptionalNestedField("group", () => SearchGroupDto)
+  group?: SearchGroupDto;
 }

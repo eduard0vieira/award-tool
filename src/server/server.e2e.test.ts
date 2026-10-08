@@ -87,8 +87,8 @@ async function startApp(login: { machineCredentials: Credentials | null } | null
 
 type Event = { type: string; [field: string]: unknown };
 
-async function* readEvents(url: string, cookie?: string): AsyncGenerator<Event> {
-  const response = await fetch(url, cookie ? { headers: { cookie } } : {});
+async function* readEvents(url: string, cookie?: string, signal?: AbortSignal): AsyncGenerator<Event> {
+  const response = await fetch(url, { ...(cookie ? { headers: { cookie } } : {}), ...(signal ? { signal } : {}) });
   assert.equal(response.status, 200);
   const decoder = new TextDecoder();
   let buffer = "";
@@ -225,6 +225,7 @@ describe("server without auth", () => {
 describe("server with auth", () => {
   const machine = { user: "agent", pass: "secret" };
   const person = { user: "thiago", pass: "vamoscomclasse" };
+  const colleague = { user: "rony", pass: "vamoscomclasse" };
   let url: string;
   let fake: FakeSource;
   let prisma: Awaited<ReturnType<typeof startApp>>["prisma"];
@@ -232,7 +233,9 @@ describe("server with auth", () => {
 
   before(async () => {
     ({ url, fake, prisma, stop } = await startApp({ machineCredentials: machine }));
-    await prisma.user.create({ data: { username: person.user, passwordHash: await hashPassword(person.pass) } });
+    for (const who of [person, colleague]) {
+      await prisma.user.create({ data: { username: who.user, passwordHash: await hashPassword(who.pass) } });
+    }
   });
   after(() => stop());
 
@@ -452,5 +455,80 @@ describe("server with auth", () => {
     const again = await startSearch(cookie, { origin: "PRT", destination: "DDD", reuseRecent: true });
     assert.equal(again.reused, undefined);
     await runToDone(cookie, again.jobId);
+  });
+
+  test("shows everyone else a search card as it starts, leg by leg", async () => {
+    const thiago = await sessionCookie();
+    const rony = await sessionCookie(colleague);
+    const live = new AbortController();
+    const late = new AbortController();
+    try {
+      const feed = readEvents(`${url}/api/feed`, rony, live.signal);
+      const group = { id: "card-legs", leg: 0, args: ["GRU", "FFF", true] };
+      const outbound = await startSearch(thiago, { origin: "GRU", destination: "FFF", group });
+      assert.deepEqual((await nextEvent(feed, "group")).group, {
+        id: "card-legs",
+        source: "fake",
+        args: ["GRU", "FFF", true],
+        by: "thiago",
+        legs: [outbound.jobId],
+      });
+      await runToDone(thiago, outbound.jobId);
+
+      const inbound = await startSearch(thiago, { origin: "FFF", destination: "GRU", group: { ...group, leg: 1 } });
+      assert.deepEqual((await nextEvent(feed, "group")).group, {
+        id: "card-legs",
+        source: "fake",
+        args: ["GRU", "FFF", true],
+        by: "thiago",
+        legs: [outbound.jobId, inbound.jobId],
+      });
+
+      const snapshot = await nextEvent(readEvents(`${url}/api/feed`, rony, late.signal), "group");
+      assert.equal(snapshot.snapshot, true);
+      assert.deepEqual((snapshot.group as { legs: string[] }).legs, [outbound.jobId, inbound.jobId]);
+      await runToDone(thiago, inbound.jobId);
+    } finally {
+      live.abort();
+      late.abort();
+    }
+  });
+
+  test("keeps joined and reused searches out of the feed, since they start nothing new", async () => {
+    const thiago = await sessionCookie();
+    const rony = await sessionCookie(colleague);
+    const abort = new AbortController();
+    try {
+      const feed = readEvents(`${url}/api/feed`, thiago, abort.signal);
+      const first = await startSearch(thiago, { origin: "GRU", destination: "GGG", group: { id: "card-first", leg: 0, args: [] } });
+      assert.equal(((await nextEvent(feed, "group")).group as { id: string }).id, "card-first");
+      const joined = await startSearch(rony, { origin: "GRU", destination: "GGG", group: { id: "card-joined", leg: 0, args: [] } });
+      assert.equal(joined.jobId, first.jobId);
+      await runToDone(thiago, first.jobId);
+      await historyItem(thiago, first.jobId, "done");
+      const reused = await startSearch(rony, {
+        origin: "GRU",
+        destination: "GGG",
+        reuseRecent: true,
+        group: { id: "card-reused", leg: 0, args: [] },
+      });
+      assert.ok(reused.reused);
+
+      const marker = await startSearch(rony, { origin: "GRU", destination: "HHH", group: { id: "card-marker", leg: 0, args: [] } });
+      assert.equal(((await nextEvent(feed, "group")).group as { id: string }).id, "card-marker");
+      await runToDone(rony, marker.jobId);
+    } finally {
+      abort.abort();
+    }
+  });
+
+  test("refuses the feed without a session and an oversized group", async () => {
+    assert.equal((await fetch(`${url}/api/feed`)).status, 401);
+    const response = await fetch(`${url}/api/searches`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", cookie: await sessionCookie() },
+      body: JSON.stringify({ source: "fake", origin: "GRU", destination: "III", group: { id: "x", leg: 0, args: ["a".repeat(5000)] } }),
+    });
+    assert.equal(response.status, 400);
   });
 });

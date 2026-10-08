@@ -13,17 +13,20 @@ import { SmilesSource } from "../sources/smiles/smiles.source.ts";
 import { TapModule } from "../sources/tap/tap.module.ts";
 import { TapSource } from "../sources/tap/tap.source.ts";
 import { SEARCH_SOURCES, type SearchSource } from "./search-source.ts";
+import { FeedController } from "./feed.controller.ts";
 import { HistoryController } from "./history.controller.ts";
+import { SearchFeed } from "./search-feed.service.ts";
 import { SearchHistory } from "./search-history.service.ts";
 import { SearchController } from "./search.controller.ts";
 import { SearchService } from "./search.service.ts";
 
 @Module({
   imports: [JobsModule, TapModule, SeatspyModule, AaModule, IberiaModule, SmilesModule, LatamModule],
-  controllers: [SearchController, HistoryController],
+  controllers: [SearchController, HistoryController, FeedController],
   providers: [
     SearchService,
     SearchHistory,
+    SearchFeed,
     {
       provide: SEARCH_SOURCES,
       useFactory: (...sources: SearchSource[]) => new Map(sources.map((source) => [source.id, source])),
