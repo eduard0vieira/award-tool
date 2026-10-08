@@ -124,6 +124,7 @@ export class JobStore {
   private replay(job: Job): JobEvent[] {
     const events: JobEvent[] = [];
     if (job.status === "queued") events.push({ type: "queued" });
+    if (job.status === "running") events.push({ type: "started" });
     events.push({ type: "progress", fraction: job.progress });
     if (job.window) events.push({ type: "window", ...job.window });
     if (job.notice) events.push({ type: "notice", message: job.notice });

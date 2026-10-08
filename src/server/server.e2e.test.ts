@@ -170,6 +170,16 @@ describe("server without auth", () => {
     assert.deepEqual(replayed, liveDone);
   });
 
+  test("tells a late subscriber that a running search has already started", async () => {
+    const { body } = await post(`${url}/api/searches`, { source: "fake", origin: "GRU", destination: "OPO" });
+    await nextEvent(readEvents(`${url}/api/searches/${body.jobId}/events`), "progress");
+    const late = readEvents(`${url}/api/searches/${body.jobId}/events`);
+    const first = (await late.next()).value?.type;
+    fake.release();
+    await nextEvent(late, "done");
+    assert.equal(first, "started");
+  });
+
   test("asks the user and resumes after the answer", async () => {
     const { body } = await post(`${url}/api/searches`, { source: "fake", origin: "ASK", destination: "MIA" });
     const events = readEvents(`${url}/api/searches/${body.jobId}/events`);
