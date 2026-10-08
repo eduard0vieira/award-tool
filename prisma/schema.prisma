@@ -38,6 +38,9 @@ model Search {
   groupId     String?
   groupLeg    Int?
   groupArgs   String?
+  // Per-flight data for the flight filter (Smiles), apart from `result` so the
+  // history and the live events never carry it.
+  flights     String?
 
   @@index([requestKey, createdAt])
   @@index([createdAt])

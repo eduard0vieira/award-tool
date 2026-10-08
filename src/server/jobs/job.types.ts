@@ -20,6 +20,8 @@ export type Job = {
   requestKey?: string;
   // Username, or null for a machine credential or a server without login.
   requestedBy?: string | null;
+  // Per-flight data the history stores apart from the result (flight filter).
+  flights?: unknown;
 };
 
 export type JobCallbacks = {

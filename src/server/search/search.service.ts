@@ -14,7 +14,9 @@ export type StartedSearch = {
   // Someone already had this exact search running: the job is theirs, shared.
   joined?: { by: string | null };
   // A finished identical search was handed back instead of a new one.
-  reused?: { by: string | null; finishedAt: string };
+  // `id` is the original search's: its row holds what the card can still use
+  // (the flight filter), since the reused job itself has no row.
+  reused?: { by: string | null; finishedAt: string; id: string };
 };
 
 const MAX_GROUP_ARGS_LENGTH = 4000;
@@ -62,7 +64,7 @@ export class SearchService {
           "Para dados de agora, busque de novo.";
         const jobId = this.jobs.createFinished(JSON.parse(recent.result) as Record<string, unknown>, notice);
         trackLeg(jobId, false);
-        return { jobId, reused: { by, finishedAt: recent.finishedAt.toISOString() } };
+        return { jobId, reused: { by, finishedAt: recent.finishedAt.toISOString(), id: recent.id } };
       }
     }
 

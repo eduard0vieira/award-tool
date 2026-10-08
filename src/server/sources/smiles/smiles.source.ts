@@ -1,6 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { SessionPool } from "../../../core/session-pool.ts";
 import { createSearchSheet, type FlightRow } from "../../../outputs/spreadsheet.ts";
+import { storedSmilesDays } from "../../../scrapers/smiles/smiles-flights.ts";
 import {
   buildSmilesReport,
   searchSmilesYear,
@@ -142,6 +143,7 @@ export class SmilesSource implements SearchSource<SmilesSearchDto> {
         legs,
         ceilings: { "Econômica": ceilings.economy, Conforto: ceilings.premium, Executiva: ceilings.business },
       });
+      this.jobs.keepFlights(jobId, storedSmilesDays(days));
       this.jobs.complete(jobId, { legs, partialNotice, spreadsheetUrl });
     });
   }

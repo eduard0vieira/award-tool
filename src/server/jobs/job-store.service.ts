@@ -66,6 +66,11 @@ export class JobStore {
     job.events.next({ type: "started" });
   }
 
+  // Set before complete(): the history stores it when the "done" event arrives.
+  keepFlights(jobId: string, flights: unknown) {
+    this.get(jobId).flights = flights;
+  }
+
   complete(jobId: string, result: Record<string, unknown>) {
     const job = this.get(jobId);
     job.status = "done";

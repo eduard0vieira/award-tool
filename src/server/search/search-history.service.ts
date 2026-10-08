@@ -17,7 +17,7 @@ export type NewSearch = {
   group?: { id: string; leg: number; args: unknown[] } | undefined;
 };
 
-type SearchUpdate = { status: string; result?: string; error?: string; finishedAt?: Date };
+type SearchUpdate = { status: string; result?: string; error?: string; finishedAt?: Date; flights?: string };
 
 function updateFor(event: JobEvent): SearchUpdate | null {
   if (event.type === "started") return { status: "running" };
@@ -52,7 +52,10 @@ export class SearchHistory implements OnModuleInit {
     if (interrupted.count > 0) console.log(`${interrupted.count} busca(s) interrompida(s) pelo reinício marcadas como erro.`);
 
     const cutoff = new Date(Date.now() - config.searchResultRetentionDays * 86_400_000);
-    await this.prisma.search.updateMany({ where: { createdAt: { lt: cutoff }, result: { not: null } }, data: { result: null } });
+    await this.prisma.search.updateMany({
+      where: { createdAt: { lt: cutoff }, OR: [{ result: { not: null } }, { flights: { not: null } }] },
+      data: { result: null, flights: null },
+    });
   }
 
   async record(search: NewSearch) {
@@ -70,9 +73,11 @@ export class SearchHistory implements OnModuleInit {
     // Chained so the rows follow the job's order even when two updates are in
     // flight at once ("started" right before a fast "done").
     let pending = Promise.resolve();
-    this.jobs.get(search.jobId).events.subscribe((event) => {
+    const job = this.jobs.get(search.jobId);
+    job.events.subscribe((event) => {
       const update = updateFor(event);
       if (!update) return;
+      if (event.type === "done" && job.flights !== undefined) update.flights = JSON.stringify(job.flights);
       pending = pending
         .then(() => this.prisma.search.update({ where: { id: search.jobId }, data: update }))
         .then(
@@ -90,6 +95,7 @@ export class SearchHistory implements OnModuleInit {
     return this.prisma.search.findFirst({
       where: { requestKey, status: "done", finishedAt: { gte: since }, result: { not: null } },
       orderBy: { finishedAt: "desc" },
+      omit: { flights: true },
       include: { user: { select: { username: true } } },
     });
   }
@@ -99,7 +105,7 @@ export class SearchHistory implements OnModuleInit {
       where: before ? { createdAt: { lt: before } } : {},
       orderBy: { createdAt: "desc" },
       take: limit,
-      omit: { result: true },
+      omit: { result: true, flights: true },
       include: { user: { select: { username: true } } },
     });
     return rows.map(({ user, userId: _userId, requestKey: _key, groupArgs: _args, request, ...row }) => ({
@@ -114,6 +120,7 @@ export class SearchHistory implements OnModuleInit {
     const rows = await this.prisma.search.findMany({
       where: { groupId },
       orderBy: { groupLeg: "asc" },
+      omit: { flights: true },
       include: { user: { select: { username: true } } },
     });
     const first = rows[0];
@@ -136,7 +143,11 @@ export class SearchHistory implements OnModuleInit {
   }
 
   async get(id: string) {
-    const row = await this.prisma.search.findUnique({ where: { id }, include: { user: { select: { username: true } } } });
+    const row = await this.prisma.search.findUnique({
+      where: { id },
+      omit: { flights: true },
+      include: { user: { select: { username: true } } },
+    });
     if (!row) throw new NotFoundException("Busca não encontrada no histórico.");
     const { user, userId: _userId, requestKey: _key, groupArgs: _args, request, result, ...rest } = row;
     return {
