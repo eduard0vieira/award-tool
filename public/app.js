@@ -278,6 +278,8 @@ function historyItemFrom(row) {
     user: row.user,
     status: row.status,
     timestamp: Date.parse(row.createdAt),
+    groupId: row.groupId,
+    groupLeg: row.groupLeg,
   };
 }
 
@@ -420,6 +422,11 @@ function repeatSearch(item) {
 // The server keeps each leg apart (A→B and B→A). Those pairs (same program,
 // opposite directions, up to 3h apart) show as one ⇄ entry, with the outbound's
 // direction and the time the return started.
+// The pair shows whatever still needs attention first.
+function pairStatus(a, b) {
+  return ["running", "queued", "partial", "done"].find((status) => a.status === status || b.status === status);
+}
+
 function groupForDisplay(history) {
   const PAIR_WINDOW_MS = 3 * 60 * 60 * 1000;
   const used = new Set();
@@ -429,11 +436,23 @@ function groupForDisplay(history) {
     if (used.has(i)) continue;
     const item = history[i];
 
+    // Legs that know their card pair exactly; the rest fall back to route and time.
+    if (item.groupId) {
+      const j = history.findIndex((other, k) => k > i && !used.has(k) && other.groupId === item.groupId);
+      if (j !== -1) {
+        used.add(j);
+        const outbound = item.groupLeg === 0 ? item : history[j];
+        display.push({ ...outbound, roundTrip: true, timestamp: item.timestamp, status: pairStatus(item, history[j]) });
+        continue;
+      }
+    }
+
     if (!item.roundTrip) {
       const j = history.findIndex(
         (other, k) =>
           k > i &&
           !used.has(k) &&
+          !(item.groupId && other.groupId) &&
           !other.roundTrip &&
           other.program === item.program &&
           other.origin === item.destination &&
@@ -590,8 +609,58 @@ function createHistoryItem(item) {
   repeatButton.innerHTML = ICONS.repeat;
   repeatButton.addEventListener("click", () => repeatSearch(item));
 
-  row.append(main, cabins, right, repeatButton);
+  // A fixed-width slot, so rows with and without "Abrir" keep the status column aligned.
+  const actions = document.createElement("div");
+  actions.className = "history-item-actions";
+  if (item.groupId && (item.status === "done" || item.status === "partial")) {
+    const openButton = document.createElement("button");
+    openButton.type = "button";
+    openButton.className = "action-button open-result-button";
+    openButton.textContent = "Abrir";
+    openButton.setAttribute("aria-label", `Abrir o resultado de ${spokenRoute}`);
+    openButton.addEventListener("click", () => openFromHistory(item, openButton));
+    actions.append(openButton);
+  }
+  actions.append(repeatButton);
+  row.append(main, cabins, right, actions);
   return row;
+}
+
+const TAB_BY_SOURCE = { tap: "tap", seatspy: "seatspy", aa: "aa", latam: "latam", smiles: "smiles", iberia: "iberia" };
+
+// Rebuilds the whole card from what the server saved: same dates, copy and alert
+// buttons, no new search and no credit spent.
+async function openFromHistory(item, button) {
+  clearNotice(historyNotice);
+  button.disabled = true;
+  try {
+    const response = await apiFetch(`/api/history/groups/${encodeURIComponent(item.groupId)}`);
+    const card = await response.json().catch(() => null);
+    if (!response.ok || !card) throw new Error(card?.error || "Não deu para abrir essa busca.");
+    if (!RESUME_BY_SOURCE[card.source] || card.args.length !== ARG_COUNT_BY_SOURCE[card.source]) {
+      throw new Error("Essa busca foi salva num formato que esta versão não sabe abrir.");
+    }
+    if (card.legs.every((leg) => !leg.result)) {
+      throw new Error("O resultado dessa busca não está mais guardado no servidor. Use o botão de repetir para buscar de novo.");
+    }
+    const tab = TAB_BY_SOURCE[card.source];
+    if (document.getElementById(`tab-${tab}`).disabled) throw new Error("A aba desse programa ainda não está disponível.");
+
+    const session = newSession(card.source, card.args);
+    session.viewing = { by: card.user, at: Date.parse(card.createdAt) };
+    for (const leg of card.legs) {
+      session.record.steps[leg.leg] = leg.result
+        ? { result: resultFromEvent(leg.result) }
+        : { error: leg.error || "Essa parte da busca não terminou." };
+    }
+    RESUME_BY_SOURCE[card.source](...card.args, session);
+    activateTab(tab);
+    panels[tab].querySelector(".search-job")?.scrollIntoView({ block: "start" });
+  } catch (err) {
+    showNotice(historyNotice, err.message);
+  } finally {
+    button.disabled = false;
+  }
 }
 
 const announcer = document.getElementById("announcer");
@@ -992,8 +1061,9 @@ function saveSearches(list) {
 }
 
 function persistSession(session) {
-  // Someone else's card: restoring it as ours would start its next leg from here.
-  if (session.spectating) return;
+  // Someone else's card, or one opened from the history: restoring it as ours
+  // would start its missing legs from here.
+  if (session.spectating || session.viewing) return;
   const list = loadSearches().filter((search) => search.id !== session.record.id);
   list.push(session.record);
   saveSearches(list);
@@ -1209,6 +1279,19 @@ function markSpectatorCard(card, session) {
   card.setMinimized(true);
 }
 
+function markHistoryCard(card, session) {
+  if (card.fromHistory) return;
+  card.fromHistory = true;
+  card.restored = true;
+  const { by, at } = session.viewing;
+  const owner = document.createElement("span");
+  owner.className = "job-owner";
+  const whose = !by ? "busca" : by === currentUser ? "sua busca" : `busca de ${by}`;
+  owner.textContent = `do histórico, ${whose} em ${formatDateTime(at)}`;
+  card.root.querySelector(".job-title").after(owner);
+  offerFreshSearch(card, session);
+}
+
 let historyRefresh = null;
 
 function refreshVisibleHistory() {
@@ -1272,6 +1355,19 @@ function openFeed(attempt = 0) {
   };
 }
 
+// The same shape whether the result just arrived or comes back from the history.
+function resultFromEvent(event) {
+  return {
+    result: event.legs || event.section || event.report,
+    spreadsheetUrl: event.spreadsheetUrl,
+    localFile: event.localFile,
+    partialNotice: event.partialNotice,
+    appliedCeilings: event.appliedCeilings,
+    confirmation: event.confirmation,
+    stoppedByUser: event.stoppedByUser,
+  };
+}
+
 const RECONNECT_MS = 3000;
 const SEARCH_NOT_STARTED_MESSAGE =
   "O servidor não respondeu e a busca não começou. Se ele estiver atualizando, tente de novo em alguns segundos.";
@@ -1286,6 +1382,7 @@ function runOnServer(card, body, progressLabel, session) {
     // When resuming, a known step is reused; once the saved steps run out, the
     // search simply carries on from where it stopped.
     if (session?.spectating) markSpectatorCard(card, session);
+    if (session?.viewing) markHistoryCard(card, session);
     let step = session?.record.steps[session.index];
     if (session) session.index++;
     if (!step && session?.spectating) {
@@ -1300,6 +1397,12 @@ function runOnServer(card, body, progressLabel, session) {
     // Set before any early exit: Remove must know which record to delete, and a
     // restored search leaves right below.
     if (session) card.root.dataset.searchId = session.record.id;
+
+    // A card opened from the history only shows what was saved; it never searches.
+    if (session?.viewing && !step?.result) {
+      reject(new Error(step?.error || "Essa parte da busca não ficou salva no histórico."));
+      return;
+    }
 
     if (step?.result) {
       card.restored = true;
@@ -1396,15 +1499,7 @@ function runOnServer(card, body, progressLabel, session) {
           removeQuestion(card);
           // Otherwise the label stays frozen on the last "Buscando…" after the search ends.
           card.progressLabelEl.textContent = "";
-          const result = {
-            result: event.legs || event.section || event.report,
-            spreadsheetUrl: event.spreadsheetUrl,
-            localFile: event.localFile,
-            partialNotice: event.partialNotice,
-            appliedCeilings: event.appliedCeilings,
-            confirmation: event.confirmation,
-            stoppedByUser: event.stoppedByUser,
-          };
+          const result = resultFromEvent(event);
           keepResult(result);
           resolve(result);
         } else if (event.type === "error") {

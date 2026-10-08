@@ -1623,8 +1623,16 @@ input[type="number"] {
 
 /* Fixed widths keep the status column aligned whatever "há 1 min" or "há 20 min" says. */
 .history-item-relative {
-  min-width: 64px;
+  min-width: 84px;
   text-align: right;
+}
+
+.history-item-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--e2);
+  min-width: 96px;
 }
 
 @media (max-width: 560px) {
