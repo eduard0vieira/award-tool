@@ -923,15 +923,22 @@ function saveSearches(list) {
 }
 
 function persistSession(session) {
+  // Someone else's card: restoring it as ours would start its next leg from here.
+  if (session.spectating) return;
   const list = loadSearches().filter((search) => search.id !== session.record.id);
   list.push(session.record);
   saveSearches(list);
 }
 
+// Read before anything restores them, so the feed never shows this browser's own cards back as someone else's.
+const ownGroupIds = new Set(loadSearches().map((search) => search.id));
+
 // `args` must be serializable: it is what rebuilds the search later.
 function newSession(source, args) {
+  const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  ownGroupIds.add(id);
   return {
-    record: { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, source, args, steps: [], createdAt: Date.now() },
+    record: { id, source, args, steps: [], createdAt: Date.now() },
     resuming: false,
     index: 0,
   };
@@ -999,6 +1006,14 @@ function showQuestion(card, jobId, { id, message }) {
   text.className = "question-text";
   text.textContent = message;
 
+  // Answering someone else's question is deciding their search for them.
+  if (card.spectator) {
+    text.textContent = `${message}\n\nQuem fez a busca é quem responde.`;
+    box.append(text);
+    card.root.querySelector(".job-header").after(box);
+    return;
+  }
+
   const actions = document.createElement("div");
   actions.className = "question-actions";
 
@@ -1061,6 +1076,78 @@ function offerFreshSearch(card, session) {
   card.noticeEl.after(button);
 }
 
+// Someone else's search, followed live: it never sends a search of its own.
+// Its legs come from the feed, and only whoever searched can stop it or answer.
+const spectatedGroups = new Map();
+// The originator's browser starts the next leg as soon as the previous one ends.
+const SHARED_LEG_WAIT_MS = 2 * 60 * 1000;
+// The session goes in right after these arguments; a different count would put it in the wrong one.
+const ARG_COUNT_BY_SOURCE = { tap: 4, seatspy: 5, smiles: 5, aa: 7, latam: 4, iberia: 7 };
+
+function followSharedGroup(group, fromSnapshot) {
+  if (ownGroupIds.has(group.id)) return;
+  const known = spectatedGroups.get(group.id);
+  if (known) {
+    addSharedLegs(known, group.legs);
+    return;
+  }
+  if (!RESUME_BY_SOURCE[group.source] || group.args.length !== ARG_COUNT_BY_SOURCE[group.source]) return;
+  const session = {
+    record: { id: group.id, source: group.source, args: group.args, steps: [], createdAt: Date.now() },
+    resuming: true,
+    index: 0,
+    spectating: { by: group.by, fromSnapshot, waiters: new Map() },
+  };
+  spectatedGroups.set(group.id, session);
+  addSharedLegs(session, group.legs);
+  RESUME_BY_SOURCE[group.source](...group.args, session);
+}
+
+function addSharedLegs(session, legs) {
+  legs.forEach((jobId, leg) => {
+    if (!jobId || session.record.steps[leg]) return;
+    session.record.steps[leg] = { jobId };
+    session.spectating.waiters.get(leg)?.(jobId);
+    session.spectating.waiters.delete(leg);
+  });
+}
+
+function nextSharedLeg(session, leg) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      session.spectating.waiters.delete(leg);
+      reject(new Error("A próxima perna dessa busca não começou. Quem buscou pode ter fechado a página; confira no Histórico."));
+    }, SHARED_LEG_WAIT_MS);
+    session.spectating.waiters.set(leg, (jobId) => {
+      clearTimeout(timer);
+      resolve(jobId);
+    });
+  });
+}
+
+function markSpectatorCard(card, session) {
+  if (card.spectator) return;
+  card.spectator = true;
+  card.sharedJob = true;
+  card.stopButton.hidden = true;
+  // A page opened mid-search would otherwise read out every colleague's search as it ends.
+  card.restored = session.spectating.fromSnapshot;
+  const { by } = session.spectating;
+  const owner = document.createElement("span");
+  owner.className = "job-owner";
+  owner.textContent = by ? `por ${by === currentUser ? "você, em outra tela" : by}` : "de outra tela";
+  card.root.querySelector(".job-title").after(owner);
+  card.setMinimized(true);
+}
+
+function openFeed() {
+  const feed = new EventSource("/api/feed");
+  feed.onmessage = (message) => {
+    const event = JSON.parse(message.data);
+    if (event.type === "group") followSharedGroup(event.group, event.snapshot === true);
+  };
+}
+
 function runOnServer(card, body, progressLabel, session) {
   return new Promise(async (resolve, reject) => {
     card.progressLabelEl.textContent = progressLabel;
@@ -1070,8 +1157,17 @@ function runOnServer(card, body, progressLabel, session) {
 
     // When resuming, a known step is reused; once the saved steps run out, the
     // search simply carries on from where it stopped.
-    const step = session?.record.steps[session.index];
+    if (session?.spectating) markSpectatorCard(card, session);
+    let step = session?.record.steps[session.index];
     if (session) session.index++;
+    if (!step && session?.spectating) {
+      try {
+        step = { jobId: await nextSharedLeg(session, session.index - 1) };
+      } catch (err) {
+        reject(err);
+        return;
+      }
+    }
 
     // Set before any early exit: Remove must know which record to delete, and a
     // restored search leaves right below.
@@ -1103,7 +1199,12 @@ function runOnServer(card, body, progressLabel, session) {
           headers: { "Content-Type": "application/json" },
           // A recent identical search comes back instead of a new one, unless
           // this is the "Buscar de novo" of such a result.
-          body: JSON.stringify({ ...body, reuseRecent: !session?.forceFresh }),
+          // `group` lets the others follow this card live (see followSharedGroup).
+          body: JSON.stringify({
+            ...body,
+            reuseRecent: !session?.forceFresh,
+            ...(session && { group: { id: session.record.id, leg: session.index - 1, args: session.record.args } }),
+          }),
         });
       } catch {
         reject(new Error("Não foi possível conectar ao servidor."));
@@ -1606,9 +1707,9 @@ async function startTapSearch(origin, destination, roundTrip, ceilings, session)
     }
 
     card.setStatus("Pronto", "status-done");
-    card.resultEl.hidden = false;
+    card.resultEl.hidden = card.minimized;
     card.hasSubtabs = true;
-    card.subtabsEl.hidden = false;
+    card.subtabsEl.hidden = card.minimized;
     showPartialNotices(card, partialNotices);
     updateCardActions(card);
     showAlertButtons(card, "tap", origin, destination, [
@@ -1653,7 +1754,7 @@ async function startSeatspySearch(program, origin, destination, roundTrip, showS
     }
 
     card.setStatus("Pronto", "status-done");
-    card.resultEl.hidden = false;
+    card.resultEl.hidden = card.minimized;
     // No Upgrade tab: the upgrade is a TAP product; on SeatSpy's programs it
     // promised a move those airlines do not offer.
     updateCardActions(card);
@@ -1731,7 +1832,7 @@ async function startSmilesSearch(origin, destination, ceilings, roundTrip, perio
     }
 
     card.setStatus("Pronto", "status-done");
-    card.resultEl.hidden = false;
+    card.resultEl.hidden = card.minimized;
     showPartialNotices(card, partialNotices);
     updateCardActions(card);
     showSpreadsheetLink(card, outbound.spreadsheetUrl, roundTrip ? "ida" : "busca");
@@ -2019,7 +2120,7 @@ async function startAaSearch(origin, destination, cabin, maxStops, ceiling, roun
     }
 
     card.setStatus("Pronto", "status-done");
-    card.resultEl.hidden = false;
+    card.resultEl.hidden = card.minimized;
     showPartialNotices(card, partialNotices);
     updateCardActions(card);
     // Before the alert bar: both go right under the header, and the last one in stays on top.
@@ -2198,7 +2299,7 @@ async function startLatamSearch(origin, destination, ceilings, confirmMiles, ses
     showLatamAlertButton(card, origin, destination, legs, confirmation);
 
     card.setStatus("Pronto", "status-done");
-    card.resultEl.hidden = false;
+    card.resultEl.hidden = card.minimized;
     if (partialNotice) showPartialNotices(card, [partialNotice]);
     updateCardActions(card);
   } catch (err) {
@@ -2345,7 +2446,7 @@ async function startIberiaSearch(origin, destination, ceilingAvios, roundTrip, d
     }
 
     card.setStatus("Pronto", "status-done");
-    card.resultEl.hidden = false;
+    card.resultEl.hidden = card.minimized;
     showPartialNotices(card, partialNotices);
     updateCardActions(card);
     // Without this the per-flight sheet was created and the card said nothing:
@@ -2549,3 +2650,4 @@ seatspyForm.addEventListener("submit", async (event) => {
 const tabFromUrl = location.hash.slice(1);
 if (Object.hasOwn(panels, tabFromUrl)) activateTab(tabFromUrl);
 restoreSearches();
+openFeed();
