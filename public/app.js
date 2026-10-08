@@ -1140,11 +1140,20 @@ function markSpectatorCard(card, session) {
   card.setMinimized(true);
 }
 
+let historyRefresh = null;
+
+function refreshVisibleHistory() {
+  if (panels.history.hidden) return;
+  clearTimeout(historyRefresh);
+  historyRefresh = setTimeout(renderHistory, 500);
+}
+
 function openFeed() {
   const feed = new EventSource("/api/feed");
   feed.onmessage = (message) => {
     const event = JSON.parse(message.data);
     if (event.type === "group") followSharedGroup(event.group, event.snapshot === true);
+    else if (event.type === "history") refreshVisibleHistory();
   };
 }
 
