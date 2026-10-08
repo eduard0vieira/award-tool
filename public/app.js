@@ -143,7 +143,6 @@ const seatspyForm = document.getElementById("seatspy-search-form");
 const seatspyProgramSelect = document.getElementById("seatspy-program");
 const seatspyOriginInput = document.getElementById("seatspy-origin");
 const seatspyDestinationInput = document.getElementById("seatspy-destination");
-const seatspyShowSeatsCheckbox = document.getElementById("seatspy-show-seats");
 const seatspyRoundTripCheckbox = document.getElementById("seatspy-round-trip");
 const seatspyEconomyCeilingInput = document.getElementById("seatspy-ceiling-economy");
 const seatspyPremiumCeilingInput = document.getElementById("seatspy-ceiling-premium");
@@ -922,6 +921,11 @@ const excludedDates = new WeakMap();
 const editedSeats = new WeakMap();
 const MAX_EDITED_SEATS = 9;
 
+// Also keyed by `days`. SeatSpy always searches with seats and the card takes
+// them out on screen: toggling them used to repeat the search, and SeatSpy
+// answers a repeat minutes later with nothing.
+const seatsHidden = new WeakSet();
+
 function svgIcon(paths, { filled = false } = {}) {
   const paint = filled ? 'fill="currentColor" stroke="none"' : 'fill="none" stroke="currentColor"';
   return (
@@ -1011,19 +1015,25 @@ function canEditDates(section) {
   return daysText(section.days) === section.text;
 }
 
-// What the alert and the copy buttons use: the section minus the days taken out
-// on screen. With nothing taken out it is the server's object, text untouched.
+function shownDays(section) {
+  return seatsHidden.has(section.days) ? section.days.map(({ seats: _seats, ...day }) => day) : section.days;
+}
+
 function seatsEditedIn(section) {
   return (section && editedSeats.get(section.days)) || new Map();
 }
 
+// What the alert and the copy buttons use: the section minus the days taken out
+// on screen, with the seats typed in the editor, or none when the card hides
+// them. With nothing changed it is the server's object, text untouched.
 function keptSection(section) {
   const excluded = excludedOf(section);
   const seats = seatsEditedIn(section);
-  if (excluded.size === 0 && seats.size === 0) return section;
-  const days = section.days
+  const hidden = Boolean(section && seatsHidden.has(section.days));
+  if (excluded.size === 0 && seats.size === 0 && !hidden) return section;
+  const days = shownDays(section)
     .filter((day) => !excluded.has(day.date))
-    .map((day) => (seats.has(day.date) ? { ...day, seats: seats.get(day.date) } : day));
+    .map((day) => (!hidden && seats.has(day.date) ? { ...day, seats: seats.get(day.date) } : day));
   const values = days.map((day) => day.valueK).filter((value) => value != null);
   return {
     ...section,
@@ -1809,9 +1819,13 @@ function renderColumn(columnEl, section, colorClass) {
     }
     const excluded = new Set(section.days.map((day) => day.date).filter((date) => !parsed.kept.has(date)));
     excludedDates.set(section.days, excluded);
+    // With seats hidden the text carries none, so the ones edited before stay.
+    const hidden = seatsHidden.has(section.days);
+    const previous = seatsEditedIn(section);
     const seats = new Map();
     for (const day of section.days) {
-      const typed = parsed.kept.get(day.date);
+      if (!parsed.kept.has(day.date)) continue;
+      const typed = hidden ? previous.get(day.date) : parsed.kept.get(day.date);
       if (typed != null && typed !== day.seats) seats.set(day.date, typed);
     }
     editedSeats.set(section.days, seats);
@@ -1830,7 +1844,7 @@ function renderColumn(columnEl, section, colorClass) {
   editor.querySelector(".dates-editor-apply").onclick = apply;
   editor.querySelector(".dates-editor-cancel").onclick = () => setEditing(false);
   editor.querySelector(".dates-editor-restore").onclick = () => {
-    textArea.value = section.text;
+    textArea.value = daysText(shownDays(section));
     setError("");
   };
   textArea.onkeydown = (event) => {
@@ -1845,7 +1859,7 @@ function renderColumn(columnEl, section, colorClass) {
 // null when written without them (the search's count stays).
 function parseKeptDates(text, section) {
   const datesByMonth = new Map(
-    groupByMonth(section.days).map((group) => [group.title, new Map(group.items.map((day) => [day.date.split("-")[2], day]))]),
+    groupByMonth(shownDays(section)).map((group) => [group.title, new Map(group.items.map((day) => [day.date.split("-")[2], day]))]),
   );
   const kept = new Map();
   for (const rawLine of text.split("\n")) {
@@ -2084,11 +2098,34 @@ async function startSeatspySearch(program, origin, destination, roundTrip, showS
       { cabinClass: "Executiva", outbound: sectionOf(legs[0], "Executiva"), inbound: sectionOf(legs[1], "Executiva") },
       { cabinClass: "Primeira Classe", outbound: sectionOf(legs[0], "Primeira Classe"), inbound: sectionOf(legs[1], "Primeira Classe") },
     ]);
+    addSeatsToggle(card, legs.flatMap((leg) => leg.sections));
   } catch (err) {
     showFailure(card, err);
   } finally {
     card.progressEl.hidden = true;
   }
+}
+
+function addSeatsToggle(card, sections) {
+  const bar = card.root.querySelector(":scope > .alert-actions");
+  if (!bar || !sections.some((section) => section.days?.some((day) => day.seats > 0))) return;
+
+  const label = document.createElement("label");
+  label.className = "checkbox seats-toggle";
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.checked = true;
+  label.append(input, "Mostrar assentos");
+  bar.appendChild(label);
+
+  input.addEventListener("change", () => {
+    for (const section of sections) {
+      if (input.checked) seatsHidden.delete(section.days);
+      else seatsHidden.add(section.days);
+    }
+    card.root.classList.toggle("hide-seats", !input.checked);
+    card.root.dispatchEvent(new CustomEvent("alert-dates-changed"));
+  });
 }
 
 // Google Sheets may be down or unconfigured; the local CSV always exists when
@@ -3408,7 +3445,7 @@ seatspyForm.addEventListener("submit", async (event) => {
     origin,
     destination,
     roundTrip,
-    startSeatspySearch(program, origin, destination, roundTrip, seatspyShowSeatsCheckbox.checked),
+    startSeatspySearch(program, origin, destination, roundTrip, true),
   );
 });
 

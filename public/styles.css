@@ -1259,6 +1259,15 @@ input[type="number"] {
   text-underline-offset: 2px;
 }
 
+.hide-seats .date-chip-seats {
+  display: none;
+}
+
+.seats-toggle {
+  margin-left: auto;
+  font-size: var(--text-sm);
+}
+
 /* A day with a booking link: underlined like any link, so it never needs hover to
    be found. */
 .date-chip-link {
