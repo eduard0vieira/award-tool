@@ -18,19 +18,75 @@ const whoAmI = apiFetch("/api/me")
   })
   .catch((err) => console.error("Não foi possível saber quem está logado:", err));
 
-document.getElementById("logout-button").addEventListener("click", async () => {
+document.getElementById("logout-button").addEventListener("click", async function logout() {
+  let body;
   try {
     const response = await fetch("/api/logout", { method: "POST" });
     if (response.ok) {
       location.href = "/login";
       return;
     }
-    alert("Não foi possível sair. Tente de novo.");
+    body = `O servidor respondeu ${response.status}.`;
   } catch (err) {
     console.error("Falha ao sair:", err);
-    alert("Não foi possível conectar ao servidor para sair. Confira a conexão e tente de novo.");
+    body = "O servidor não respondeu. Confira a conexão.";
+  }
+  if (await askUser({ title: "Você continua conectado", body, confirmLabel: "Tentar sair de novo", cancelLabel: "Fechar" })) {
+    logout();
   }
 });
+
+const confirmDialog = document.getElementById("confirm-dialog");
+const confirmDialogTitle = confirmDialog.querySelector(".confirm-dialog-title");
+const confirmDialogRoutes = confirmDialog.querySelector(".confirm-dialog-routes");
+const confirmDialogBody = confirmDialog.querySelector(".confirm-dialog-body");
+const confirmDialogCancel = confirmDialog.querySelector(".confirm-dialog-cancel");
+const confirmDialogConfirm = confirmDialog.querySelector(".confirm-dialog-confirm");
+let dialogQueue = Promise.resolve();
+
+confirmDialogCancel.addEventListener("click", () => confirmDialog.close("cancel"));
+// A click on the dimmed backdrop lands on the dialog element itself, outside its form.
+confirmDialog.addEventListener("click", (event) => {
+  if (event.target === confirmDialog) confirmDialog.close("cancel");
+});
+
+// `routes`: [{ origin, destination, roundTrip, lines: [text, ...] }], each drawn as the card's route sign.
+function askUser({ title, routes = [], body, confirmLabel, cancelLabel = "Cancelar" }) {
+  const shown = dialogQueue.then(
+    () =>
+      new Promise((resolve) => {
+        confirmDialogTitle.textContent = title;
+        confirmDialogRoutes.replaceChildren(...routes.map(dialogRouteItem));
+        confirmDialogRoutes.hidden = routes.length === 0;
+        confirmDialogBody.textContent = body;
+        confirmDialogCancel.textContent = cancelLabel;
+        confirmDialogConfirm.textContent = confirmLabel;
+        confirmDialog.returnValue = "";
+        confirmDialog.addEventListener("close", () => resolve(confirmDialog.returnValue === "confirm"), { once: true });
+        confirmDialog.showModal();
+      }),
+  );
+  dialogQueue = shown;
+  return shown;
+}
+
+function dialogRouteItem({ origin, destination, roundTrip, lines }) {
+  const item = document.createElement("li");
+  item.className = "confirm-dialog-route";
+  const sign = document.createElement("span");
+  sign.className = "confirm-dialog-sign";
+  appendRoute(sign, origin, destination, roundTrip);
+  const facts = document.createElement("span");
+  facts.className = "confirm-dialog-facts";
+  for (const [index, text] of lines.entries()) {
+    const line = document.createElement("span");
+    line.className = index === 0 ? "confirm-dialog-fact-lead" : "confirm-dialog-fact";
+    line.textContent = text;
+    facts.append(line);
+  }
+  item.append(sign, facts);
+  return item;
+}
 
 const tapForm = document.getElementById("tap-search-form");
 const tapOriginInput = document.getElementById("tap-origin");
@@ -2346,29 +2402,51 @@ function trackRunning(program, origin, destination, roundTrip, search) {
 // The paid sources have a query limit, so a route anyone searched recently asks
 // before searching again. It reads the shared history, not just this browser's.
 async function repeatWarning(program, origin, destination, roundTrip) {
+  const quota = program === "tap" ? "do AwardTool" : "do SeatSpy";
+  const spends = `Buscar de novo gasta outra consulta ${quota}.`;
   let history;
   try {
     history = await loadHistory();
   } catch (err) {
-    return confirm(`${err.message} Não deu para conferir se esse trecho já foi buscado. Buscar mesmo assim?`);
+    return askUser({
+      title: "Não deu para conferir o histórico",
+      body: `${err.message} Se alguém já buscou esse trecho, essa busca gasta outra consulta ${quota}.`,
+      confirmLabel: "Buscar mesmo assim",
+    });
   }
+
+  const routes = [];
+  let running = false;
   for (const [from, to] of searchRoutes(origin, destination, roundTrip)) {
     if (runningSearches.has(`${program}|${from}|${to}`)) {
-      if (!confirm(`A busca ${from} → ${to} ainda está em andamento. Buscar de novo mesmo assim?`)) return false;
+      running = true;
+      routes.push({ origin: from, destination: to, lines: ["Você está buscando agora"] });
       continue;
     }
     const previous = latestSearchOf(history, from, to, program);
-    if (previous && Date.now() - previous.timestamp < TOLERANCE_MS) {
-      const who = whoSearched(previous);
-      const subject = !who || who === "você" ? "Você já buscou" : `${who} já buscou`;
-      const confirmed = confirm(
-        `${subject} ${from} → ${to} ${formatRelativeTime(previous.timestamp)} ` +
-          `(${formatDateTime(previous.timestamp)}), há menos de ${TOLERANCE_DAYS} dias. Buscar de novo mesmo assim?`,
-      );
-      if (!confirmed) return false;
-    }
+    if (!previous || Date.now() - previous.timestamp >= TOLERANCE_MS) continue;
+    // A round trip found twice is one search: one sign with both directions.
+    if (previous.roundTrip && routes.some((route) => route.previous === previous)) continue;
+    const who = whoSearched(previous) || "Alguém";
+    routes.push({
+      origin: previous.roundTrip ? previous.origin : from,
+      destination: previous.roundTrip ? previous.destination : to,
+      roundTrip: previous.roundTrip,
+      previous,
+      lines: [
+        `${who.charAt(0).toUpperCase()}${who.slice(1)} buscou ${formatRelativeTime(previous.timestamp)}`,
+        formatDateTime(previous.timestamp),
+      ],
+    });
   }
-  return true;
+  if (routes.length === 0) return true;
+
+  return askUser({
+    title: running ? "Essa busca ainda está rodando" : routes.length > 1 ? "Esses trechos já foram buscados" : "Esse trecho já foi buscado",
+    routes,
+    body: running ? spends : `A última busca tem menos de ${TOLERANCE_DAYS} dias. ${spends}`,
+    confirmLabel: "Buscar de novo",
+  });
 }
 
 tapForm.addEventListener("submit", async (event) => {
