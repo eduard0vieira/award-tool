@@ -1,0 +1,24 @@
+{
+  "AF_GRU_destinations": [
+    {
+      "key": "326",
+      "iata": "CDG",
+      "iatas": "PAR",
+      "title": "Charles De Gaulle"
+    }
+  ],
+  "IB_GRU_destinations": [
+    {
+      "key": "317",
+      "iata": "MAD",
+      "iatas": "",
+      "title": "Madrid"
+    }
+  ],
+  "AF_GRU_origin": {
+    "key": "476",
+    "iata": "GRU",
+    "iatas": "SAO",
+    "title": "Guarulhos"
+  }
+}

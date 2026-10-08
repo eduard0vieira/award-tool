@@ -21,6 +21,7 @@ the 406 in `docs/CONTEXT.md`).
 | `iberia-real-plus1.json`, `iberia-real-plus30.json` | Iberia, the same route 1 and 30 days later | `npm run recon:iberia` (logged-in session) |
 | `iberia-monthly-0.json` | Iberia, monthly calendar | saved by hand from a real response |
 | `latam-redemption-options-real.json` | LATAM, the 4 miles+cash combinations of a round-trip pair | `npm run recon:latam GRU JNB <outbound> <return>` (logged-in session) |
+| `seatspy-route-options.json` | SeatSpy, not an API response: the airport options of the search form as the scraper reads them (`key`, `iata`, `iatas`, `title`), after picking the airline and GRU | `npx tsx scripts/recon-seatspy-routes.ts AF GRU MAD` and `IB GRU MAD` (logged-in session, no credit spent) |
 
 ## Rule before committing a new fixture
 

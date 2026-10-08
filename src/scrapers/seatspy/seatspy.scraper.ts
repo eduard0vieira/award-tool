@@ -88,10 +88,12 @@ export async function startSeatspySession(headless = false): Promise<SeatspySess
 // Options load asynchronously, hence the waits.
 type TomSelectElement = HTMLSelectElement & {
   tomselect?: {
-    options: Record<string, { iata?: string; iatas?: string }>;
+    options: Record<string, { iata?: string; iatas?: string; title?: string }>;
     setValue: (value: string) => void;
   };
 };
+
+export type AirportOption = { key: string; iata?: string | undefined; iatas?: string | undefined; title?: string | undefined };
 
 async function selectAirline(page: Page, airline: SeatspyAirline) {
   await page.waitForFunction(
@@ -105,23 +107,41 @@ async function selectAirline(page: Page, airline: SeatspyAirline) {
   );
 }
 
-// Airports are keyed by an internal id; the IATA code lives in each option's "iata"/"iatas".
-async function selectAirport(page: Page, fieldId: "outbound" | "inbound", iata: string) {
-  const keyHandle = await page.waitForFunction(
-    ({ fieldId, iata }) => {
-      const select = document.querySelector(`#${fieldId}`) as TomSelectElement | null;
-      if (!select?.tomselect) return null;
-      const match = Object.entries(select.tomselect.options).find(
-        ([, option]) =>
-          option.iata === iata || (typeof option.iatas === "string" && option.iatas.split(/[\s,]+/).includes(iata)),
-      );
-      return match ? match[0] : null;
-    },
-    { fieldId, iata },
-    { timeout: 30000 },
-  );
-  const key = (await keyHandle.jsonValue()) as string;
+// The form only lists what the chosen airline flies: the origins it serves and,
+// once the origin is picked, its destinations from there. Each pick rebuilds the
+// next list synchronously (measured with scripts/recon-seatspy-routes.ts), so a
+// missing airport means a route SeatSpy does not have, found before any credit.
+async function airportOptions(page: Page, fieldId: "outbound" | "inbound"): Promise<AirportOption[]> {
+  return page.evaluate((id) => {
+    const select = document.querySelector(`#${id}`) as TomSelectElement | null;
+    if (!select?.tomselect) throw new Error(`O campo #${id} do formulário do SeatSpy não carregou.`);
+    return Object.entries(select.tomselect.options).map(([key, option]) => ({
+      key,
+      iata: option.iata,
+      iatas: option.iatas,
+      title: option.title,
+    }));
+  }, fieldId);
+}
 
+// Airports are keyed by an internal id; the IATA code lives in "iata", and a
+// city code (SAO, PAR) in "iatas".
+export function findAirport(options: AirportOption[], iata: string): AirportOption | null {
+  return options.find((option) => option.iata === iata || (option.iatas ?? "").split(/[\s,]+/).includes(iata)) ?? null;
+}
+
+export function routeNotFoundMessage(airlineName: string, origin: string, destination: string, destinations: AirportOption[]): string {
+  const known = destinations.map((option) => (option.title ? `${option.iata} (${option.title})` : option.iata)).filter(Boolean);
+  const shown = known.slice(0, 12).join(", ");
+  const more = known.length > 12 ? ` e mais ${known.length - 12}` : "";
+  return (
+    `A ${airlineName} não voa ${origin} → ${destination} no SeatSpy. ` +
+    (known.length > 0 ? `De ${origin}, ela voa para: ${shown}${more}. ` : "") +
+    "A busca não foi feita e nenhum crédito foi gasto."
+  );
+}
+
+async function selectAirport(page: Page, fieldId: "outbound" | "inbound", key: string) {
   await page.evaluate(
     ({ fieldId, key }) => (document.querySelector(`#${fieldId}`) as TomSelectElement).tomselect!.setValue(key),
     { fieldId, key },
@@ -288,9 +308,17 @@ export async function searchSeatspy(
   page.on("response", onResponse);
 
   try {
+    const airlineName = AIRLINE_NAMES[params.airline];
     await selectAirline(page, params.airline);
-    await selectAirport(page, "outbound", origin);
-    await selectAirport(page, "inbound", destination);
+    const originOption = findAirport(await airportOptions(page, "outbound"), origin);
+    if (!originOption) {
+      throw new Error(`A ${airlineName} não tem voos saindo de ${origin} no SeatSpy. A busca não foi feita e nenhum crédito foi gasto.`);
+    }
+    await selectAirport(page, "outbound", originOption.key);
+    const destinations = await airportOptions(page, "inbound");
+    const destinationOption = findAirport(destinations, destination);
+    if (!destinationOption) throw new Error(routeNotFoundMessage(airlineName, origin, destination, destinations));
+    await selectAirport(page, "inbound", destinationOption.key);
 
     // Radios and buttons have the same viewport problem: click through JS.
     await page.evaluate((roundTrip) => {
@@ -312,7 +340,6 @@ export async function searchSeatspy(
       onProgress(Math.min(0.15 + (byDirection.size + emptyDirections.size) * 0.4, 0.95));
     }
 
-    const airlineName = AIRLINE_NAMES[params.airline];
     if (emptyDirections.has("outbound")) {
       throw new Error(
         `Nenhuma disponibilidade encontrada para ${origin} → ${destination}. É possível que a ${airlineName} não opere esse trecho.`,
