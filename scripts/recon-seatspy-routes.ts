@@ -1,6 +1,7 @@
 // Answers "does SeatSpy know this route before searching?" without spending a
 // credit: logs in, fills the form like the scraper and never clicks search.
 // Usage: npx tsx scripts/recon-seatspy-routes.ts AF GRU MAD [outDir]
+// ROUTE_MAP=1 also saves every origin the airline offers, with its destinations.
 import fs from "node:fs";
 import path from "node:path";
 import { startSeatspySession } from "../src/scrapers/seatspy/seatspy.scraper.ts";
@@ -38,6 +39,16 @@ try {
   await page.evaluate((code) => (document.querySelector("#airline") as TomSelectElement).tomselect!.setValue(code), airline);
   await settle();
   const outboundOptions = await options("outbound");
+  if (process.env.ROUTE_MAP) {
+    const map = await page.evaluate(() => {
+      const select = document.querySelector("#outbound") as TomSelectElement;
+      return Object.entries(select.tomselect!.options).map(([key, option]) => {
+        const { $div: _div, $option: _option, ...plain } = option as Record<string, unknown>;
+        return [key, plain];
+      });
+    });
+    fs.writeFileSync(path.join(outDir, `seatspy-route-map-${airline}.json`), JSON.stringify(map, null, 2));
+  }
   const originEntry = outboundOptions?.find(([, option]) => option.iata === origin || String(option.iatas ?? "").split(/[\s,]+/).includes(origin));
 
   let afterOrigin = null;
