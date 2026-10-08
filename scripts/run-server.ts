@@ -105,6 +105,7 @@ async function checkForUpdate() {
   }
 
   const lockBefore = blobAtHead("package-lock.json");
+  const schemaBefore = blobAtHead("prisma/schema.prisma");
   const supervisorBefore = blobAtHead("scripts/run-server.ts");
   try {
     git("merge", "--ff-only", "--quiet", `origin/${BRANCH}`);
@@ -121,6 +122,15 @@ async function checkForUpdate() {
       execFileSync("npm", ["ci"], { cwd: ROOT_DIR, stdio: "inherit", shell: isWindows });
     } catch (err) {
       log(`npm ci falhou: ${errorMessage(err)}. Subindo o servidor mesmo assim.`);
+    }
+  } else if (blobAtHead("prisma/schema.prisma") !== schemaBefore) {
+    // npm ci's postinstall already regenerates the client. Without it, a schema
+    // change left the old client in place and every search failed on create.
+    log("O schema do banco mudou. Rodando prisma generate.");
+    try {
+      execFileSync("npx", ["prisma", "generate"], { cwd: ROOT_DIR, stdio: "inherit", shell: isWindows });
+    } catch (err) {
+      log(`prisma generate falhou: ${errorMessage(err)}. Subindo o servidor mesmo assim.`);
     }
   }
   if (blobAtHead("scripts/run-server.ts") !== supervisorBefore) {
