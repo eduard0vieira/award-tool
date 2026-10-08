@@ -4,6 +4,7 @@ import { PrismaService } from "../db/prisma.service.ts";
 import { CANCELLED } from "../jobs/job-runner.service.ts";
 import { JobStore } from "../jobs/job-store.service.ts";
 import type { JobEvent } from "../jobs/job.types.ts";
+import { SearchFeed } from "./search-feed.service.ts";
 
 export type NewSearch = {
   jobId: string;
@@ -38,6 +39,7 @@ export class SearchHistory implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jobs: JobStore,
+    private readonly feed: SearchFeed,
   ) {}
 
   async onModuleInit() {
@@ -57,6 +59,7 @@ export class SearchHistory implements OnModuleInit {
     await this.prisma.search.create({
       data: { ...fields, id: jobId, request: JSON.stringify(request), status: "queued" },
     });
+    this.feed.historyChanged();
     // Chained so the rows follow the job's order even when two updates are in
     // flight at once ("started" right before a fast "done").
     let pending = Promise.resolve();
@@ -66,7 +69,7 @@ export class SearchHistory implements OnModuleInit {
       pending = pending
         .then(() => this.prisma.search.update({ where: { id: search.jobId }, data: update }))
         .then(
-          () => {},
+          () => this.feed.historyChanged(),
           (err: unknown) =>
             console.error(
               `[${search.jobId}] não foi possível gravar "${update.status}" no histórico: ` +

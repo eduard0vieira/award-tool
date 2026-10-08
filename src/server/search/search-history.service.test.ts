@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 import { createTestDatabase } from "../db/test-database.ts";
 import type { PrismaService } from "../db/prisma.service.ts";
 import { JobStore } from "../jobs/job-store.service.ts";
+import { SearchFeed } from "./search-feed.service.ts";
 import { SearchHistory } from "./search-history.service.ts";
 
 const row = (id: string, status: string, createdAt = new Date()) => ({
@@ -24,7 +25,8 @@ describe("search history on startup", () => {
       await prisma.search.createMany({
         data: [row("running", "running"), row("queued", "queued"), row("old", "done", new Date("2020-01-01")), row("new", "done")],
       });
-      await new SearchHistory(prisma as unknown as PrismaService, new JobStore()).onModuleInit();
+      const jobs = new JobStore();
+      await new SearchHistory(prisma as unknown as PrismaService, jobs, new SearchFeed(jobs)).onModuleInit();
 
       const byId = new Map((await prisma.search.findMany()).map((r) => [r.id, r]));
       for (const id of ["running", "queued"]) {
