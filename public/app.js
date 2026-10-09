@@ -3145,7 +3145,7 @@ function smilesDateError(input) {
   const text = input.value.trim();
   if (!text) return null;
   const iso = parseTypedDate(text);
-  if (!iso) return "Data inválida. Use DD/MM/AAAA.";
+  if (!iso) return /^\d{2}\/\d{2}\/\d{4}$/.test(text) ? `${text} não existe no calendário.` : "Data inválida. Use DD/MM/AAAA.";
   const firstDay = localIsoDay(1);
   const lastDay = localIsoDay(SMILES_SALE_WINDOW_DAYS - 1);
   if (iso < firstDay) return `Use a partir de ${formatFullDate(firstDay)}.`;
@@ -3183,16 +3183,35 @@ function validateSmilesDates() {
   return null;
 }
 
-// Typing only digits fills in the slashes; deleting is left alone so the caret
-// never jumps while a date is being fixed. Errors wait for the field to be
-// left, so nothing turns red halfway through typing a date.
+// Builds DD/MM/AAAA from the typed digits and refuses a digit no day or month
+// can have: "5" as a day becomes "05", a "4" after "3" in the day is dropped,
+// and so is a "3" after "1" in the month. Impossible dates such as 31/02 are
+// caught once the date is complete.
+function maskTypedDate(text) {
+  const parts = ["", "", ""];
+  for (const digit of text.replace(/\D/g, "")) {
+    const [day, month] = parts;
+    if (day.length < 2) {
+      if (day === "" && digit > "3") parts[0] = `0${digit}`;
+      else if (!(day === "3" && digit > "1") && !(day === "0" && digit === "0")) parts[0] += digit;
+    } else if (month.length < 2) {
+      if (month === "" && digit > "1") parts[1] = `0${digit}`;
+      else if (!(month === "1" && digit > "2") && !(month === "0" && digit === "0")) parts[1] += digit;
+    } else if (parts[2].length < 4) {
+      parts[2] += digit;
+    }
+  }
+  return parts.filter(Boolean).join("/");
+}
+
+// Typing fills in the slashes; deleting is left alone so the caret never jumps
+// while a date is being fixed. A half-typed date is never marked wrong: the
+// check runs once all ten characters are in, or when the field is left.
 for (const input of [smilesFromInput, smilesUntilInput]) {
   input.addEventListener("input", (event) => {
-    if (event.inputType?.startsWith("insert")) {
-      const digits = input.value.replace(/\D/g, "").slice(0, 8);
-      input.value = [digits.slice(0, 2), digits.slice(2, 4), digits.slice(4)].filter(Boolean).join("/");
-    }
-    if (input.getAttribute("aria-invalid") === "true" && !smilesDateError(input)) setDateError(input, null);
+    if (event.inputType?.startsWith("insert")) input.value = maskTypedDate(input.value);
+    if (input.value.length === 10) validateSmilesDates();
+    else if (input.getAttribute("aria-invalid") === "true" && !smilesDateError(input)) setDateError(input, null);
   });
   input.addEventListener("blur", () => {
     if (input.value.trim()) validateSmilesDates();
