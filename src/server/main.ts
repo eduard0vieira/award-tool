@@ -5,12 +5,12 @@ import path from "node:path";
 import { NestFactory } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import { DATABASE_FILE, ROOT_DIR } from "../core/paths.ts";
-import { AppModule } from "./app.module.ts";
-import { parseSeedUsers, seedUsers } from "./auth/seed-users.ts";
 import { config } from "./config.ts";
-import { configureApp } from "./configure-app.ts";
 import { hasPendingMigrations } from "./db/pending-migrations.ts";
-import { PrismaService } from "./db/prisma.service.ts";
+
+function npx(args: string[]) {
+  execFileSync("npx", args, { cwd: ROOT_DIR, stdio: "inherit", shell: process.platform === "win32" });
+}
 
 // On every start, not in the supervisor: the notebook runs whichever supervisor
 // version it booted with, and an old one would start a server on a database
@@ -22,12 +22,19 @@ try {
   console.error("Não deu para conferir as migrações pendentes; rodando o prisma migrate deploy:", err);
 }
 if (migrationsPending) {
-  execFileSync("npx", ["prisma", "migrate", "deploy"], {
-    cwd: ROOT_DIR,
-    stdio: "inherit",
-    shell: process.platform === "win32",
-  });
+  // A migration comes with a schema change, and the generated client is not in
+  // git: a supervisor that only restarts the server left the old client in place
+  // and every search failed on the new column. Generating here, before the app
+  // is imported, takes that off whichever supervisor is running.
+  npx(["prisma", "generate"]);
+  npx(["prisma", "migrate", "deploy"]);
 }
+
+// Imported only now: they load the Prisma client the step above may have regenerated.
+const { AppModule } = await import("./app.module.ts");
+const { configureApp } = await import("./configure-app.ts");
+const { PrismaService } = await import("./db/prisma.service.ts");
+const { parseSeedUsers, seedUsers } = await import("./auth/seed-users.ts");
 
 const app = await NestFactory.create<NestExpressApplication>(AppModule);
 const prisma = app.get(PrismaService);
