@@ -1905,10 +1905,6 @@ input[type="number"] {
   gap: var(--e3);
 }
 
-.flight-filter-actions button[type="submit"] {
-  margin-left: 0;
-}
-
 .flight-filter-status {
   font-size: var(--text-sm);
   color: var(--ink-soft);

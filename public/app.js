@@ -2152,6 +2152,7 @@ const SMILES_FILTER_CABINS = [
   ["business", "Executiva"],
 ];
 let flightFilterCount = 0;
+const FILTER_TYPING_MS = 500;
 
 async function filterSmilesLeg(searchId, filter) {
   const response = await apiFetch(`/api/smiles/flights/${encodeURIComponent(searchId)}/filter`, {
@@ -2211,8 +2212,8 @@ function addFlightFilter(card, ctx) {
     </div>
     <p class="flight-filter-hint flight-filter-ceiling" hidden></p>
     <div class="flight-filter-actions">
-      <button type="submit">Aplicar filtro</button>
       <button type="button" class="action-button flight-filter-clear">Limpar</button>
+      <button type="button" class="action-button flight-filter-hide">Minimizar filtros</button>
       <span class="flight-filter-status" role="status"></span>
     </div>`;
   card.noticeEl.before(panel);
@@ -2254,11 +2255,23 @@ function addFlightFilter(card, ctx) {
     return results;
   };
 
+  // The cheapest cabin the airline flies on its own, so its chip says what it costs.
+  const startingPrice = (from) => {
+    const found = SMILES_FILTER_CABINS.find(([cabin]) => from[cabin] != null);
+    if (!found) return "";
+    const [cabin, label] = found;
+    return `, a partir de ${integerFormat.format(from[cabin])}${cabin === "economy" ? "" : ` na ${label}`}`;
+  };
+
+  // Rebuilt on every change (the starting prices follow the stops), keeping what was checked.
   const showCarriers = (results) => {
+    const checked = new Set(new FormData(panel).getAll("carrier"));
     const byCode = new Map();
     for (const option of results.flatMap((result) => result.carrierOptions)) {
       const known = byCode.get(option.code);
-      byCode.set(option.code, { ...option, flights: (known?.flights ?? 0) + option.flights });
+      const from = { ...known?.from };
+      for (const [cabin, miles] of Object.entries(option.from)) from[cabin] = Math.min(from[cabin] ?? miles, miles);
+      byCode.set(option.code, { ...option, from, flights: (known?.flights ?? 0) + option.flights });
     }
     options.replaceChildren(
       ...[...byCode.values()]
@@ -2270,10 +2283,11 @@ function addFlightFilter(card, ctx) {
           input.type = "checkbox";
           input.name = "carrier";
           input.value = option.code;
+          input.checked = checked.has(option.code);
           const code = document.createElement("strong");
           code.textContent = option.code;
           const name = document.createElement("span");
-          name.textContent = `${option.name} (${plural(option.flights, "voo", "voos")})`;
+          name.textContent = `${option.name} (${plural(option.flights, "voo", "voos")}${startingPrice(option.from)})`;
           label.append(input, code, name);
           return label;
         }),
@@ -2313,7 +2327,7 @@ function addFlightFilter(card, ctx) {
             button.append(value, count);
             button.addEventListener("click", () => {
               maxInput.value = String(miles / 1000);
-              maxInput.focus();
+              maxInput.dispatchEvent(new Event("change", { bubbles: true }));
             });
             return button;
           }),
@@ -2327,9 +2341,14 @@ function addFlightFilter(card, ctx) {
     }
   };
 
+  const setOpen = (open) => {
+    panel.hidden = !open;
+    toggle.setAttribute("aria-expanded", String(open));
+    toggle.textContent = open ? "Esconder filtros" : "Filtrar voos";
+  };
+
   toggle.addEventListener("click", async () => {
-    panel.hidden = !panel.hidden;
-    toggle.setAttribute("aria-expanded", String(!panel.hidden));
+    setOpen(panel.hidden);
     if (panel.hidden || card.flightFilterLoaded) return;
     card.flightFilterLoaded = true;
     try {
@@ -2344,28 +2363,54 @@ function addFlightFilter(card, ctx) {
     }
   });
 
+  // Applied on every change, so picking an airline at once shows its prices.
+  // Only the latest answer is drawn: an older one arriving late must not win.
+  let latest = 0;
   const apply = async (filter, appliedText) => {
-    const submit = panel.querySelector('button[type="submit"]');
-    submit.disabled = true;
+    const mine = ++latest;
     try {
       const results = await run(filter);
+      if (mine !== latest) return;
       redrawSmilesCard(card, ctx, results);
+      showCarriers(results);
       showMilesValues(results);
       status.textContent = appliedText;
     } catch (err) {
-      status.textContent = err.message;
-    } finally {
-      submit.disabled = false;
+      if (mine === latest) status.textContent = err.message;
     }
   };
 
+  const applyCurrent = () => {
+    const filter = readFilter();
+    apply(
+      filter,
+      Object.keys(filter).length
+        ? "Filtro aplicado: as datas, a cópia e os alertas abaixo seguem o filtro. Datas tiradas à mão voltaram."
+        : "Sem filtro: todas as datas da busca.",
+    );
+  };
+
+  let typing = null;
+  panel.addEventListener("change", applyCurrent);
+  // Typed limits wait for a pause, so "372,5" is not filtered as 3, 37 and 372 first.
+  panel.addEventListener("input", (event) => {
+    if (event.target.type !== "number") return;
+    clearTimeout(typing);
+    typing = setTimeout(applyCurrent, FILTER_TYPING_MS);
+  });
   panel.addEventListener("submit", (event) => {
     event.preventDefault();
-    apply(readFilter(), "Filtro aplicado. As datas, a cópia e os alertas abaixo seguem o filtro; datas tiradas à mão voltaram.");
+    clearTimeout(typing);
+    applyCurrent();
   });
   panel.querySelector(".flight-filter-clear").addEventListener("click", () => {
     panel.reset();
-    apply({}, "Sem filtro: todas as datas da busca.");
+    clearTimeout(typing);
+    applyCurrent();
+  });
+  panel.querySelector(".flight-filter-hide").addEventListener("click", () => {
+    setOpen(false);
+    toggle.focus();
   });
 }
 
