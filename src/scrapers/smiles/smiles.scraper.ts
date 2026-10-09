@@ -929,9 +929,9 @@ const SMILES_CABINS = [
   { field: "business", label: "Executiva", colorClass: "cabin-business" },
 ] as const;
 
-// `carriers` only when the flights carry their operators (the flight filter):
-// the codes that fly the flight quoted that day, null when it did not say.
-export type SmilesSectionDay = { date: string; valueK: number; seats: number; carriers?: string[] | null };
+// `carriers`: who flies the flight quoted that day, null when a leg did not say.
+// Absent only when the flights came without operators.
+export type SmilesSectionDay = { date: string; valueK: number; seats: number; carriers?: SmilesCarrier[] | null };
 export type SmilesSection = LabeledSection<SmilesSectionDay>;
 
 type ReportFlight = { cabin: SmilesCabin; miles: number; seats: number; carriers?: SmilesCarrier[] | null };
@@ -949,7 +949,7 @@ export function buildSmilesReport(days: { date: string; flights: ReportFlight[] 
         if (flights.length === 0) return null;
         const cheapest = flights.reduce((a, b) => (a.miles <= b.miles ? a : b));
         const quoted: SmilesSectionDay = { date: day.date, valueK: Math.round(cheapest.miles / 10) / 100, seats: cheapest.seats };
-        if (cheapest.carriers !== undefined) quoted.carriers = cheapest.carriers?.map((carrier) => carrier.code) ?? null;
+        if (cheapest.carriers !== undefined) quoted.carriers = cheapest.carriers;
         return quoted;
       })
       .filter((day): day is SmilesSectionDay => day !== null);

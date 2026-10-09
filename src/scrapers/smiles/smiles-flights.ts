@@ -102,7 +102,7 @@ export function filterSmilesFlights(days: StoredSmilesDay[], filter: SmilesFligh
   const kept = days.map((day) => ({ date: day.date, flights: day.flights.filter((flight) => passes(flight, filter)) }));
   const sections = buildSmilesReport(kept).map((section) => ({
     ...section,
-    carriers: [...new Set(section.days.flatMap((day) => day.carriers ?? []))].sort(),
+    carriers: [...new Set(section.days.flatMap((day) => day.carriers?.map((carrier) => carrier.code) ?? []))].sort(),
   }));
 
   return {

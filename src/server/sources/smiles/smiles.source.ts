@@ -94,7 +94,10 @@ export class SmilesSource implements SearchSource<SmilesSearchDto> {
         period,
       );
 
-      const legs: Leg[] = [{ label: `${origin} → ${destination}`, sections: buildSmilesReport(days, ceilings) }];
+      // From the stored flights, so each quoted day says who flies it: the alert
+      // names that airline instead of assuming GOL.
+      const stored = storedSmilesDays(days);
+      const legs: Leg[] = [{ label: `${origin} → ${destination}`, sections: buildSmilesReport(stored, ceilings) }];
 
       // The gaps come already worded by the scraper, which knows what it left uncovered.
       const notices = [...gaps];
@@ -143,7 +146,7 @@ export class SmilesSource implements SearchSource<SmilesSearchDto> {
         legs,
         ceilings: { "Econômica": ceilings.economy, Conforto: ceilings.premium, Executiva: ceilings.business },
       });
-      this.jobs.keepFlights(jobId, storedSmilesDays(days));
+      this.jobs.keepFlights(jobId, stored);
       this.jobs.complete(jobId, { legs, partialNotice, spreadsheetUrl });
     });
   }
