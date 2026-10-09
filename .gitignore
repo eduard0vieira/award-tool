@@ -14,7 +14,7 @@
 /old
 
 .env
-alerts/
+/alerts/
 spreadsheets/
 
 .perfil-aa/
