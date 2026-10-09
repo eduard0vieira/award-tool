@@ -21,6 +21,7 @@ export class AlertsService {
         maxK: positiveOrNull(request.maxK),
         outboundText: request.outboundText ?? "",
         returnText: request.returnText ?? "",
+        ...(request.operators && { operators: request.operators }),
       },
       {
         // The alert is rendered by loading this same server's portal, behind the same Basic Auth.

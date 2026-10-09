@@ -31,8 +31,13 @@ const SOURCE_INFO: Record<string, { airline: string; program: string; unit: stri
   VIR: { airline: "Outra", program: "Virgin Atlantic Flying Club", unit: "pontos" },
 };
 
+export type Operator = { code: string; name: string };
+
 export type AlertRequest = {
   source: string; // "tap" | "aa" | a SeatSpy code ("IB", "BA", ...)
+  // Who flies the dates in the alert, when the source knows it (Smiles): it
+  // replaces the program's default airline, which for Smiles was always GOL.
+  operators?: Operator[];
   origin: string; // IATA
   destination: string; // IATA
   cabinClass: string; // "Econômica" | "Premium Economy" | "Executiva"
@@ -73,6 +78,63 @@ export function mirrorCaption(caption: string): string {
 }
 
 // The portal's own route shape, read by its ?render page.
+// The portal's own airline names (AIRLINES in vcc-alertas-portal's App.jsx) by
+// IATA code, so the card gets that airline's color and logo.
+const PORTAL_AIRLINE_BY_CODE: Record<string, string> = {
+  A3: "Aegean",
+  AM: "Aeroméxico",
+  AC: "Air Canada",
+  UX: "Air Europa",
+  AF: "Air France",
+  TN: "Air Tahiti Nui",
+  AA: "American Airlines",
+  NH: "ANA",
+  OZ: "Asiana",
+  AV: "Avianca",
+  AD: "Azul",
+  BA: "British Airways",
+  CX: "Cathay Pacific",
+  CM: "Copa Airlines",
+  DL: "Delta Air Lines",
+  EK: "Emirates",
+  ET: "Ethiopian Airlines",
+  EY: "Etihad Airways",
+  AY: "Finnair",
+  G3: "GOL",
+  IB: "Iberia",
+  JL: "Japan Airlines",
+  KL: "KLM",
+  KE: "Korean Air",
+  LA: "LATAM",
+  JJ: "LATAM",
+  LH: "Lufthansa",
+  QF: "Qantas",
+  QR: "Qatar Airways",
+  AT: "Royal Air Maroc",
+  SQ: "Singapore Airlines",
+  SA: "South African Airways",
+  LX: "Swiss",
+  TP: "TAP Air Portugal",
+  TK: "Turkish Airlines",
+  UA: "United Airlines",
+};
+
+// An airline the portal does not know keeps the program's name for it, made
+// readable: "ITA AIRWAYS" becomes "ITA Airways", "GOL (G3)" loses the code.
+function readableAirline(name: string): string {
+  const clean = name.replace(/\s*\([A-Z0-9]{2,3}\)$/, "").trim();
+  if (clean !== clean.toUpperCase()) return clean;
+  return clean
+    .split(/\s+/)
+    .map((word) => (word.length <= 3 ? word : word[0] + word.slice(1).toLowerCase()))
+    .join(" ");
+}
+
+export function operatorsAirline(operators: Operator[]): string {
+  const names = [...new Set(operators.map((operator) => PORTAL_AIRLINE_BY_CODE[operator.code] ?? readableAirline(operator.name)))];
+  return names.join(" + ");
+}
+
 function portalRoute(request: AlertRequest) {
   const info = SOURCE_INFO[request.source] ?? { airline: "Outra", program: request.source, unit: "milhas" };
   const miles = request.minK != null ? String(Math.round(request.minK * 1000)) : "";
@@ -82,7 +144,7 @@ function portalRoute(request: AlertRequest) {
   return {
     origemSigla: request.origin.toUpperCase(),
     destinoSigla: request.destination.toUpperCase(),
-    companhia: info.airline,
+    companhia: request.operators?.length ? operatorsAirline(request.operators) : info.airline,
     classe: request.cabinClass,
     programas: [{ name: info.program, miles, milesMax, unit: info.unit, taxas: "" }],
     datasIdaText: request.outboundText || "",

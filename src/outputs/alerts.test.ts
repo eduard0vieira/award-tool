@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { mirrorCaption } from "./alerts.ts";
+import { mirrorCaption, operatorsAirline } from "./alerts.ts";
 
 describe("return caption", () => {
   // The outbound caption exactly as the portal's ?render page wrote it.
@@ -32,5 +32,16 @@ describe("return caption", () => {
 
   test("refuses a route line it does not recognize instead of guessing", () => {
     assert.throws(() => mirrorCaption("GRU - MAD\n🚨 *Classe Econômica Iberia*"), /mudou de formato/);
+  });
+
+  test("names who flies the dates the way the portal knows the airline", () => {
+    assert.equal(operatorsAirline([{ code: "AA", name: "AMERICAN AIRLINES" }]), "American Airlines");
+    assert.equal(operatorsAirline([{ code: "SA", name: "SOUTH AFRICAN AIRWAYS" }]), "South African Airways");
+    assert.equal(operatorsAirline([{ code: "KL", name: "KLM" }, { code: "AF", name: "AIR FRANCE" }]), "KLM + Air France");
+  });
+
+  test("keeps an airline the portal does not know readable", () => {
+    assert.equal(operatorsAirline([{ code: "AZ", name: "ITA AIRWAYS" }]), "ITA Airways");
+    assert.equal(operatorsAirline([{ code: "MK", name: "Air Mauritius" }]), "Air Mauritius");
   });
 });
