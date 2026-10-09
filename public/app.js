@@ -2457,6 +2457,19 @@ async function requestAlert(body) {
 }
 
 // options: [{ cabinClass, outbound, inbound }]; only cabins with some availability become buttons.
+// Who flies the dates going into the alert (dates taken out by hand excluded),
+// so the alert names that airline. Only Smiles days carry it; an older card
+// without it keeps the program's default airline.
+function operatorsOf(sections) {
+  const days = sections.filter(hasDays).flatMap((section) => section.days);
+  if (days.length === 0 || days.some((day) => day.carriers === undefined)) return {};
+  if (days.some((day) => day.carriers === null)) {
+    throw new Error("Algumas datas desse alerta são de voos sem companhia informada. Filtre os voos por companhia para o alerta dizer quem opera.");
+  }
+  const byCode = new Map(days.flatMap((day) => day.carriers).map((carrier) => [carrier.code, carrier]));
+  return { operators: [...byCode.values()] };
+}
+
 function showAlertButtons(card, source, origin, destination, options) {
   const withData = options.filter((option) => hasDays(option.outbound) || hasDays(option.inbound));
   if (withData.length === 0) return;
@@ -2490,6 +2503,7 @@ function showAlertButtons(card, source, origin, destination, options) {
           ...milesRange(outbound, inbound),
           outboundText: hasDays(outbound) ? outbound.text : "",
           returnText: hasDays(inbound) ? inbound.text : "",
+          ...operatorsOf([outbound, inbound]),
         });
         showGeneratedAlert(card, alert);
         setAlertButtonState(button, option.cabinClass, "done");
