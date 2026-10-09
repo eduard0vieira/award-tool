@@ -68,4 +68,13 @@ describe("Smiles flight filter", () => {
     const afFlights = economy.filter((flight) => flight.carriers?.every((carrier) => carrier.code === "AF"));
     assert.equal(onlyAf.reduce((total, option) => total + option.flights, 0), afFlights.length);
   });
+
+  test("tells each airline's cheapest flight per cabin, flown entirely by it and within the stops", () => {
+    const { carrierOptions } = filterSmilesFlights(days, { maxStops: 1 });
+    const af = carrierOptions.find((option) => option.code === "AF")!;
+    const onlyAfEconomy = days[0]!.flights.filter(
+      (flight) => flight.cabin === "economy" && flight.stops <= 1 && flight.carriers?.every((carrier) => carrier.code === "AF"),
+    );
+    assert.equal(af.from.economy, Math.min(...onlyAfEconomy.map((flight) => flight.miles)));
+  });
 });

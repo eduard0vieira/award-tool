@@ -14,7 +14,9 @@ export type SmilesFlightFilter = {
   miles?: Partial<Record<SmilesCabin, MilesRange>> | undefined;
 };
 
-export type CarrierOption = { code: string; name: string; flights: number };
+// `from`: the cheapest flight per cabin flown entirely by this airline, within
+// the stop limit; what picking only it would show first.
+export type CarrierOption = { code: string; name: string; flights: number; from: Partial<Record<SmilesCabin, number>> };
 export type MilesOption = { miles: number; flights: number; days: number };
 
 export function storedSmilesDays(days: SmilesDayResponse[]): StoredSmilesDay[] {
@@ -64,10 +66,17 @@ export function filterSmilesFlights(days: StoredSmilesDay[], filter: SmilesFligh
       flightsWithoutCarrier++;
       continue;
     }
-    for (const carrier of new Map(flight.carriers.map((carrier) => [carrier.code, carrier])).values()) {
-      const option = options.get(carrier.code) ?? { code: carrier.code, name: carrier.name, flights: 0 };
+    const codes = new Map(flight.carriers.map((carrier) => [carrier.code, carrier]));
+    for (const carrier of codes.values()) {
+      const option = options.get(carrier.code) ?? { code: carrier.code, name: carrier.name, flights: 0, from: {} };
       option.flights++;
       options.set(carrier.code, option);
+    }
+    const [onlyCarrier] = codes.keys();
+    if (codes.size === 1 && onlyCarrier && passes(flight, { maxStops: filter.maxStops })) {
+      const option = options.get(onlyCarrier)!;
+      const cheapest = option.from[flight.cabin];
+      if (cheapest === undefined || flight.miles < cheapest) option.from[flight.cabin] = flight.miles;
     }
   }
 
