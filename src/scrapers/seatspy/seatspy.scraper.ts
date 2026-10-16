@@ -38,7 +38,7 @@ export type SeatspyDay = {
 
 // Values in K (thousands of miles), min/max counting only priced days. Only
 // SeatSpy and Smiles have seats; LATAM and AA reuse this shape without them.
-export type SectionDay = { date: string; valueK: number | null; seats?: number };
+export type SectionDay = { date: string; valueK: number | null; seats?: number; link?: string };
 export type SeatspySection = LabeledSection<SectionDay>;
 
 export type SeatspyReport = { sections: SeatspySection[] };
@@ -445,7 +445,13 @@ const MAX_SHOWN_SEATS = 9;
 // `showSeats = false` removes seats from the whole report: from the text that
 // goes into the alert and from the days, so the screen hides them too. Seats
 // hidden on screen but present in the copied text would be the worst mix.
-export function buildSeatspyReport(days: SeatspyDay[], ceilings: SeatspyCeilings = {}, showSeats = true): SeatspyReport {
+// `linkOf` gives the program's own award search for a day, when its format is known.
+export function buildSeatspyReport(
+  days: SeatspyDay[],
+  ceilings: SeatspyCeilings = {},
+  showSeats = true,
+  linkOf?: (date: string) => string,
+): SeatspyReport {
   const sections = CABINS.map(({ field, label, colorClass }) => {
     const ceiling = ceilings[field];
     const available = days.filter((day) => {
@@ -474,6 +480,7 @@ export function buildSeatspyReport(days: SeatspyDay[], ceilings: SeatspyCeilings
         valueK: miles != null ? Math.round(miles / 10) / 100 : null,
       };
       if (showSeats) formatted.seats = Math.min(seats, MAX_SHOWN_SEATS);
+      if (linkOf) formatted.link = linkOf(day.date);
       return formatted;
     });
     const seatsByDate = new Map(formattedDays.map((day) => [day.date, day.seats ?? 0]));

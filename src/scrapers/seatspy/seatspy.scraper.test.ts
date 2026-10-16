@@ -57,4 +57,12 @@ describe("SeatSpy report", () => {
     assert.equal(business.days[0]!.seats, 9);
     assert.equal(business.text, "Nov 2026: 03 (9)");
   });
+
+  test("links each day to the program's own search when it knows how, and only then", () => {
+    const closed = { available: false, miles: null, seats: 0 };
+    const day: SeatspyDay = { date: "2026-11-03", economy: { available: true, miles: 20000, seats: 4 }, premium: closed, business: closed, first: closed };
+    const economy = (report: ReturnType<typeof buildSeatspyReport>) => report.sections.find((section) => section.label === "Econômica")!;
+    assert.equal(economy(buildSeatspyReport([day], {}, true, (date) => `https://example.test/${date}`)).days[0]!.link, "https://example.test/2026-11-03");
+    assert.equal(economy(buildSeatspyReport([day])).days[0]!.link, undefined);
+  });
 });
