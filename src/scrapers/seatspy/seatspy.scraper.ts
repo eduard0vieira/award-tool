@@ -438,6 +438,10 @@ const CABINS = [
   { field: "first", label: "Primeira Classe", colorClass: "cabin-first" },
 ] as const;
 
+// The group's convention, as airlines show it: "9" means 9 or more. SeatSpy
+// sometimes reports more for British Airways (10, 11), which the alert must not repeat.
+const MAX_SHOWN_SEATS = 9;
+
 // `showSeats = false` removes seats from the whole report: from the text that
 // goes into the alert and from the days, so the screen hides them too. Seats
 // hidden on screen but present in the copied text would be the worst mix.
@@ -469,7 +473,7 @@ export function buildSeatspyReport(days: SeatspyDay[], ceilings: SeatspyCeilings
         date: day.date,
         valueK: miles != null ? Math.round(miles / 10) / 100 : null,
       };
-      if (showSeats) formatted.seats = seats;
+      if (showSeats) formatted.seats = Math.min(seats, MAX_SHOWN_SEATS);
       return formatted;
     });
     const seatsByDate = new Map(formattedDays.map((day) => [day.date, day.seats ?? 0]));

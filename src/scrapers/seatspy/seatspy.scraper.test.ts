@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, test } from "node:test";
 import { FIXTURES_DIR } from "../../core/paths.ts";
-import { findAirport, routeMapFrom, routeNotFoundMessage } from "./seatspy.scraper.ts";
+import { buildSeatspyReport, findAirport, routeMapFrom, routeNotFoundMessage, type SeatspyDay } from "./seatspy.scraper.ts";
 
 const options = JSON.parse(fs.readFileSync(path.join(FIXTURES_DIR, "seatspy-route-options.json"), "utf8"));
 
@@ -40,5 +40,21 @@ describe("SeatSpy route map", () => {
     const [key, option] = raw[0];
     const { destinations: _destinations, ...withoutDestinations } = option;
     assert.throws(() => routeMapFrom([[key, withoutDestinations]]), /sem o campo "destinations"/);
+  });
+});
+
+describe("SeatSpy report", () => {
+  test("shows at most 9 seats, in the days and in the copied text", () => {
+    const closed = { available: false, miles: null, seats: 0 };
+    const day: SeatspyDay = {
+      date: "2026-11-03",
+      economy: closed,
+      premium: closed,
+      business: { available: true, miles: 110000, seats: 11 },
+      first: closed,
+    };
+    const business = buildSeatspyReport([day]).sections.find((section) => section.label === "Executiva")!;
+    assert.equal(business.days[0]!.seats, 9);
+    assert.equal(business.text, "Nov 2026: 03 (9)");
   });
 });
