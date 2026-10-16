@@ -1252,6 +1252,13 @@ input[type="number"] {
   transform: translateY(-0.35em);
 }
 
+/* Typed in the date editor, not what the search found: it has to look different. */
+.date-chip-seats-edited {
+  color: var(--warning-ink);
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+}
+
 /* A day with a booking link: underlined like any link, so it never needs hover to
    be found. */
 .date-chip-link {

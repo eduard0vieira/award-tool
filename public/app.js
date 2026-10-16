@@ -918,6 +918,9 @@ function legText(sections) {
 // ({ ...section, colorClass }) but hands the original to the alert, and both
 // share the same array.
 const excludedDates = new WeakMap();
+// Seat counts typed in the date editor, by date, keyed the same way.
+const editedSeats = new WeakMap();
+const MAX_EDITED_SEATS = 9;
 
 function svgIcon(paths, { filled = false } = {}) {
   const paint = filled ? 'fill="currentColor" stroke="none"' : 'fill="none" stroke="currentColor"';
@@ -997,16 +1000,30 @@ function dayToken(day) {
 
 // Editing rebuilds the text on the front; if the rebuild does not reproduce the
 // server's text, an edited alert would go out in a different format.
+function showChipSeats(seatsEl, seats, foundSeats) {
+  seatsEl.textContent = seats;
+  const edited = seats !== foundSeats;
+  seatsEl.classList.toggle("date-chip-seats-edited", edited);
+  seatsEl.title = edited ? `${plural(seats, "vaga", "vagas")}, editado (a busca trouxe ${foundSeats})` : plural(seats, "vaga", "vagas");
+}
+
 function canEditDates(section) {
   return daysText(section.days) === section.text;
 }
 
 // What the alert and the copy buttons use: the section minus the days taken out
 // on screen. With nothing taken out it is the server's object, text untouched.
+function seatsEditedIn(section) {
+  return (section && editedSeats.get(section.days)) || new Map();
+}
+
 function keptSection(section) {
   const excluded = excludedOf(section);
-  if (excluded.size === 0) return section;
-  const days = section.days.filter((day) => !excluded.has(day.date));
+  const seats = seatsEditedIn(section);
+  if (excluded.size === 0 && seats.size === 0) return section;
+  const days = section.days
+    .filter((day) => !excluded.has(day.date))
+    .map((day) => (seats.has(day.date) ? { ...day, seats: seats.get(day.date) } : day));
   const values = days.map((day) => day.valueK).filter((value) => value != null);
   return {
     ...section,
@@ -1708,7 +1725,8 @@ function renderColumn(columnEl, section, colorClass) {
 
     const row = document.createElement("div");
     row.className = "date-chip-row";
-    for (const { date, seats, link } of group.items) {
+    for (const { date, seats: foundSeats, link } of group.items) {
+      const seats = seatsEditedIn(section).get(date) ?? foundSeats;
       // With a link the day becomes a real anchor (opens in a new tab, the address can be copied).
       const chip = document.createElement(link ? "a" : "span");
       chip.className = `date-chip ${colorClass}${link ? " date-chip-link" : ""}`;
@@ -1724,9 +1742,8 @@ function renderColumn(columnEl, section, colorClass) {
       if (seats > 0) {
         const seatsEl = document.createElement("small");
         seatsEl.className = "date-chip-seats";
-        seatsEl.textContent = seats;
-        seatsEl.title = plural(seats, "vaga", "vagas");
         chip.appendChild(seatsEl);
+        showChipSeats(seatsEl, seats, foundSeats);
       }
       row.appendChild(chip);
     }
@@ -1749,7 +1766,7 @@ function renderColumn(columnEl, section, colorClass) {
   editor.className = "dates-editor";
   editor.hidden = true;
   editor.innerHTML = `
-    <p class="dates-editor-hint" id="${editorId}-hint">Apague as datas que não vão no alerta. Selecione um trecho ou uma linha inteira para tirar várias de uma vez.</p>
+    <p class="dates-editor-hint" id="${editorId}-hint">Apague as datas que não vão no alerta (selecione um trecho ou uma linha inteira para tirar várias de uma vez) ou mude os assentos entre parênteses, de 1 a 9.</p>
     <textarea class="dates-editor-text" spellcheck="false" aria-describedby="${editorId}-hint ${editorId}-error"></textarea>
     <p class="dates-editor-error" id="${editorId}-error" role="alert" hidden></p>
     <div class="dates-editor-actions">
@@ -1792,8 +1809,17 @@ function renderColumn(columnEl, section, colorClass) {
     }
     const excluded = new Set(section.days.map((day) => day.date).filter((date) => !parsed.kept.has(date)));
     excludedDates.set(section.days, excluded);
+    const seats = new Map();
+    for (const day of section.days) {
+      const typed = parsed.kept.get(day.date);
+      if (typed != null && typed !== day.seats) seats.set(day.date, typed);
+    }
+    editedSeats.set(section.days, seats);
+    const foundSeats = new Map(section.days.map((day) => [day.date, day.seats]));
     for (const chip of chipsEl.querySelectorAll(".date-chip")) {
       chip.classList.toggle("date-chip-excluded", excluded.has(chip.dataset.date));
+      const seatsEl = chip.querySelector(".date-chip-seats");
+      if (seatsEl) showChipSeats(seatsEl, seats.get(chip.dataset.date) ?? foundSeats.get(chip.dataset.date), foundSeats.get(chip.dataset.date));
     }
     renderSummary();
     setEditing(false);
@@ -1814,13 +1840,14 @@ function renderColumn(columnEl, section, colorClass) {
 }
 
 // The text area is free text, so it is read strictly: every day left in it must
-// be one the search returned, written exactly as the copy text writes it. The
-// alert never carries what was typed, only the days it matched.
+// be one the search returned. Only its seat count may change (1 to 9), and only
+// in a cabin that shows seats. Returns each kept date with the seats typed, or
+// null when written without them (the search's count stays).
 function parseKeptDates(text, section) {
   const datesByMonth = new Map(
-    groupByMonth(section.days).map((group) => [group.title, new Map(group.items.map((day) => [dayToken(day), day.date]))]),
+    groupByMonth(section.days).map((group) => [group.title, new Map(group.items.map((day) => [day.date.split("-")[2], day]))]),
   );
-  const kept = new Set();
+  const kept = new Map();
   for (const rawLine of text.split("\n")) {
     const line = rawLine.trim();
     if (!line) continue;
@@ -1830,9 +1857,19 @@ function parseKeptDates(text, section) {
     const dates = datesByMonth.get(month);
     if (!dates) return { error: `${month} não está no resultado dessa busca.` };
     for (const token of rest.split(",").map((part) => part.trim()).filter(Boolean)) {
-      const date = dates.get(token);
-      if (!date) return { error: `"${token}" não é uma data de ${month} no resultado dessa busca.` };
-      kept.add(date);
+      const parts = token.match(/^(\d{2})(?:\s*\((\d+)\))?$/);
+      const day = parts && dates.get(parts[1]);
+      if (!day) return { error: `"${token}" não é uma data de ${month} no resultado dessa busca.` };
+      if (parts[2] === undefined) {
+        kept.set(day.date, null);
+        continue;
+      }
+      if (!(day.seats > 0)) return { error: `"${token}": essa cabine não mostra assentos.` };
+      const seats = Number(parts[2]);
+      if (seats < 1 || seats > MAX_EDITED_SEATS) {
+        return { error: `"${token}": os assentos vão de 1 a ${MAX_EDITED_SEATS}.` };
+      }
+      kept.set(day.date, seats);
     }
   }
   return { kept };
