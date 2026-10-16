@@ -84,16 +84,20 @@ const confirmDialogRoutes = confirmDialog.querySelector(".confirm-dialog-routes"
 const confirmDialogBody = confirmDialog.querySelector(".confirm-dialog-body");
 const confirmDialogCancel = confirmDialog.querySelector(".confirm-dialog-cancel");
 const confirmDialogConfirm = confirmDialog.querySelector(".confirm-dialog-confirm");
+const confirmDialogExtra = confirmDialog.querySelector(".confirm-dialog-extra");
 let dialogQueue = Promise.resolve();
 
 confirmDialogCancel.addEventListener("click", () => confirmDialog.close("cancel"));
+confirmDialogExtra.addEventListener("click", () => confirmDialog.close("extra"));
 // A click on the dimmed backdrop lands on the dialog element itself, outside its form.
 confirmDialog.addEventListener("click", (event) => {
   if (event.target === confirmDialog) confirmDialog.close("cancel");
 });
 
 // `routes`: [{ origin, destination, roundTrip, lines: [text, ...] }], each drawn as the card's route sign.
-function askUser({ title, routes = [], body, confirmLabel, cancelLabel = "Cancelar" }) {
+// Resolves true for the confirm button, "extra" for the optional middle one
+// (`extraLabel`), false for cancel, Esc or a click outside.
+function askUser({ title, routes = [], body, confirmLabel, cancelLabel = "Cancelar", extraLabel = "" }) {
   const shown = dialogQueue.then(
     () =>
       new Promise((resolve) => {
@@ -103,8 +107,14 @@ function askUser({ title, routes = [], body, confirmLabel, cancelLabel = "Cancel
         confirmDialogBody.textContent = body;
         confirmDialogCancel.textContent = cancelLabel;
         confirmDialogConfirm.textContent = confirmLabel;
+        confirmDialogExtra.textContent = extraLabel;
+        confirmDialogExtra.hidden = !extraLabel;
         confirmDialog.returnValue = "";
-        confirmDialog.addEventListener("close", () => resolve(confirmDialog.returnValue === "confirm"), { once: true });
+        confirmDialog.addEventListener(
+          "close",
+          () => resolve(confirmDialog.returnValue === "confirm" || (confirmDialog.returnValue === "extra" && "extra")),
+          { once: true },
+        );
         confirmDialog.showModal();
       }),
   );
@@ -652,9 +662,9 @@ const TAB_BY_SOURCE = { tap: "tap", seatspy: "seatspy", aa: "aa", latam: "latam"
 
 // Rebuilds the whole card from what the server saved: same dates, copy and alert
 // buttons, no new search and no credit spent.
-async function openFromHistory(item, button) {
-  clearNotice(historyNotice);
-  button.disabled = true;
+async function openFromHistory(item, button, noticeEl = historyNotice) {
+  clearNotice(noticeEl);
+  if (button) button.disabled = true;
   try {
     const response = await apiFetch(`/api/history/groups/${encodeURIComponent(item.groupId)}`);
     const card = await response.json().catch(() => null);
@@ -679,9 +689,9 @@ async function openFromHistory(item, button) {
     activateTab(tab);
     panels[tab].querySelector(".search-job")?.scrollIntoView({ block: "start" });
   } catch (err) {
-    showNotice(historyNotice, err.message);
+    showNotice(noticeEl, err.message);
   } finally {
-    button.disabled = false;
+    if (button) button.disabled = false;
   }
 }
 
@@ -3000,7 +3010,11 @@ function trackRunning(program, origin, destination, roundTrip, search) {
 
 // The paid sources have a query limit, so a route anyone searched recently asks
 // before searching again. It reads the shared history, not just this browser's.
-async function repeatWarning(program, origin, destination, roundTrip) {
+// Resolves false to stop, true when nothing was searched recently, "fresh"
+// when the user asked to search again anyway (the search must then skip the
+// recent result, or it lands on it and asks again), and { open } to open that
+// earlier result instead of spending a query.
+async function repeatWarning(program, origin, destination, roundTrip, { canOpen = false } = {}) {
   const quota = program === "tap" ? "do AwardTool" : "do SeatSpy";
   const spends = `Buscar de novo gasta outra consulta ${quota}.`;
   let history;
@@ -3040,12 +3054,27 @@ async function repeatWarning(program, origin, destination, roundTrip) {
   }
   if (routes.length === 0) return true;
 
-  return askUser({
+  const openable = canOpen && !running
+    ? routes.map((route) => route.previous).find((item) => item?.groupId && (item.status === "done" || item.status === "partial"))
+    : null;
+  const choice = await askUser({
     title: running ? "Essa busca ainda está rodando" : routes.length > 1 ? "Esses trechos já foram buscados" : "Esse trecho já foi buscado",
     routes,
-    body: running ? spends : `A última busca tem menos de ${TOLERANCE_DAYS} dias. ${spends}`,
+    body: running
+      ? spends
+      : `A última busca tem menos de ${TOLERANCE_DAYS} dias. ${spends}${openable ? " Abrir o resultado anterior não gasta." : ""}`,
     confirmLabel: "Buscar de novo",
+    extraLabel: openable ? "Abrir resultado anterior" : "",
   });
+  if (choice === "extra") return { open: openable };
+  return choice && "fresh";
+}
+
+// A new search the user confirmed over a recent one: it must not come back as that recent result.
+function freshSession(source, args) {
+  const session = newSession(source, args);
+  session.forceFresh = true;
+  return session;
 }
 
 tapForm.addEventListener("submit", async (event) => {
@@ -3058,21 +3087,18 @@ tapForm.addEventListener("submit", async (event) => {
     showNotice(tapNotice, "Preencha origem e destino.");
     return;
   }
-  if (!(await repeatWarning("tap", origin, destination, roundTrip))) return;
+  const choice = await repeatWarning("tap", origin, destination, roundTrip, { canOpen: true });
+  if (!choice) return;
+  if (choice.open) {
+    openFromHistory(choice.open, null, tapNotice);
+    return;
+  }
   const inK = (input) => {
     const value = parseFloat(input.value);
     return Number.isFinite(value) && value > 0 ? value : null;
   };
-  trackRunning(
-    "tap",
-    origin,
-    destination,
-    roundTrip,
-    startTapSearch(origin, destination, roundTrip, {
-      business: inK(tapBusinessCeilingInput),
-      economy: inK(tapEconomyCeilingInput),
-    }),
-  );
+  const args = [origin, destination, roundTrip, { business: inK(tapBusinessCeilingInput), economy: inK(tapEconomyCeilingInput) }];
+  trackRunning("tap", origin, destination, roundTrip, startTapSearch(...args, choice === "fresh" ? freshSession("tap", args) : undefined));
 });
 
 latamForm.addEventListener("submit", (event) => {
@@ -3439,13 +3465,19 @@ seatspyForm.addEventListener("submit", async (event) => {
     showNotice(seatspyNotice, "Preencha origem e destino.");
     return;
   }
-  if (!(await repeatWarning(program, origin, destination, roundTrip))) return;
+  const choice = await repeatWarning(program, origin, destination, roundTrip, { canOpen: true });
+  if (!choice) return;
+  if (choice.open) {
+    openFromHistory(choice.open, null, seatspyNotice);
+    return;
+  }
+  const args = [program, origin, destination, roundTrip, true];
   trackRunning(
     program,
     origin,
     destination,
     roundTrip,
-    startSeatspySearch(program, origin, destination, roundTrip, true),
+    startSeatspySearch(...args, choice === "fresh" ? freshSession("seatspy", args) : undefined),
   );
 });
 
