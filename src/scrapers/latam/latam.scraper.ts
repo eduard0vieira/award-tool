@@ -254,14 +254,39 @@ export function filterByCeilings(days: LatamDay[], ceilings: LatamCeilings = {})
   });
 }
 
-export function buildLatamReport(days: LatamDay[], ceilings: LatamCeilings = {}): ReportSection {
+// The site's own search, one way and in miles (redemption=true), sorted by
+// miles like the bot's pair confirmation. It asks for the LATAM Pass login
+// first; logged in, it lands on that day's flights.
+export function latamBookingLink(route: LatamRoute, date: string): string {
+  return (
+    "https://www.latamairlines.com/br/pt/oferta-voos?" +
+    new URLSearchParams({
+      origin: route.origin,
+      destination: route.destination,
+      outbound: `${date}T12:00:00.000Z`,
+      adt: "1",
+      chd: "0",
+      inf: "0",
+      trip: "OW",
+      cabin: "Economy",
+      redemption: "true",
+      sort: "PRICE,asc",
+    }).toString()
+  );
+}
+
+export function buildLatamReport(days: LatamDay[], ceilings: LatamCeilings = {}, linkRoute?: LatamRoute): ReportSection {
   const accepted = filterByCeilings(days, ceilings);
 
   if (accepted.length === 0) {
     return { min: null, max: null, days: [], text: "Nenhuma tarifa encontrada nesse período." };
   }
 
-  const formattedDays = accepted.map((day) => ({ date: day.date, valueK: Math.round(day.price) }));
+  const formattedDays = accepted.map((day) => ({
+    date: day.date,
+    valueK: Math.round(day.price),
+    ...(linkRoute ? { link: latamBookingLink(linkRoute, day.date) } : {}),
+  }));
   const values = formattedDays.map((day) => day.valueK);
 
   return {

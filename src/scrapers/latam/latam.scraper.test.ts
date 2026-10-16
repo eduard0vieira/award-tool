@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, test } from "node:test";
 import { FIXTURES_DIR } from "../../core/paths.ts";
-import { buildLatamReport, pickBestPairs, readRedemptionOptions } from "./latam.scraper.ts";
+import { buildLatamReport, latamBookingLink, pickBestPairs, readRedemptionOptions } from "./latam.scraper.ts";
 
 const outbound = [
   { date: "2026-10-01", price: 2500, lowestFare: true },
@@ -58,5 +58,18 @@ describe("LATAM", () => {
       { outbound: outboundDays[0], inbound: inboundDays[1] },
       { outbound: outboundDays[1], inbound: inboundDays[2] },
     ]);
+  });
+
+  test("links each day to the site's one-way search in miles, in the leg's direction", () => {
+    const report = buildLatamReport(outbound, {}, { origin: "SCL", destination: "GRU" });
+    const link = new URL(report.days[0]!.link!);
+    assert.equal(link.origin + link.pathname, "https://www.latamairlines.com/br/pt/oferta-voos");
+    assert.equal(link.searchParams.get("origin"), "SCL");
+    assert.equal(link.searchParams.get("destination"), "GRU");
+    assert.equal(link.searchParams.get("outbound"), "2026-10-01T12:00:00.000Z");
+    assert.equal(link.searchParams.get("trip"), "OW");
+    assert.equal(link.searchParams.get("redemption"), "true");
+    assert.equal(report.days[0]!.link, latamBookingLink({ origin: "SCL", destination: "GRU" }, "2026-10-01"));
+    assert.equal(buildLatamReport(outbound).days[0]!.link, undefined);
   });
 });

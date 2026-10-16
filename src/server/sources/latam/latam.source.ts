@@ -87,11 +87,19 @@ export class LatamSource implements SearchSource<LatamSearchDto> {
       const legs: Leg[] = [
         {
           label: `Ida: ${origin} → ${destination}`,
-          sections: [{ label: "Econômica", colorClass: "cabin-economy", ...buildLatamReport(outbound, ceilings) }],
+          sections: [
+            { label: "Econômica", colorClass: "cabin-economy", ...buildLatamReport(outbound, ceilings, { origin, destination }) },
+          ],
         },
         {
           label: `Volta: ${destination} → ${origin}`,
-          sections: [{ label: "Econômica", colorClass: "cabin-economy", ...buildLatamReport(inbound, ceilings) }],
+          sections: [
+            {
+              label: "Econômica",
+              colorClass: "cabin-economy",
+              ...buildLatamReport(inbound, ceilings, { origin: destination, destination: origin }),
+            },
+          ],
         },
       ];
       let partialNotice =
