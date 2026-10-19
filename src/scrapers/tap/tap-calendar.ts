@@ -1,7 +1,7 @@
 import { inflateSync } from "node:zlib";
 import type { Page } from "playwright";
 import { formatDatesByMonth, type FormattedDay, type ReportSection } from "../../core/common.ts";
-import { awardtoolRateLimiter } from "./tap.scraper.ts";
+import { awardtoolRateLimiter, tapBookingLink, type TapRoute } from "./tap.scraper.ts";
 
 // AwardTool's route calendar: a year of its stored award data for one route, every
 // program in a single response. See docs/recon/awardtool-panorama.md.
@@ -103,6 +103,7 @@ export type TapCalendarOptions = {
   floorsK: { business: number | null; economy: number | null };
   // Unix seconds, like the calendar's "last seen".
   now: number;
+  route: TapRoute;
 };
 
 export type TapCalendarReport =
@@ -124,7 +125,7 @@ const STALE_REASON = (hours: number) =>
 
 export function buildTapCalendarReport(dates: TapCalendarDate[], options: TapCalendarOptions): TapCalendarReport {
   if (dates.length === 0) return { kind: "not_tracked" };
-  const { nonstopOnly, maxAgeHours, ceilingsK, floorsK, now } = options;
+  const { nonstopOnly, maxAgeHours, ceilingsK, floorsK, now, route } = options;
   const oldestAllowed = now - maxAgeHours * 3600;
 
   const kept = { business: [] as TapCalendarDay[], economy: [] as TapCalendarDay[] };
@@ -146,7 +147,7 @@ export function buildTapCalendarReport(dates: TapCalendarDate[], options: TapCal
         newestStaleSeenAt = Math.max(newestStaleSeenAt ?? 0, fares.seenAt);
         continue;
       }
-      kept[cabin].push({ date: entry.date, valueK: miles / 1000, seenAt: fares.seenAt });
+      kept[cabin].push({ date: entry.date, valueK: miles / 1000, seenAt: fares.seenAt, link: tapBookingLink(route, entry.date) });
     }
   }
 

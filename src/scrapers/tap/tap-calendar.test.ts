@@ -5,12 +5,13 @@ import { describe, test } from "node:test";
 import { deflateSync } from "node:zlib";
 import { FIXTURES_DIR } from "../../core/paths.ts";
 import { buildTapCalendarReport, decodeCalendarResponse, type TapCalendarDate } from "./tap-calendar.ts";
+import { tapBookingLink } from "./tap.scraper.ts";
 
 const raw = fs.readFileSync(path.join(FIXTURES_DIR, "awardtool-route-calendar-GRU-LIS.json"), "utf8");
 const dates = decodeCalendarResponse(raw, "GRU-LIS");
 // The newest "last seen" in the fixture, so the test does not age with the calendar.
 const capturedAt = Math.max(...dates.map((entry) => entry.any.seenAt));
-const options = { nonstopOnly: false, maxAgeHours: 48, ceilingsK: { business: 181, economy: 60 }, floorsK: { business: null, economy: null }, now: capturedAt };
+const options = { nonstopOnly: false, maxAgeHours: 48, ceilingsK: { business: 181, economy: 60 }, floorsK: { business: null, economy: null }, now: capturedAt, route: { origin: "GRU", destination: "LIS" } };
 
 const wrap = (body: unknown) => JSON.stringify({ ciphered_data: deflateSync(JSON.stringify(body)).toString("base64") });
 const fares = (seenAt: number, economy: number | null, business: number | null) => ({ seenAt, economy, business });
@@ -39,7 +40,13 @@ describe("AwardTool route calendar", () => {
     if (report.kind !== "ok") return;
     assert.equal(report.business.days.length, 110);
     assert.equal(report.economy.days.length, 181);
-    assert.deepEqual(report.business.days[0], { date: "2026-10-20", valueK: 135, seenAt: 1792324949 });
+    assert.deepEqual(report.business.days[0], {
+      date: "2026-10-20",
+      valueK: 135,
+      seenAt: 1792324949,
+      link: tapBookingLink({ origin: "GRU", destination: "LIS" }, "2026-10-20"),
+    });
+    assert.match(report.business.days[0]!.link!, /origin=GRU&destination=LIS&.*depDate=20.10.2026&award=true/);
     assert.ok(report.business.days.every((day) => day.valueK <= 181 && day.seenAt >= capturedAt - 48 * 3600));
     assert.ok(report.economy.days.every((day) => day.valueK <= 60));
     assert.equal(report.staleDates, 10);

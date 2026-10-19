@@ -57,7 +57,7 @@ export class TapSource implements SearchSource<TapSearchDto> {
         job.shouldStop,
       );
 
-      const report = buildTapReport(days, ceilings);
+      const report = buildTapReport(days, ceilings, { origin, destination });
       // Sent to the front so the ceiling actually applied is explicit instead of
       // an outdated server silently applying the default.
       const appliedCeilings = {

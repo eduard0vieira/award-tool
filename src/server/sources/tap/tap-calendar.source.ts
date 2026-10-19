@@ -60,7 +60,13 @@ export class TapCalendarSource implements SearchSource<TapCalendarSearchDto> {
       job.log(`Lendo o calendário do AwardTool para ${origin}-${destination}...`);
       job.progress(0.1);
       const dates = await readRouteCalendar(page, baseUrl, origin, destination);
-      const report = buildTapCalendarReport(dates, { ...filters, ceilingsK, floorsK, now: Math.floor(Date.now() / 1000) });
+      const report = buildTapCalendarReport(dates, {
+        ...filters,
+        ceilingsK,
+        floorsK,
+        now: Math.floor(Date.now() / 1000),
+        route: { origin, destination },
+      });
       job.progress(1);
 
       if (report.kind === "not_tracked") {

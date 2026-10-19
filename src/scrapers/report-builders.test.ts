@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { aaBookingLink, buildAaReport } from "./aa/aa.scraper.ts";
 import { buildSeatspyReport, type CabinAvailability } from "./seatspy/seatspy.scraper.ts";
-import { buildTapReport } from "./tap/tap.scraper.ts";
+import { buildTapReport, tapBookingLink } from "./tap/tap.scraper.ts";
 
 const cabin = (miles: number | null, seats = 0): CabinAvailability => ({ available: miles !== null, miles, seats });
 
@@ -28,6 +28,16 @@ describe("report builders", () => {
       },
       economy: { min: 45, max: 45, days: [{ date: "2026-10-01", valueK: 45 }], text: "Out 2026: 01" },
     });
+  });
+
+  test("TAP links each date to flytap's miles search when it knows the route", () => {
+    const report = buildTapReport(
+      [{ date: "2026-10-01", found: 1, total: 1, economy: "45K", premiumEconomy: "-", business: "170K", first: "-" }],
+      {},
+      { origin: "GRU", destination: "LIS" },
+    );
+    assert.equal(report.business.days[0]!.link, tapBookingLink({ origin: "GRU", destination: "LIS" }, "2026-10-01"));
+    assert.match(report.economy.days[0]!.link!, /^https:\/\/booking\.flytap\.com\/booking\/flights\/deeplink\?.*depDate=01\.10\.2026&award=true$/);
   });
 
   test("SeatSpy builds four cabins, applies ceilings and shows seats", () => {

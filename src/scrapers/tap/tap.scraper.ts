@@ -236,10 +236,36 @@ export type TapCeilings = {
   economyK?: number | null;
 };
 
+export type TapRoute = { origin: string; destination: string };
+
+// The deep link flytap.com's own search box opens (its booking form, with "Pagar
+// com milhas" ticked). The page shows miles once the account is logged in.
+export function tapBookingLink(route: TapRoute, date: string): string {
+  const [year, month, day] = date.split("-");
+  return (
+    "https://booking.flytap.com/booking/flights/deeplink?" +
+    new URLSearchParams({
+      market: "BR",
+      language: "pt",
+      origin: route.origin,
+      destination: route.destination,
+      flexibleDates: "false",
+      flightType: "single",
+      adt: "1",
+      chd: "0",
+      inf: "0",
+      yth: "0",
+      depDate: `${day}.${month}.${year}`,
+      award: "true",
+    }).toString()
+  );
+}
+
 function buildSection(
   days: AvailabilityDay[],
   field: "economy" | "business",
   accepts: (valueK: number) => boolean,
+  route?: TapRoute,
 ): ReportSection {
   const available = days.filter((day) => {
     const value = parseValueK(day[field]);
@@ -251,7 +277,11 @@ function buildSection(
   }
 
   const formattedDays: FormattedDay[] = available
-    .map((day) => ({ date: day.date, valueK: parseValueK(day[field])! }))
+    .map((day) => ({
+      date: day.date,
+      valueK: parseValueK(day[field])!,
+      ...(route && { link: tapBookingLink(route, day.date) }),
+    }))
     .sort((a, b) => a.date.localeCompare(b.date));
   const values = formattedDays.map((day) => day.valueK);
 
@@ -263,12 +293,12 @@ function buildSection(
   };
 }
 
-export function buildTapReport(days: AvailabilityDay[], ceilings: TapCeilings = {}): TapReport {
+export function buildTapReport(days: AvailabilityDay[], ceilings: TapCeilings = {}, route?: TapRoute): TapReport {
   const businessCeiling = ceilings.businessK ?? DEFAULT_BUSINESS_CEILING_K;
   const economyCeiling = ceilings.economyK ?? DEFAULT_ECONOMY_CEILING_K;
   return {
-    business: buildSection(days, "business", (value) => value <= businessCeiling),
-    economy: buildSection(days, "economy", (value) => value <= economyCeiling),
+    business: buildSection(days, "business", (value) => value <= businessCeiling, route),
+    economy: buildSection(days, "economy", (value) => value <= economyCeiling, route),
   };
 }
 
