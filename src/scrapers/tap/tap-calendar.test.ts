@@ -27,9 +27,10 @@ describe("AwardTool route calendar", () => {
   });
 
   test("names the missing field instead of guessing it", () => {
-    const row = { date: "2027-01-01", program: "TP", points: { ls: 1, y: 44900 }, points_ns: { ls: 1, y: 44900, j: null } };
+    const row = { date: "2027-01-01", route: "GRU-LIS", program: "TP", points: { ls: 1, y: 44900 }, points_ns: { ls: 1, y: 44900, j: null } };
     assert.throws(() => decodeCalendarResponse(wrap({ status: 200, data: [row] }), "GRU-LIS"), /points\.j/);
     assert.throws(() => decodeCalendarResponse(wrap({ status: 500, data: [] }), "GRU-LIS"), /status 500/);
+    assert.throws(() => decodeCalendarResponse(raw, "LIS-GRU"), /outro trecho/);
   });
 
   test("applies the ceilings and the maximum age, with the date's last-seen time", () => {

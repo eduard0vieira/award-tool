@@ -46,9 +46,12 @@ export function decodeCalendarResponse(raw: string, route: string): TapCalendarD
   if (body?.status !== 200) fail(route, `status ${String(body?.status)}`);
   if (!Array.isArray(body.data)) fail(route, "falta a lista data");
 
-  return body.data
-    .map(asRecord)
-    .filter((row) => row?.program === TAP_PROGRAM)
+  const rows = body.data.map(asRecord);
+  // The page may still be answering for the route it showed before: those dates must never pass for this one.
+  if (rows.length > 0 && !rows.some((row) => row?.route === route)) fail(route, "a resposta é de outro trecho");
+
+  return rows
+    .filter((row) => row?.route === route && row.program === TAP_PROGRAM)
     .map((row) => {
       const date = row!.date;
       if (typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date)) fail(route, "linha sem date");
