@@ -21,6 +21,7 @@ export class AlertsService {
         maxK: positiveOrNull(request.maxK),
         outboundText: request.outboundText ?? "",
         returnText: request.returnText ?? "",
+        ...(request.tip && { tip: request.tip }),
         ...(request.operators && { operators: request.operators }),
       },
       {

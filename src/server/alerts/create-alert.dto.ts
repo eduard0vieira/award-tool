@@ -1,5 +1,16 @@
 import { Type } from "class-transformer";
-import { ArrayMaxSize, ArrayMinSize, IsArray, IsNotEmpty, IsNumber, IsOptional, IsString, Matches, ValidateNested } from "class-validator";
+import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsArray,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+  ValidateNested,
+} from "class-validator";
 
 export class OperatorDto {
   @Matches(/^[A-Z0-9]{2,3}$/, { message: "Cada companhia em operators deve ter um código como AA ou G3." })
@@ -42,6 +53,12 @@ export class CreateAlertDto {
   @IsOptional()
   @IsString({ message: "O campo returnText deve ser texto." })
   returnText?: string;
+
+  // The caption's "pulo do gato", e.g. how the TAP upgrade alert is issued.
+  @IsOptional()
+  @IsString({ message: "O campo tip deve ser texto." })
+  @MaxLength(600, { message: "O campo tip aceita no máximo 600 caracteres." })
+  tip?: string;
 
   // More than two would make the alert's airline line ambiguous for the client.
   @IsOptional()

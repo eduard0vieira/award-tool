@@ -45,6 +45,7 @@ export type AlertRequest = {
   maxK: number | null; // highest value; becomes "milesMax" when it differs
   outboundText: string; // "Mmm YYYY: DD, DD", the format the portal parses
   returnText: string;
+  tip?: string;
 };
 
 export type GeneratedAlert = {
@@ -149,6 +150,7 @@ function portalRoute(request: AlertRequest) {
     programas: [{ name: info.program, miles, milesMax, unit: info.unit, taxas: "" }],
     datasIdaText: request.outboundText || "",
     datasVoltaText: request.returnText || "",
+    ...(request.tip && { puloDoGato: request.tip }),
   };
 }
 
@@ -227,6 +229,10 @@ export async function generateAlert(
       images,
       caption: (await page.locator("#render-legenda").textContent()) ?? "",
     };
+    // An older portal build ignores the tip, and an upgrade alert without it reads as a plain business fare.
+    if (request.tip && !alert.caption.includes(request.tip.trim())) {
+      throw new Error("O portal de alertas não colocou a explicação na legenda. Atualize o build do portal (npm run build) e gere de novo.");
+    }
     // A return caption only when the portal split the alert into an outbound card
     // and a return card, sent as two messages. One card already shows both
     // directions and goes out as one message with one caption.
