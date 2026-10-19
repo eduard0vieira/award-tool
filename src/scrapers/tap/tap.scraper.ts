@@ -29,7 +29,7 @@ export type TapReport = {
 };
 
 const TAP_MIN_INTERVAL_MS = Number(process.env.AWARDTOOL_SEARCH_INTERVAL_MS) || 15000;
-const awardtoolRateLimiter = new RateLimiter(TAP_MIN_INTERVAL_MS);
+export const awardtoolRateLimiter = new RateLimiter(TAP_MIN_INTERVAL_MS);
 
 // Each row of the "Date" popover has a "YYYY-MM-DD (found/total)" paragraph
 // followed by 4 prices, one per cabin, told apart by the color of the dot next
