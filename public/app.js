@@ -148,6 +148,15 @@ const tapNotice = document.getElementById("tap-notice");
 const tapBusinessCeilingInput = document.getElementById("tap-ceiling-business");
 const tapEconomyCeilingInput = document.getElementById("tap-ceiling-economy");
 const tapQueue = document.getElementById("tap-queue");
+const tapModeButtons = document.querySelectorAll("#panel-tap .panel-subtabs .subtab-button");
+const tapCalendarForm = document.getElementById("tap-calendar-form");
+const tapCalendarOriginInput = document.getElementById("tap-calendar-origin");
+const tapCalendarDestinationInput = document.getElementById("tap-calendar-destination");
+const tapCalendarRoundTripCheckbox = document.getElementById("tap-calendar-round-trip");
+const tapCalendarBusinessCeilingInput = document.getElementById("tap-calendar-ceiling-business");
+const tapCalendarEconomyCeilingInput = document.getElementById("tap-calendar-ceiling-economy");
+const tapCalendarStopsSelect = document.getElementById("tap-calendar-stops");
+const tapCalendarMaxAgeInput = document.getElementById("tap-calendar-max-age");
 
 const seatspyForm = document.getElementById("seatspy-search-form");
 const seatspyProgramSelect = document.getElementById("seatspy-program");
@@ -227,6 +236,7 @@ const TOLERANCE_MS = TOLERANCE_DAYS * 24 * 60 * 60 * 1000;
 
 const PROGRAM_LABELS = {
   tap: "TAP",
+  "tap-calendar": "TAP (Panorama)",
   AA: "American Airlines",
   LATAM: "LATAM",
   SMILES: "Smiles",
@@ -292,7 +302,7 @@ function activateTab(tab) {
 // The history used to live under another key with Portuguese fields. It is
 // moved once, then the old key goes away so clearing the history cannot bring it back.
 // The history is the server's: every search anyone ran, kept in its database.
-const PROGRAM_BY_SOURCE = { tap: "tap", aa: "AA", latam: "LATAM", smiles: "SMILES", iberia: "IBERIA" };
+const PROGRAM_BY_SOURCE = { tap: "tap", "tap-calendar": "tap-calendar", aa: "AA", latam: "LATAM", smiles: "SMILES", iberia: "IBERIA" };
 // Failed and cancelled searches stay on the server, but nobody has dates from them.
 const LISTED_STATUSES = new Set(["queued", "running", "done", "partial"]);
 let currentUser = null;
@@ -404,11 +414,19 @@ function dayLabel(timestamp) {
 
 // Fills the right tab's form with the history route and switches to it.
 function repeatSearch(item) {
-  if (item.program === "tap") {
+  if (item.program === "tap-calendar") {
+    tapCalendarOriginInput.value = item.origin;
+    tapCalendarDestinationInput.value = item.destination;
+    tapCalendarRoundTripCheckbox.checked = Boolean(item.roundTrip);
+    activateTab("tap");
+    selectTapMode(tapModeButtons[0]);
+    tapCalendarOriginInput.focus();
+  } else if (item.program === "tap") {
     tapOriginInput.value = item.origin;
     tapDestinationInput.value = item.destination;
     tapRoundTripCheckbox.checked = Boolean(item.roundTrip);
     activateTab("tap");
+    selectTapMode(tapModeButtons[1]);
     tapOriginInput.focus();
   } else if (item.program === "SMILES") {
     smilesOriginInput.value = item.origin;
@@ -568,7 +586,7 @@ async function renderHistory() {
 }
 
 function historyCabins(item) {
-  if (item.program === "tap") return [["Executiva", "cabin-business"], ["Econômica", "cabin-economy"]];
+  if (item.program === "tap" || item.program === "tap-calendar") return [["Executiva", "cabin-business"], ["Econômica", "cabin-economy"]];
   if (item.program === "LATAM" || item.program === "IBERIA") return [["Econômica", "cabin-economy"]];
   if (item.program === "SMILES") return [["Econômica", "cabin-economy"], ["Conforto", "cabin-premium"], ["Executiva", "cabin-business"]];
   if (item.program === "AA") {
@@ -658,7 +676,7 @@ function createHistoryItem(item) {
   return row;
 }
 
-const TAB_BY_SOURCE = { tap: "tap", seatspy: "seatspy", aa: "aa", latam: "latam", smiles: "smiles", iberia: "iberia" };
+const TAB_BY_SOURCE = { tap: "tap", "tap-calendar": "tap", seatspy: "seatspy", aa: "aa", latam: "latam", smiles: "smiles", iberia: "iberia" };
 
 // Rebuilds the whole card from what the server saved: same dates, copy and alert
 // buttons, no new search and no credit spent.
@@ -1146,6 +1164,7 @@ function newSession(source, args) {
 // The argument order is the one each search started with, which is why `args` is kept as it came.
 const RESUME_BY_SOURCE = {
   tap: (...args) => startTapSearch(...args),
+  "tap-calendar": (...args) => startTapCalendarSearch(...args),
   seatspy: (...args) => startSeatspySearch(...args),
   smiles: (...args) => startSmilesSearch(...args),
   aa: (...args) => startAaSearch(...args),
@@ -1292,7 +1311,7 @@ const spectatedGroups = new Map();
 // The originator's browser starts the next leg as soon as the previous one ends.
 const SHARED_LEG_WAIT_MS = 2 * 60 * 1000;
 // The session goes in right after these arguments; a different count would put it in the wrong one.
-const ARG_COUNT_BY_SOURCE = { tap: 4, seatspy: 5, smiles: 5, aa: 7, latam: 4, iberia: 7 };
+const ARG_COUNT_BY_SOURCE = { tap: 4, "tap-calendar": 4, seatspy: 5, smiles: 5, aa: 7, latam: 4, iberia: 7 };
 
 function followSharedGroup(group, fromSnapshot) {
   if (ownGroupIds.has(group.id)) return;
@@ -1436,6 +1455,9 @@ function resultFromEvent(event) {
     appliedCeilings: event.appliedCeilings,
     confirmation: event.confirmation,
     stoppedByUser: event.stoppedByUser,
+    filters: event.filters,
+    coverage: event.coverage,
+    notices: event.notices,
   };
 }
 
@@ -1712,7 +1734,7 @@ function renderColumn(columnEl, section, colorClass) {
   const editButton = columnEl.querySelector(".edit-dates-button");
 
   if (!section.days || section.days.length === 0) {
-    summaryEl.textContent = "Sem disponibilidade nesse período.";
+    summaryEl.textContent = section.emptyReason || "Sem disponibilidade nesse período.";
     copyButton.hidden = true;
     editButton.hidden = true;
     setColumnExpanded(columnEl, false);
@@ -1745,7 +1767,7 @@ function renderColumn(columnEl, section, colorClass) {
 
     const row = document.createElement("div");
     row.className = "date-chip-row";
-    for (const { date, seats: foundSeats, link } of group.items) {
+    for (const { date, seats: foundSeats, link, seenAt } of group.items) {
       const seats = seatsEditedIn(section).get(date) ?? foundSeats;
       // With a link the day becomes a real anchor (opens in a new tab, the address can be copied).
       const chip = document.createElement(link ? "a" : "span");
@@ -1759,6 +1781,7 @@ function renderColumn(columnEl, section, colorClass) {
         chip.rel = "noopener noreferrer";
         chip.title = `Abrir a emissão de ${formatFullDate(date)} no site`;
       }
+      if (seenAt) chip.title = `Visto pelo AwardTool em ${formatDateTime(seenAt * 1000)}`;
       if (seats > 0) {
         const seatsEl = document.createElement("small");
         seatsEl.className = "date-chip-seats";
@@ -1994,15 +2017,39 @@ function showPartialNotices(card, notices) {
   showNotice(card.noticeEl, [...new Set(notices)].join(" "));
 }
 
-async function startTapSearch(origin, destination, roundTrip, ceilings, session) {
+function startTapSearch(origin, destination, roundTrip, ceilings, session) {
   session = session || newSession("tap", [origin, destination, roundTrip, ceilings]);
-  const card = createJobCard(tapQueue, { program: "TAP", origin, destination, roundTrip });
+  return runTapSearch(session, { source: "tap", ceilings }, origin, destination, roundTrip);
+}
+
+// The stored calendar costs no query and is refreshed by AwardTool all the time,
+// so it never takes someone's earlier result.
+function startTapCalendarSearch(origin, destination, roundTrip, options, session) {
+  if (!session) {
+    session = newSession("tap-calendar", [origin, destination, roundTrip, options]);
+    session.forceFresh = true;
+  }
+  return runTapSearch(session, { source: "tap-calendar", ...options }, origin, destination, roundTrip, "Panorama");
+}
+
+function tapCalendarFacts(filters, coverage) {
+  if (!filters) return [];
+  return [
+    filters.nonstopOnly ? "Só voo direto" : "Com ou sem conexão",
+    `Visto há até ${filters.maxAgeHours} h`,
+    coverage?.until && `Dados até ${coverage.until.split("-").reverse().join("/")}`,
+  ];
+}
+
+async function runTapSearch(session, request, origin, destination, roundTrip, detail) {
+  const card = createJobCard(tapQueue, { program: "TAP", detail, origin, destination, roundTrip });
   const partialNotices = [];
+  const notices = [];
 
   try {
     const outbound = await runOnServer(
       card,
-      { source: "tap", origin, destination, ceilings },
+      { ...request, origin, destination },
       roundTrip ? "Buscando ida…" : "Buscando…",
       session,
     );
@@ -2012,10 +2059,12 @@ async function startTapSearch(origin, destination, roundTrip, ceilings, session)
         { text: "Teto aplicado", className: "fact-lead" },
         `Executiva ${outbound.appliedCeilings.businessK}K`,
         `Econômica ${outbound.appliedCeilings.economyK}K`,
+        ...tapCalendarFacts(outbound.filters, outbound.coverage),
       ]);
       card.ceilingsEl.hidden = false;
     }
     if (outbound.partialNotice) partialNotices.push(outbound.partialNotice);
+    notices.push(...(outbound.notices || []).map((notice) => (roundTrip ? `Ida: ${notice}` : notice)));
     const outboundLabel = roundTrip ? `Ida: ${origin} → ${destination}` : `${origin} → ${destination}`;
     renderTapLeg(card.resultEl, outboundLabel, outboundReport);
     card.upgradeLegs.push({ label: outboundLabel, business: outboundReport.business.days, economy: outboundReport.economy.days });
@@ -2033,12 +2082,13 @@ async function startTapSearch(origin, destination, roundTrip, ceilings, session)
     } else if (roundTrip) {
       const inbound = await runOnServer(
         card,
-        { source: "tap", origin: destination, destination: origin, ceilings },
+        { ...request, origin: destination, destination: origin },
         "Buscando volta…",
         session,
       );
       returnReport = inbound.result;
       if (inbound.partialNotice) partialNotices.push(inbound.partialNotice);
+      notices.push(...(inbound.notices || []).map((notice) => `Volta: ${notice}`));
       const returnLabel = `Volta: ${destination} → ${origin}`;
       renderTapLeg(card.resultEl, returnLabel, returnReport);
       card.upgradeLegs.push({ label: returnLabel, business: returnReport.business.days, economy: returnReport.economy.days });
@@ -2052,7 +2102,7 @@ async function startTapSearch(origin, destination, roundTrip, ceilings, session)
     card.resultEl.hidden = card.minimized;
     card.hasSubtabs = true;
     card.subtabsEl.hidden = card.minimized;
-    showPartialNotices(card, partialNotices);
+    showPartialNotices(card, [...partialNotices, ...notices]);
     updateCardActions(card);
     showAlertButtons(card, "tap", origin, destination, [
       { cabinClass: "Executiva", outbound: outboundReport.business, inbound: returnReport?.business },
@@ -3099,6 +3149,44 @@ tapForm.addEventListener("submit", async (event) => {
   };
   const args = [origin, destination, roundTrip, { business: inK(tapBusinessCeilingInput), economy: inK(tapEconomyCeilingInput) }];
   trackRunning("tap", origin, destination, roundTrip, startTapSearch(...args, choice === "fresh" ? freshSession("tap", args) : undefined));
+});
+
+function selectTapMode(button) {
+  markSelectedTab(tapModeButtons, button);
+  tapCalendarForm.hidden = button.dataset.mode !== "calendar";
+  tapForm.hidden = button.dataset.mode !== "live";
+}
+
+tapModeButtons.forEach((button) => {
+  button.addEventListener("click", () => selectTapMode(button));
+  button.addEventListener("keydown", (event) => onTabListKeydown(event, tapModeButtons, selectTapMode));
+});
+
+tapCalendarForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  clearNotice(tapNotice);
+  const origin = tapCalendarOriginInput.value.trim().toUpperCase();
+  const destination = tapCalendarDestinationInput.value.trim().toUpperCase();
+  const roundTrip = tapCalendarRoundTripCheckbox.checked;
+  const maxAgeHours = Number(tapCalendarMaxAgeInput.value);
+  if (!origin || !destination) {
+    showNotice(tapNotice, "Preencha origem e destino.");
+    return;
+  }
+  if (!Number.isInteger(maxAgeHours) || maxAgeHours < 1 || maxAgeHours > 720) {
+    showNotice(tapNotice, "A idade máxima do dado deve ser um número inteiro de horas, de 1 a 720.");
+    return;
+  }
+  const inK = (input) => {
+    const value = parseFloat(input.value);
+    return Number.isFinite(value) && value > 0 ? value : null;
+  };
+  const options = {
+    ceilings: { business: inK(tapCalendarBusinessCeilingInput), economy: inK(tapCalendarEconomyCeilingInput) },
+    nonstopOnly: tapCalendarStopsSelect.value === "nonstop",
+    maxAgeHours,
+  };
+  startTapCalendarSearch(origin, destination, roundTrip, options);
 });
 
 latamForm.addEventListener("submit", (event) => {

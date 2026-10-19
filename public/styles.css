@@ -1088,6 +1088,11 @@ input[type="number"] {
   padding: var(--e4) var(--e5) var(--e5);
 }
 
+.subtabs.panel-subtabs {
+  padding: 0 var(--e1);
+  border-top: 0;
+}
+
 .subtabs[hidden] + .result {
   border-top: 1px solid var(--line);
 }

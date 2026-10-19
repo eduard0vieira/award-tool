@@ -52,7 +52,51 @@
     <!-- Every source has its own form and queue; switching tabs only toggles
          hidden, so a running search in one tab keeps its progress. -->
     <section id="panel-tap" class="panel" role="tabpanel" aria-labelledby="tab-tap" tabindex="-1">
-      <form id="tap-search-form">
+      <div class="subtabs panel-subtabs" role="tablist" aria-label="Modo de busca do AwardTool">
+        <button type="button" role="tab" id="tap-mode-calendar" aria-controls="tap-calendar-form" aria-selected="true" class="subtab-button active" data-mode="calendar">Panorama</button>
+        <button type="button" role="tab" id="tap-mode-live" aria-controls="tap-search-form" aria-selected="false" tabindex="-1" class="subtab-button" data-mode="live">Busca ao vivo</button>
+      </div>
+
+      <form id="tap-calendar-form" role="tabpanel" aria-labelledby="tap-mode-calendar">
+        <div class="field">
+          <label for="tap-calendar-origin">Origem</label>
+          <input id="tap-calendar-origin" name="origin" placeholder="ex.: GRU" maxlength="3" pattern="[A-Za-z]{3}" title="Código IATA de 3 letras" required autocomplete="off" autocapitalize="characters" spellcheck="false" />
+        </div>
+        <div class="field">
+          <label for="tap-calendar-destination">Destino</label>
+          <input id="tap-calendar-destination" name="destination" placeholder="ex.: LIS" maxlength="3" pattern="[A-Za-z]{3}" title="Código IATA de 3 letras" required autocomplete="off" autocapitalize="characters" spellcheck="false" />
+        </div>
+        <label class="checkbox">
+          <input type="checkbox" id="tap-calendar-round-trip" name="round-trip" checked />
+          Ida e volta
+        </label>
+        <button type="submit">Buscar</button>
+
+        <div class="ceilings-row">
+          <div class="field">
+            <label for="tap-calendar-ceiling-business">Teto Executiva (K)</label>
+            <input id="tap-calendar-ceiling-business" name="ceiling-business" type="number" min="1" step="0.5" placeholder="padrão: 181" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label for="tap-calendar-ceiling-economy">Teto Econômica (K)</label>
+            <input id="tap-calendar-ceiling-economy" name="ceiling-economy" type="number" min="1" step="0.5" placeholder="padrão: 60" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label for="tap-calendar-stops">Conexões</label>
+            <select id="tap-calendar-stops" name="stops">
+              <option value="any">Com ou sem conexão</option>
+              <option value="nonstop">Só voo direto</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="tap-calendar-max-age">Visto há no máximo (h)</label>
+            <input id="tap-calendar-max-age" name="max-age" type="number" min="1" max="720" step="1" value="48" required autocomplete="off" />
+          </div>
+        </div>
+        <p class="hint">Lê as datas que o AwardTool guarda da TAP, sem gastar consulta. Cada data foi vista por ele há algumas horas ou dias: confirme no site da TAP antes de emitir.</p>
+      </form>
+
+      <form id="tap-search-form" role="tabpanel" aria-labelledby="tap-mode-live" hidden>
         <div class="field">
           <label for="tap-origin">Origem</label>
           <input id="tap-origin" name="origin" placeholder="ex.: GRU" maxlength="3" pattern="[A-Za-z]{3}" title="Código IATA de 3 letras" required autocomplete="off" autocapitalize="characters" spellcheck="false" />
@@ -78,6 +122,7 @@
             <input id="tap-ceiling-economy" name="ceiling-economy" type="number" min="1" step="0.5" placeholder="padrão: 53" autocomplete="off" />
           </div>
         </div>
+        <p class="hint">Busca no site do AwardTool em tempo real, em janelas de 36 dias. A TAP está fora dessa busca desde agosto de 2026; use o Panorama.</p>
       </form>
 
       <p id="tap-notice" class="notice" hidden></p>
