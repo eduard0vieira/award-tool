@@ -1,0 +1,116 @@
+import { Inject, Injectable } from "@nestjs/common";
+import { SessionPool } from "../../../core/session-pool.ts";
+import { buildTapCalendarReport, readRouteCalendar } from "../../../scrapers/tap/tap-calendar.ts";
+import { DEFAULT_BUSINESS_CEILING_K, type TapSession } from "../../../scrapers/tap/tap.scraper.ts";
+import { JobRunner } from "../../jobs/job-runner.service.ts";
+import { JobStore } from "../../jobs/job-store.service.ts";
+import type { SearchSource } from "../../search/search-source.ts";
+import { recordSearch } from "../record-search.ts";
+import { TapCalendarSearchDto } from "./tap-calendar-search.dto.ts";
+import { TAP_POOL } from "./tap.source.ts";
+
+// The stored data spans TAP's whole saver range, so economy goes up to 60K here,
+// above the live search's 53K: it takes the 59K days.
+export const DEFAULT_CALENDAR_ECONOMY_CEILING_K = 60;
+export const DEFAULT_MAX_AGE_HOURS = 48;
+
+const NOT_TRACKED = "O AwardTool não acompanha a TAP nesse trecho.";
+
+@Injectable()
+export class TapCalendarSource implements SearchSource<TapCalendarSearchDto> {
+  readonly id = "tap-calendar";
+  readonly requestDto = TapCalendarSearchDto;
+
+  identity(request: TapCalendarSearchDto) {
+    return {
+      origin: request.origin,
+      destination: request.destination,
+      business: request.ceilings?.business ?? null,
+      economy: request.ceilings?.economy ?? null,
+      nonstopOnly: request.nonstopOnly ?? false,
+      maxAgeHours: request.maxAgeHours ?? DEFAULT_MAX_AGE_HOURS,
+    };
+  }
+
+  constructor(
+    @Inject(TAP_POOL) private readonly pool: SessionPool<TapSession>,
+    private readonly runner: JobRunner,
+    private readonly jobs: JobStore,
+  ) {}
+
+  start(jobId: string, request: TapCalendarSearchDto) {
+    const { origin, destination } = request;
+    const ceilingsK = {
+      business: request.ceilings?.business ?? DEFAULT_BUSINESS_CEILING_K,
+      economy: request.ceilings?.economy ?? DEFAULT_CALENDAR_ECONOMY_CEILING_K,
+    };
+    const filters = { nonstopOnly: request.nonstopOnly ?? false, maxAgeHours: request.maxAgeHours ?? DEFAULT_MAX_AGE_HOURS };
+    const appliedCeilings = { businessK: ceilingsK.business, economyK: ceilingsK.economy };
+
+    return this.runner.run(this.pool, jobId, async ({ page, baseUrl }) => {
+      const job = this.jobs.callbacks(jobId);
+      job.log(`Lendo o calendário do AwardTool para ${origin}-${destination}...`);
+      job.progress(0.1);
+      const dates = await readRouteCalendar(page, baseUrl, origin, destination);
+      const report = buildTapCalendarReport(dates, { ...filters, ceilingsK, now: Math.floor(Date.now() / 1000) });
+      job.progress(1);
+
+      if (report.kind === "not_tracked") {
+        const empty = { min: null, max: null, days: [], text: NOT_TRACKED, emptyReason: NOT_TRACKED };
+        this.jobs.complete(jobId, {
+          report: { business: empty, economy: empty },
+          appliedCeilings,
+          filters,
+          notTracked: true,
+          notices: [`${NOT_TRACKED} (${origin} → ${destination})`],
+        });
+        return;
+      }
+
+      const notices: string[] = [];
+      if (report.staleDates > 0) {
+        const newest = report.newestStaleSeenAt === null ? "" : `, a mais recente vista em ${seenAtText(report.newestStaleSeenAt)}`;
+        notices.push(
+          `${report.staleDates} data(s) dentro do teto ficaram de fora por terem sido vistas há mais de ${filters.maxAgeHours} h${newest}.`,
+        );
+      }
+      if (report.mixedCabinDates > 0) {
+        notices.push(`${report.mixedCabinDates} data(s) só tinham Executiva com trecho em Econômica e não contam como Executiva.`);
+      }
+      job.log(`${report.business.days.length} datas de Executiva e ${report.economy.days.length} de Econômica.`);
+
+      recordSearch(jobId, {
+        source: "tap",
+        origin,
+        destination,
+        legs: [
+          {
+            label: `${origin} → ${destination}`,
+            sections: [
+              { ...report.business, label: "Executiva" },
+              { ...report.economy, label: "Econômica" },
+            ],
+          },
+        ],
+        ceilings: { Executiva: ceilingsK.business, "Econômica": ceilingsK.economy },
+      });
+      this.jobs.complete(jobId, {
+        report: { business: report.business, economy: report.economy },
+        appliedCeilings,
+        filters,
+        coverage: { until: report.coveredUntil, seenBetween: report.seenBetween },
+        notices,
+      });
+    });
+  }
+}
+
+function seenAtText(seconds: number) {
+  return new Date(seconds * 1000).toLocaleString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}

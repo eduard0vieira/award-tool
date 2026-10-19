@@ -3,6 +3,7 @@ import { startTapSession, type TapSession } from "../../../scrapers/tap/tap.scra
 import { config } from "../../config.ts";
 import { JobsModule } from "../../jobs/jobs.module.ts";
 import { sessionPoolProvider } from "../session-pool.provider.ts";
+import { TapCalendarSource } from "./tap-calendar.source.ts";
 import { TAP_POOL, TapSource } from "./tap.source.ts";
 
 @Module({
@@ -16,7 +17,8 @@ import { TAP_POOL, TapSource } from "./tap.source.ts";
       closeSession: (session) => session.browser.close(),
     }),
     TapSource,
+    TapCalendarSource,
   ],
-  exports: [TapSource],
+  exports: [TapSource, TapCalendarSource],
 })
 export class TapModule {}
