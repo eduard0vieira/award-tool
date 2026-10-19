@@ -15,7 +15,7 @@ Each source has its own tab in the front:
 
 | Source | What it is | Login | How it extracts |
 |---|---|---|---|
-| **AwardTool** (TAP) | paid aggregator | yes (user/password in `.env`) | real navigation of the page |
+| **AwardTool** (TAP) | paid aggregator | yes (user/password in `.env`) | Panorama sub-tab (default): the route calendar's stored data, one request per leg, read from the page's own response; live sub-tab: real navigation of the search page (TAP left it in Aug 2026). See `docs/recon/awardtool-panorama.md` |
 | **SeatSpy** | paid aggregator, 9 programs (AF, B6, BA, CX, EY, IB, KLM, QF, VIR) | yes | intercepts the network response of the internal API |
 | **American** | aa.com, award search | no | `fetch` from inside the page on the calendar endpoint |
 | **LATAM** | latamairlines.com | browser session | calendar endpoint (cash) + real search (miles) |
@@ -67,7 +67,8 @@ loader, class-validator on request bodies, Playwright, Prisma 7 on SQLite
 ```
 src/
   scrapers/                  one folder per program; this is where scraping lives
-    tap/tap.scraper.ts         AwardTool/TAP
+    tap/tap.scraper.ts         AwardTool/TAP, live search
+    tap/tap-calendar.ts        AwardTool/TAP, stored route calendar
     seatspy/seatspy.scraper.ts SeatSpy (9 programs)
     aa/aa.scraper.ts           American
     latam/latam.scraper.ts     LATAM (calendar in R$ + confirmation in miles)
