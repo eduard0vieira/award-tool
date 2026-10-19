@@ -155,6 +155,8 @@ const tapCalendarDestinationInput = document.getElementById("tap-calendar-destin
 const tapCalendarRoundTripCheckbox = document.getElementById("tap-calendar-round-trip");
 const tapCalendarBusinessCeilingInput = document.getElementById("tap-calendar-ceiling-business");
 const tapCalendarEconomyCeilingInput = document.getElementById("tap-calendar-ceiling-economy");
+const tapCalendarBusinessFloorInput = document.getElementById("tap-calendar-floor-business");
+const tapCalendarEconomyFloorInput = document.getElementById("tap-calendar-floor-economy");
 const tapCalendarStopsSelect = document.getElementById("tap-calendar-stops");
 const tapCalendarMaxAgeInput = document.getElementById("tap-calendar-max-age");
 
@@ -2032,14 +2034,18 @@ function startTapCalendarSearch(origin, destination, roundTrip, options, session
   return runTapSearch(session, { source: "tap-calendar", ...options }, origin, destination, roundTrip, "Panorama");
 }
 
+function milesRangeText(floorK, ceilingK) {
+  return floorK ? `${floorK}–${ceilingK}K` : `${ceilingK}K`;
+}
+
 // On a round trip the legs can end on different dates; the earlier one is what both cover.
 function setTapFacts(card, legs) {
   const [{ appliedCeilings, filters }] = legs;
   const coveredUntil = legs.map((leg) => leg.coverage?.until).filter(Boolean).sort()[0];
   setFacts(card.ceilingsEl, [
-    { text: "Teto aplicado", className: "fact-lead" },
-    `Executiva ${appliedCeilings.businessK}K`,
-    `Econômica ${appliedCeilings.economyK}K`,
+    { text: appliedCeilings.businessFloorK || appliedCeilings.economyFloorK ? "Faixa aplicada" : "Teto aplicado", className: "fact-lead" },
+    `Executiva ${milesRangeText(appliedCeilings.businessFloorK, appliedCeilings.businessK)}`,
+    `Econômica ${milesRangeText(appliedCeilings.economyFloorK, appliedCeilings.economyK)}`,
     filters && (filters.nonstopOnly ? "Só voo direto" : "Com ou sem conexão"),
     filters && `Visto há até ${filters.maxAgeHours} h`,
     coveredUntil && `Dados até ${coveredUntil.split("-").reverse().join("/")}`,
@@ -3180,8 +3186,17 @@ tapCalendarForm.addEventListener("submit", (event) => {
     const value = parseFloat(input.value);
     return Number.isFinite(value) && value > 0 ? value : null;
   };
+  const ceilings = { business: inK(tapCalendarBusinessCeilingInput), economy: inK(tapCalendarEconomyCeilingInput) };
+  const floors = { business: inK(tapCalendarBusinessFloorInput), economy: inK(tapCalendarEconomyFloorInput) };
+  const defaults = { business: 181, economy: 60 };
+  const inverted = ["business", "economy"].find((cabin) => floors[cabin] && floors[cabin] > (ceilings[cabin] ?? defaults[cabin]));
+  if (inverted) {
+    showNotice(tapNotice, `O mínimo da ${inverted === "business" ? "Executiva" : "Econômica"} está acima do máximo.`);
+    return;
+  }
   const options = {
-    ceilings: { business: inK(tapCalendarBusinessCeilingInput), economy: inK(tapCalendarEconomyCeilingInput) },
+    ceilings,
+    floors,
     nonstopOnly: tapCalendarStopsSelect.value === "nonstop",
     maxAgeHours,
   };

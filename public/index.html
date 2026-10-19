@@ -73,13 +73,22 @@
         <button type="submit">Buscar</button>
 
         <div class="ceilings-row">
-          <div class="field">
-            <label for="tap-calendar-ceiling-business">Teto Executiva (K)</label>
-            <input id="tap-calendar-ceiling-business" name="ceiling-business" type="number" min="1" step="0.5" placeholder="padrão: 181" autocomplete="off" />
+          <!-- Empty maximum means 181K business / 60K economy; empty minimum means none. -->
+          <div class="field flight-filter-range" role="group" aria-labelledby="tap-calendar-business-label">
+            <span class="flight-filter-range-label" id="tap-calendar-business-label">Executiva (K)</span>
+            <div class="flight-filter-range-inputs">
+              <input id="tap-calendar-floor-business" name="floor-business" type="number" min="1" step="any" placeholder="mín." aria-label="Executiva, mínimo em mil milhas" autocomplete="off" />
+              <span aria-hidden="true">a</span>
+              <input id="tap-calendar-ceiling-business" name="ceiling-business" type="number" min="1" step="any" placeholder="181" aria-label="Executiva, máximo em mil milhas (padrão 181)" autocomplete="off" />
+            </div>
           </div>
-          <div class="field">
-            <label for="tap-calendar-ceiling-economy">Teto Econômica (K)</label>
-            <input id="tap-calendar-ceiling-economy" name="ceiling-economy" type="number" min="1" step="0.5" placeholder="padrão: 60" autocomplete="off" />
+          <div class="field flight-filter-range" role="group" aria-labelledby="tap-calendar-economy-label">
+            <span class="flight-filter-range-label" id="tap-calendar-economy-label">Econômica (K)</span>
+            <div class="flight-filter-range-inputs">
+              <input id="tap-calendar-floor-economy" name="floor-economy" type="number" min="1" step="any" placeholder="mín." aria-label="Econômica, mínimo em mil milhas" autocomplete="off" />
+              <span aria-hidden="true">a</span>
+              <input id="tap-calendar-ceiling-economy" name="ceiling-economy" type="number" min="1" step="any" placeholder="60" aria-label="Econômica, máximo em mil milhas (padrão 60)" autocomplete="off" />
+            </div>
           </div>
           <div class="field">
             <label for="tap-calendar-stops">Conexões</label>
@@ -90,7 +99,7 @@
           </div>
           <div class="field">
             <label for="tap-calendar-max-age">Visto há no máximo (h)</label>
-            <input id="tap-calendar-max-age" name="max-age" type="number" min="1" max="720" step="1" value="48" required autocomplete="off" />
+            <input id="tap-calendar-max-age" name="max-age" type="number" min="1" max="720" step="1" value="120" required autocomplete="off" />
           </div>
         </div>
         <p class="hint">Lê as datas que o AwardTool guarda da TAP, sem gastar consulta. Cada data foi vista por ele há algumas horas ou dias: confirme no site da TAP antes de emitir.</p>
