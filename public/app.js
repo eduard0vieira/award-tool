@@ -2032,13 +2032,19 @@ function startTapCalendarSearch(origin, destination, roundTrip, options, session
   return runTapSearch(session, { source: "tap-calendar", ...options }, origin, destination, roundTrip, "Panorama");
 }
 
-function tapCalendarFacts(filters, coverage) {
-  if (!filters) return [];
-  return [
-    filters.nonstopOnly ? "Só voo direto" : "Com ou sem conexão",
-    `Visto há até ${filters.maxAgeHours} h`,
-    coverage?.until && `Dados até ${coverage.until.split("-").reverse().join("/")}`,
-  ];
+// On a round trip the legs can end on different dates; the earlier one is what both cover.
+function setTapFacts(card, legs) {
+  const [{ appliedCeilings, filters }] = legs;
+  const coveredUntil = legs.map((leg) => leg.coverage?.until).filter(Boolean).sort()[0];
+  setFacts(card.ceilingsEl, [
+    { text: "Teto aplicado", className: "fact-lead" },
+    `Executiva ${appliedCeilings.businessK}K`,
+    `Econômica ${appliedCeilings.economyK}K`,
+    filters && (filters.nonstopOnly ? "Só voo direto" : "Com ou sem conexão"),
+    filters && `Visto há até ${filters.maxAgeHours} h`,
+    coveredUntil && `Dados até ${coveredUntil.split("-").reverse().join("/")}`,
+  ]);
+  card.ceilingsEl.hidden = false;
 }
 
 async function runTapSearch(session, request, origin, destination, roundTrip, detail) {
@@ -2054,15 +2060,7 @@ async function runTapSearch(session, request, origin, destination, roundTrip, de
       session,
     );
     const outboundReport = outbound.result;
-    if (outbound.appliedCeilings) {
-      setFacts(card.ceilingsEl, [
-        { text: "Teto aplicado", className: "fact-lead" },
-        `Executiva ${outbound.appliedCeilings.businessK}K`,
-        `Econômica ${outbound.appliedCeilings.economyK}K`,
-        ...tapCalendarFacts(outbound.filters, outbound.coverage),
-      ]);
-      card.ceilingsEl.hidden = false;
-    }
+    if (outbound.appliedCeilings) setTapFacts(card, [outbound]);
     if (outbound.partialNotice) partialNotices.push(outbound.partialNotice);
     notices.push(...(outbound.notices || []).map((notice) => (roundTrip ? `Ida: ${notice}` : notice)));
     const outboundLabel = roundTrip ? `Ida: ${origin} → ${destination}` : `${origin} → ${destination}`;
@@ -2089,6 +2087,7 @@ async function runTapSearch(session, request, origin, destination, roundTrip, de
       returnReport = inbound.result;
       if (inbound.partialNotice) partialNotices.push(inbound.partialNotice);
       notices.push(...(inbound.notices || []).map((notice) => `Volta: ${notice}`));
+      if (outbound.appliedCeilings && inbound.coverage) setTapFacts(card, [outbound, inbound]);
       const returnLabel = `Volta: ${destination} → ${origin}`;
       renderTapLeg(card.resultEl, returnLabel, returnReport);
       card.upgradeLegs.push({ label: returnLabel, business: returnReport.business.days, economy: returnReport.economy.days });
