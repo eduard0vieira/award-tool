@@ -1655,7 +1655,7 @@ function computeUpgrade(businessDays, economyDays) {
   const economyByDate = new Map((economyDays || []).map((day) => [day.date, day.valueK]));
   return (businessDays || [])
     .filter((day) => economyByDate.has(day.date))
-    .map((day) => ({ date: day.date, businessK: day.valueK, economyK: economyByDate.get(day.date) }))
+    .map((day) => ({ date: day.date, businessK: day.valueK, economyK: economyByDate.get(day.date), link: day.link }))
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
@@ -1682,12 +1682,18 @@ function upgradeSection(leg, costK) {
     .filter((day) => costK === null || (day.economyK != null && day.businessK != null && day.economyK + costK < day.businessK))
     .map((day) => {
       if (costK === null) {
-        return { date: day.date, valueK: day.economyK, hint: `Econômica ${day.economyK}K, Executiva direta ${day.businessK}K` };
+        return {
+          date: day.date,
+          valueK: day.economyK,
+          link: day.link,
+          hint: `Econômica ${day.economyK}K, Executiva direta ${day.businessK}K`,
+        };
       }
       const totalK = Math.round((day.economyK + costK) * 10) / 10;
       return {
         date: day.date,
         valueK: totalK,
+        link: day.link,
         hint: `Econômica ${day.economyK}K + upgrade ${costK}K = ${totalK}K. Executiva direta: ${day.businessK}K`,
       };
     });
@@ -1792,7 +1798,7 @@ function renderColumn(columnEl, section, colorClass) {
         chip.title = `Abrir a emissão de ${formatFullDate(date)} no site`;
       }
       if (seenAt) chip.title = `Visto pelo AwardTool em ${formatDateTime(seenAt * 1000)}`;
-      if (hint) chip.title = hint;
+      if (hint) chip.title = link ? `${hint}. Clique para abrir no site.` : hint;
       if (seats > 0) {
         const seatsEl = document.createElement("small");
         seatsEl.className = "date-chip-seats";
