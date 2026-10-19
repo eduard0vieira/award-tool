@@ -1659,73 +1659,81 @@ function computeUpgrade(businessDays, economyDays) {
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
-function renderUpgrade(card) {
-  const { upgradeListEl, upgradeEmptyEl, upgradeLegs } = card;
-  upgradeListEl.innerHTML = "";
-  upgradeEmptyEl.hidden = upgradeLegs.length > 0;
-  if (upgradeLegs.length === 0) return;
+// TAP sells the economy-to-business miles upgrade at a fixed price per region.
+// Only the Brazil–mainland Portugal price is known here; another region would
+// put a made-up total in the alert.
+const TAP_UPGRADE_K = 81.6;
+const TAP_BRAZIL_AIRPORTS = new Set(["BEL", "BSB", "CNF", "FLN", "FOR", "GIG", "GRU", "MCZ", "NAT", "POA", "REC", "SSA", "VCP"]);
+const MAINLAND_PORTUGAL_AIRPORTS = new Set(["LIS", "OPO", "FAO"]);
+const TAP_UPGRADE_TIP =
+  "⬆️ *Pulo do gato:* emita em Econômica e peça à TAP o upgrade com milhas para a Executiva " +
+  "(81.600 milhas no trecho Brasil–Portugal continental). O valor acima já soma os dois.";
 
-  for (const leg of upgradeLegs) {
-    const crossed = computeUpgrade(leg.business, leg.economy);
+function tapUpgradeCostK(origin, destination) {
+  const linked = (from, to) => TAP_BRAZIL_AIRPORTS.has(from) && MAINLAND_PORTUGAL_AIRPORTS.has(to);
+  return linked(origin, destination) || linked(destination, origin) ? TAP_UPGRADE_K : null;
+}
 
-    const block = createColumn(leg.label, "upgrade-leg");
-    block.querySelector(".edit-dates-button").remove();
-    block.querySelector(".date-chips").remove();
-    const body = block.querySelector(".column-body");
-    // Legs without crossed dates are born closed, leaving room for the ones that have them.
-    setColumnExpanded(block, crossed.length > 0);
-
-    const copyButton = block.querySelector(".copy-button");
-    if (crossed.length > 0) {
-      copyButton.textContent = "Copiar datas";
-      copyButton.addEventListener("click", () =>
-        copyToClipboard(copyButton, datesTextByMonth(crossed.map((item) => item.date)), "Copiar datas"),
-      );
-    } else {
-      copyButton.remove();
-    }
-
-    block.querySelector(".column-summary").textContent =
-      crossed.length > 0
-        ? `${plural(crossed.length, "dia", "dias")} com as duas cabines disponíveis.`
-        : "Nenhum dia com Executiva e Econômica juntas nesse período.";
-
-    if (crossed.length > 0) {
-      const dates = document.createElement("div");
-      dates.className = "upgrade-dates";
-      for (const group of groupByMonth(crossed)) {
-        const monthTitle = document.createElement("div");
-        monthTitle.className = "month-title";
-        monthTitle.textContent = group.title;
-        dates.appendChild(monthTitle);
-
-        const rows = document.createElement("div");
-        rows.className = "upgrade-rows";
-        for (const item of group.items) {
-          const row = document.createElement("div");
-          row.className = "upgrade-row";
-
-          const day = document.createElement("span");
-          day.className = "upgrade-day";
-          day.textContent = item.date.split("-")[2];
-
-          const business = document.createElement("span");
-          business.className = "date-chip cabin-business";
-          business.textContent = item.businessK != null ? `Exec ${item.businessK}K` : "Exec (preço n/d)";
-
-          const economy = document.createElement("span");
-          economy.className = "date-chip cabin-economy";
-          economy.textContent = item.economyK != null ? `Econ ${item.economyK}K` : "Econ (preço n/d)";
-
-          row.append(day, business, economy);
-          rows.appendChild(row);
-        }
-        dates.appendChild(rows);
+// With a known price, only the days where economy plus upgrade beats that day's
+// business fare: on the others the upgrade is not worth offering.
+function upgradeSection(leg, costK) {
+  const crossed = computeUpgrade(leg.business, leg.economy);
+  const days = crossed
+    .filter((day) => costK === null || (day.economyK != null && day.businessK != null && day.economyK + costK < day.businessK))
+    .map((day) => {
+      if (costK === null) {
+        return { date: day.date, valueK: day.economyK, hint: `Econômica ${day.economyK}K, Executiva direta ${day.businessK}K` };
       }
-      body.appendChild(dates);
-    }
+      const totalK = Math.round((day.economyK + costK) * 10) / 10;
+      return {
+        date: day.date,
+        valueK: totalK,
+        hint: `Econômica ${day.economyK}K + upgrade ${costK}K = ${totalK}K. Executiva direta: ${day.businessK}K`,
+      };
+    });
+  const values = days.map((day) => day.valueK).filter((value) => value != null);
+  const emptyReason =
+    crossed.length === 0
+      ? "Nenhum dia com Econômica e Executiva juntas nesse período."
+      : "Nos dias com as duas cabines, a Executiva direta sai mais barata que Econômica + upgrade.";
+  return {
+    min: values.length > 0 ? Math.min(...values) : null,
+    max: values.length > 0 ? Math.max(...values) : null,
+    days,
+    text: daysText(days),
+    ...(days.length === 0 && { emptyReason }),
+  };
+}
 
-    upgradeListEl.appendChild(block);
+// Built once when the search ends: the alert button and the edits in the
+// Upgrade tab must share the same sections, or a date taken out would come back.
+function prepareUpgrade(card, origin, destination) {
+  const costK = tapUpgradeCostK(origin, destination);
+  card.upgrade = {
+    costK,
+    legs: card.upgradeLegs.map((leg) => ({ label: leg.label, section: upgradeSection(leg, costK) })),
+  };
+}
+
+function renderUpgrade(card) {
+  if (card.upgradeRendered || !card.upgrade) return;
+  card.upgradeRendered = true;
+  const { upgradeListEl, upgradeEmptyEl, upgradeSubpanelEl } = card;
+  const { costK, legs } = card.upgrade;
+
+  upgradeSubpanelEl.querySelector(".upgrade-cost").textContent = costK === null ? "?" : `${costK}K`;
+  upgradeSubpanelEl.querySelector(".upgrade-explanation").textContent =
+    costK === null
+      ? "O bot só sabe o preço do upgrade entre o Brasil e Portugal continental. Os dias abaixo têm as duas cabines e mostram o valor da Econômica; esse trecho não gera alerta de upgrade."
+      : "Entram só os dias em que a soma sai mais barata que a Executiva direta do mesmo dia. Passe o mouse num dia para ver a conta.";
+
+  upgradeEmptyEl.hidden = legs.length > 0;
+  for (const { label, section } of legs) {
+    renderLeg(upgradeListEl, label, "columns", (columns) => {
+      const column = createColumn(costK === null ? "Dias com as duas cabines" : "Executiva via upgrade", "column-business");
+      columns.appendChild(column);
+      renderColumn(column, section, "cabin-business");
+    });
   }
 }
 
@@ -1769,7 +1777,7 @@ function renderColumn(columnEl, section, colorClass) {
 
     const row = document.createElement("div");
     row.className = "date-chip-row";
-    for (const { date, seats: foundSeats, link, seenAt } of group.items) {
+    for (const { date, seats: foundSeats, link, seenAt, hint } of group.items) {
       const seats = seatsEditedIn(section).get(date) ?? foundSeats;
       // With a link the day becomes a real anchor (opens in a new tab, the address can be copied).
       const chip = document.createElement(link ? "a" : "span");
@@ -1784,6 +1792,7 @@ function renderColumn(columnEl, section, colorClass) {
         chip.title = `Abrir a emissão de ${formatFullDate(date)} no site`;
       }
       if (seenAt) chip.title = `Visto pelo AwardTool em ${formatDateTime(seenAt * 1000)}`;
+      if (hint) chip.title = hint;
       if (seats > 0) {
         const seatsEl = document.createElement("small");
         seatsEl.className = "date-chip-seats";
@@ -2109,10 +2118,19 @@ async function runTapSearch(session, request, origin, destination, roundTrip, de
     card.subtabsEl.hidden = card.minimized;
     showPartialNotices(card, [...partialNotices, ...notices]);
     updateCardActions(card);
+    prepareUpgrade(card, origin, destination);
+    const [upgradeOutbound, upgradeInbound] = card.upgrade.legs;
     showAlertButtons(card, "tap", origin, destination, [
       { cabinClass: "Executiva", outbound: outboundReport.business, inbound: returnReport?.business },
       { cabinClass: "Econômica", outbound: outboundReport.economy, inbound: returnReport?.economy },
-    ]);
+      card.upgrade.costK !== null && {
+        cabinClass: "Executiva",
+        buttonLabel: "Executiva com upgrade",
+        outbound: upgradeOutbound?.section,
+        inbound: upgradeInbound?.section,
+        tip: TAP_UPGRADE_TIP,
+      },
+    ].filter(Boolean));
   } catch (err) {
     showFailure(card, err);
   } finally {
@@ -2624,15 +2642,16 @@ function showAlertButtons(card, source, origin, destination, options) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "alert-button";
-    setAlertButtonState(button, option.cabinClass, "idle");
+    const buttonLabel = option.buttonLabel ?? option.cabinClass;
+    setAlertButtonState(button, buttonLabel, "idle");
     button.addEventListener("click", async () => {
       button.disabled = true;
-      setAlertButtonState(button, option.cabinClass, "busy");
+      setAlertButtonState(button, buttonLabel, "busy");
       try {
         const outbound = keptSection(option.outbound);
         const inbound = keptSection(option.inbound);
         if (!hasDays(outbound) && !hasDays(inbound)) {
-          throw new Error(`Todas as datas de ${option.cabinClass} foram tiradas do alerta.`);
+          throw new Error(`Todas as datas de ${buttonLabel} foram tiradas do alerta.`);
         }
         const alert = await requestAlert({
           source,
@@ -2643,11 +2662,12 @@ function showAlertButtons(card, source, origin, destination, options) {
           outboundText: hasDays(outbound) ? outbound.text : "",
           returnText: hasDays(inbound) ? inbound.text : "",
           ...operatorsOf([outbound, inbound]),
+          ...(option.tip && { tip: option.tip }),
         });
         showGeneratedAlert(card, alert);
-        setAlertButtonState(button, option.cabinClass, "done");
+        setAlertButtonState(button, buttonLabel, "done");
       } catch (err) {
-        setAlertButtonState(button, option.cabinClass, "idle");
+        setAlertButtonState(button, buttonLabel, "idle");
         showNotice(card.noticeEl, err.message || "Falha ao gerar o alerta.");
       } finally {
         button.disabled = false;
@@ -2655,7 +2675,7 @@ function showAlertButtons(card, source, origin, destination, options) {
     });
     // The alert already on screen no longer matches the dates: back to idle so it gets generated again.
     card.root.addEventListener("alert-dates-changed", () => {
-      if (button.isConnected && !button.disabled) setAlertButtonState(button, option.cabinClass, "idle");
+      if (button.isConnected && !button.disabled) setAlertButtonState(button, buttonLabel, "idle");
     });
     bar.appendChild(button);
   }

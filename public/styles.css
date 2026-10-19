@@ -1338,6 +1338,32 @@ input[type="number"] {
 
 /* Upgrade */
 
+/* The one place the upgrade is explained: the sum itself, set as data. */
+.upgrade-formula {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--e1) var(--e3);
+  margin: 0 0 var(--e2);
+  font-family: var(--font-data);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.upgrade-op {
+  color: var(--ink-soft);
+  font-weight: 400;
+}
+
+.upgrade-term.cabin-economy {
+  color: var(--economy);
+}
+
+.upgrade-term.cabin-business {
+  color: var(--business);
+}
+
 .upgrade-explanation {
   max-width: 80ch;
   margin: 0 0 var(--e4);
@@ -1349,41 +1375,6 @@ input[type="number"] {
   display: flex;
   flex-direction: column;
   gap: var(--e4);
-}
-
-.upgrade-dates {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  align-items: start;
-  gap: var(--e2) var(--e3);
-}
-
-.upgrade-rows {
-  display: flex;
-  flex-direction: column;
-  gap: var(--e1);
-}
-
-.upgrade-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--e2);
-}
-
-.upgrade-day {
-  min-width: 28px;
-  font-family: var(--font-data);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
-.upgrade-row .cabin-business {
-  color: var(--business);
-}
-
-.upgrade-row .cabin-economy {
-  color: var(--economy);
 }
 
 /* Generated alerts and confirmations */
