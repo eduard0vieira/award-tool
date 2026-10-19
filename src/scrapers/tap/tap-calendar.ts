@@ -100,6 +100,7 @@ export type TapCalendarOptions = {
   nonstopOnly: boolean;
   maxAgeHours: number;
   ceilingsK: { business: number; economy: number };
+  floorsK: { business: number | null; economy: number | null };
   // Unix seconds, like the calendar's "last seen".
   now: number;
 };
@@ -111,7 +112,7 @@ export type TapCalendarReport =
       business: TapCalendarSection;
       economy: TapCalendarSection;
       coveredUntil: string;
-      // Dates within the ceilings left out because AwardTool last saw them too long ago.
+      // Dates within the miles range left out because AwardTool last saw them too long ago.
       staleDates: number;
       newestStaleSeenAt: number | null;
       mixedCabinDates: number;
@@ -123,7 +124,7 @@ const STALE_REASON = (hours: number) =>
 
 export function buildTapCalendarReport(dates: TapCalendarDate[], options: TapCalendarOptions): TapCalendarReport {
   if (dates.length === 0) return { kind: "not_tracked" };
-  const { nonstopOnly, maxAgeHours, ceilingsK, now } = options;
+  const { nonstopOnly, maxAgeHours, ceilingsK, floorsK, now } = options;
   const oldestAllowed = now - maxAgeHours * 3600;
 
   const kept = { business: [] as TapCalendarDay[], economy: [] as TapCalendarDay[] };
@@ -138,7 +139,7 @@ export function buildTapCalendarReport(dates: TapCalendarDate[], options: TapCal
     if (mixedCabin) mixedCabinDates++;
     for (const cabin of ["business", "economy"] as const) {
       const miles = cabin === "business" && mixedCabin ? null : fares[cabin];
-      if (miles === null || miles > ceilingsK[cabin] * 1000) continue;
+      if (miles === null || miles > ceilingsK[cabin] * 1000 || miles < (floorsK[cabin] ?? 0) * 1000) continue;
       if (fares.seenAt < oldestAllowed) {
         staleByCabin[cabin]++;
         staleDates.add(entry.date);

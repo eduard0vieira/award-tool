@@ -5,6 +5,9 @@ export class TapCalendarSearchDto extends RouteRequestDto {
   @OptionalNestedField("ceilings", () => TapCeilingsDto)
   ceilings?: TapCeilingsDto;
 
+  @OptionalNestedField("floors", () => TapCeilingsDto)
+  floors?: TapCeilingsDto;
+
   @OptionalBooleanField("nonstopOnly")
   nonstopOnly?: boolean;
 

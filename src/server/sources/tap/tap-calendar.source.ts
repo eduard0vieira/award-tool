@@ -12,7 +12,7 @@ import { TAP_POOL } from "./tap.source.ts";
 // The stored data spans TAP's whole saver range, so economy goes up to 60K here,
 // above the live search's 53K: it takes the 59K days.
 export const DEFAULT_CALENDAR_ECONOMY_CEILING_K = 60;
-export const DEFAULT_MAX_AGE_HOURS = 48;
+export const DEFAULT_MAX_AGE_HOURS = 120;
 
 const NOT_TRACKED = "O AwardTool não acompanha a TAP nesse trecho.";
 
@@ -27,6 +27,8 @@ export class TapCalendarSource implements SearchSource<TapCalendarSearchDto> {
       destination: request.destination,
       business: request.ceilings?.business ?? null,
       economy: request.ceilings?.economy ?? null,
+      businessFloor: request.floors?.business ?? null,
+      economyFloor: request.floors?.economy ?? null,
       nonstopOnly: request.nonstopOnly ?? false,
       maxAgeHours: request.maxAgeHours ?? DEFAULT_MAX_AGE_HOURS,
     };
@@ -44,15 +46,21 @@ export class TapCalendarSource implements SearchSource<TapCalendarSearchDto> {
       business: request.ceilings?.business ?? DEFAULT_BUSINESS_CEILING_K,
       economy: request.ceilings?.economy ?? DEFAULT_CALENDAR_ECONOMY_CEILING_K,
     };
+    const floorsK = { business: request.floors?.business ?? null, economy: request.floors?.economy ?? null };
     const filters = { nonstopOnly: request.nonstopOnly ?? false, maxAgeHours: request.maxAgeHours ?? DEFAULT_MAX_AGE_HOURS };
-    const appliedCeilings = { businessK: ceilingsK.business, economyK: ceilingsK.economy };
+    const appliedCeilings = {
+      businessK: ceilingsK.business,
+      economyK: ceilingsK.economy,
+      businessFloorK: floorsK.business,
+      economyFloorK: floorsK.economy,
+    };
 
     return this.runner.run(this.pool, jobId, async ({ page, baseUrl }) => {
       const job = this.jobs.callbacks(jobId);
       job.log(`Lendo o calendário do AwardTool para ${origin}-${destination}...`);
       job.progress(0.1);
       const dates = await readRouteCalendar(page, baseUrl, origin, destination);
-      const report = buildTapCalendarReport(dates, { ...filters, ceilingsK, now: Math.floor(Date.now() / 1000) });
+      const report = buildTapCalendarReport(dates, { ...filters, ceilingsK, floorsK, now: Math.floor(Date.now() / 1000) });
       job.progress(1);
 
       if (report.kind === "not_tracked") {
@@ -71,7 +79,7 @@ export class TapCalendarSource implements SearchSource<TapCalendarSearchDto> {
       if (report.staleDates > 0) {
         const newest = report.newestStaleSeenAt === null ? "" : `, a mais recente vista em ${seenAtText(report.newestStaleSeenAt)}`;
         notices.push(
-          `${report.staleDates} data(s) dentro do teto ficaram de fora por terem sido vistas há mais de ${filters.maxAgeHours} h${newest}.`,
+          `${report.staleDates} data(s) dentro da faixa de milhas ficaram de fora por terem sido vistas há mais de ${filters.maxAgeHours} h${newest}.`,
         );
       }
       if (report.mixedCabinDates > 0) {

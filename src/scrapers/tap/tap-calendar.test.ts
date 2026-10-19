@@ -10,7 +10,7 @@ const raw = fs.readFileSync(path.join(FIXTURES_DIR, "awardtool-route-calendar-GR
 const dates = decodeCalendarResponse(raw, "GRU-LIS");
 // The newest "last seen" in the fixture, so the test does not age with the calendar.
 const capturedAt = Math.max(...dates.map((entry) => entry.any.seenAt));
-const options = { nonstopOnly: false, maxAgeHours: 48, ceilingsK: { business: 181, economy: 60 }, now: capturedAt };
+const options = { nonstopOnly: false, maxAgeHours: 48, ceilingsK: { business: 181, economy: 60 }, floorsK: { business: null, economy: null }, now: capturedAt };
 
 const wrap = (body: unknown) => JSON.stringify({ ciphered_data: deflateSync(JSON.stringify(body)).toString("base64") });
 const fares = (seenAt: number, economy: number | null, business: number | null) => ({ seenAt, economy, business });
@@ -44,6 +44,14 @@ describe("AwardTool route calendar", () => {
     assert.ok(report.economy.days.every((day) => day.valueK <= 60));
     assert.equal(report.staleDates, 10);
     assert.equal(report.coveredUntil, "2027-10-15");
+  });
+
+  test("a floor drops the cheaper dates", () => {
+    const report = buildTapCalendarReport(dates, { ...options, floorsK: { business: null, economy: 55 } });
+    if (report.kind !== "ok") return assert.fail("expected a report");
+    assert.ok(report.economy.days.length > 0);
+    assert.ok(report.economy.days.every((day) => day.valueK >= 55 && day.valueK <= 60));
+    assert.equal(report.business.days.length, 110);
   });
 
   test("nonstop only reads the nonstop fares", () => {
