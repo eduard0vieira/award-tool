@@ -931,12 +931,31 @@ const SMILES_CABINS = [
 
 // `carriers`: who flies the flight quoted that day, null when a leg did not say.
 // Absent only when the flights came without operators.
-export type SmilesSectionDay = { date: string; valueK: number; seats: number; carriers?: SmilesCarrier[] | null };
+export type SmilesSectionDay = { date: string; valueK: number; seats: number; carriers?: SmilesCarrier[] | null; link?: string };
 export type SmilesSection = LabeledSection<SmilesSectionDay>;
 
 type ReportFlight = { cabin: SmilesCabin; miles: number; seats: number; carriers?: SmilesCarrier[] | null };
 
-export function buildSmilesReport(days: { date: string; flights: ReportFlight[] }[], ceilings: SmilesCeilings = {}): SmilesSection[] {
+// The site's own one-way search for that day, every cabin.
+export function smilesBookingLink(route: SmilesRoute, date: string): string {
+  const query = new URLSearchParams({
+    adults: "1",
+    cabin: "ALL",
+    children: "0",
+    departureDate: `${Date.parse(`${date}T12:00:00Z`)}`,
+    infants: "0",
+    tripType: "2",
+    originAirport: route.origin,
+    destinationAirport: route.destination,
+  });
+  return `https://www.smiles.com.br/mfe/emissao-passagem/?${query}`;
+}
+
+export function buildSmilesReport(
+  days: { date: string; flights: ReportFlight[] }[],
+  ceilings: SmilesCeilings = {},
+  route?: SmilesRoute,
+): SmilesSection[] {
   return SMILES_CABINS.map(({ field, label, colorClass }) => {
     const ceiling = ceilings[field];
 
@@ -950,6 +969,7 @@ export function buildSmilesReport(days: { date: string; flights: ReportFlight[] 
         const cheapest = flights.reduce((a, b) => (a.miles <= b.miles ? a : b));
         const quoted: SmilesSectionDay = { date: day.date, valueK: Math.round(cheapest.miles / 10) / 100, seats: cheapest.seats };
         if (cheapest.carriers !== undefined) quoted.carriers = cheapest.carriers;
+        if (route) quoted.link = smilesBookingLink(route, day.date);
         return quoted;
       })
       .filter((day): day is SmilesSectionDay => day !== null);

@@ -4,6 +4,7 @@ import { createSearchSheet, type FlightRow } from "../../../outputs/spreadsheet.
 import { storedSmilesDays } from "../../../scrapers/smiles/smiles-flights.ts";
 import {
   buildSmilesReport,
+  smilesBookingLink,
   searchSmilesYear,
   type SmilesPeriod,
   type SmilesSession,
@@ -33,20 +34,6 @@ function toPeriod(period: SmilesPeriodDto | undefined): SmilesPeriod {
   if (from) result.from = from;
   if (until) result.until = until;
   return result;
-}
-
-function smilesSearchUrl(origin: string, destination: string, date: string): string {
-  const query = new URLSearchParams({
-    adults: "1",
-    cabin: "ALL",
-    children: "0",
-    departureDate: `${Date.parse(`${date}T12:00:00Z`)}`,
-    infants: "0",
-    tripType: "2",
-    originAirport: origin,
-    destinationAirport: destination,
-  });
-  return `https://www.smiles.com.br/mfe/emissao-passagem/?${query}`;
 }
 
 // One direction per job (the endpoint is one-way) with all three cabins together.
@@ -97,7 +84,7 @@ export class SmilesSource implements SearchSource<SmilesSearchDto> {
       // From the stored flights, so each quoted day says who flies it: the alert
       // names that airline instead of assuming GOL.
       const stored = storedSmilesDays(days);
-      const legs: Leg[] = [{ label: `${origin} → ${destination}`, sections: buildSmilesReport(stored, ceilings) }];
+      const legs: Leg[] = [{ label: `${origin} → ${destination}`, sections: buildSmilesReport(stored, ceilings, { origin, destination }) }];
 
       // The gaps come already worded by the scraper, which knows what it left uncovered.
       const notices = [...gaps];
@@ -133,7 +120,7 @@ export class SmilesSource implements SearchSource<SmilesSearchDto> {
           aircraft: flight.detail.aircraft,
           tax: flight.feeReais ?? "",
           class_of_service: flight.detail.serviceClasses,
-          url: smilesSearchUrl(origin, destination, flight.detail.departureDate),
+          url: smilesBookingLink({ origin, destination }, flight.detail.departureDate),
         })),
       );
       const stamp = new Date().toISOString().slice(0, 16).replace("T", " ");

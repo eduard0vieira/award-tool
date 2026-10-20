@@ -599,7 +599,7 @@ describe("server with auth", () => {
     const body = { carriers: ["AF"], maxStops: 1, miles: { economy: { min: 1000 } } };
     const response = await filter("smiles-flights", body);
     assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), JSON.parse(JSON.stringify(filterSmilesFlights(days, body))));
+    assert.deepEqual(await response.json(), JSON.parse(JSON.stringify(filterSmilesFlights(days, body, { origin: "GRU", destination: "CDG" }))));
 
     assert.equal((await filter("aa-flights", {})).status, 400);
     assert.equal((await filter("smiles-without-flights", {})).status, 404);

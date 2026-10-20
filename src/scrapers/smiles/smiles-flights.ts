@@ -1,4 +1,11 @@
-import { buildSmilesReport, type SmilesCabin, type SmilesCarrier, type SmilesDayResponse, type SmilesSection } from "./smiles.scraper.ts";
+import {
+  buildSmilesReport,
+  type SmilesCabin,
+  type SmilesCarrier,
+  type SmilesDayResponse,
+  type SmilesRoute,
+  type SmilesSection,
+} from "./smiles.scraper.ts";
 
 // What a finished search keeps of each flight: enough to filter it and rebuild
 // the report with the same rules, nothing the spreadsheet already has.
@@ -58,7 +65,7 @@ export type FilteredSmiles = {
 // days, values, seats and the date text follow exactly the search's rules. Each
 // section also lists the operators of the flights it quotes: what an alert can
 // truthfully say about who flies every date in it.
-export function filterSmilesFlights(days: StoredSmilesDay[], filter: SmilesFlightFilter): FilteredSmiles {
+export function filterSmilesFlights(days: StoredSmilesDay[], filter: SmilesFlightFilter, route?: SmilesRoute): FilteredSmiles {
   const options = new Map<string, CarrierOption>();
   let flightsWithoutCarrier = 0;
   for (const flight of days.flatMap((day) => day.flights)) {
@@ -100,7 +107,7 @@ export function filterSmilesFlights(days: StoredSmilesDay[], filter: SmilesFligh
       .map(([miles, option]) => ({ miles, flights: option.flights, days: option.days.size }));
 
   const kept = days.map((day) => ({ date: day.date, flights: day.flights.filter((flight) => passes(flight, filter)) }));
-  const sections = buildSmilesReport(kept).map((section) => ({
+  const sections = buildSmilesReport(kept, {}, route).map((section) => ({
     ...section,
     carriers: [...new Set(section.days.flatMap((day) => day.carriers?.map((carrier) => carrier.code) ?? []))].sort(),
   }));

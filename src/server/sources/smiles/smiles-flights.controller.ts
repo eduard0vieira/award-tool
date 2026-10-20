@@ -12,7 +12,10 @@ export class SmilesFlightsController {
   @Post(":searchId/filter")
   @HttpCode(200)
   async filter(@Param("searchId") searchId: string, @Body() filter: SmilesFlightFilterDto) {
-    const row = await this.prisma.search.findUnique({ where: { id: searchId }, select: { source: true, flights: true } });
+    const row = await this.prisma.search.findUnique({
+      where: { id: searchId },
+      select: { source: true, flights: true, origin: true, destination: true },
+    });
     if (!row) throw new NotFoundException("Busca não encontrada no histórico.");
     if (row.source !== "smiles") throw new BadRequestException("O filtro de voos só existe para buscas da Smiles.");
     if (row.flights === null) {
@@ -20,6 +23,9 @@ export class SmilesFlightsController {
         "Os voos dessa busca não foram guardados: ela é de antes do filtro ou tem mais de 30 dias. Busque de novo para filtrar.",
       );
     }
-    return filterSmilesFlights(JSON.parse(row.flights) as StoredSmilesDay[], filter);
+    return filterSmilesFlights(JSON.parse(row.flights) as StoredSmilesDay[], filter, {
+      origin: row.origin,
+      destination: row.destination,
+    });
   }
 }
