@@ -12,6 +12,7 @@ import { SmilesModule } from "../sources/smiles/smiles.module.ts";
 import { SmilesSource } from "../sources/smiles/smiles.source.ts";
 import { TapModule } from "../sources/tap/tap.module.ts";
 import { TapCalendarSource } from "../sources/tap/tap-calendar.source.ts";
+import { TapShowcaseSource } from "../sources/tap/tap-showcase.source.ts";
 import { TapSource } from "../sources/tap/tap.source.ts";
 import { SEARCH_SOURCES, type SearchSource } from "./search-source.ts";
 import { FeedController } from "./feed.controller.ts";
@@ -31,7 +32,7 @@ import { SearchService } from "./search.service.ts";
     {
       provide: SEARCH_SOURCES,
       useFactory: (...sources: SearchSource[]) => new Map(sources.map((source) => [source.id, source])),
-      inject: [TapSource, TapCalendarSource, SeatspySource, AaSource, IberiaSource, SmilesSource, LatamSource],
+      inject: [TapSource, TapCalendarSource, TapShowcaseSource, SeatspySource, AaSource, IberiaSource, SmilesSource, LatamSource],
     },
   ],
 })
