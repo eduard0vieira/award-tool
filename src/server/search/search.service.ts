@@ -34,20 +34,25 @@ export class SearchService {
     private readonly feed: SearchFeed,
   ) {}
 
-  async start(body: Record<string, unknown> | undefined, actor?: Actor): Promise<StartedSearch> {
+  // The same checks as start(), for a request that will only run later.
+  async validate(body: Record<string, unknown> | undefined) {
     const source = this.sourceFor(body?.source);
     const request = await validateBody(source.requestDto, body);
     const route = request as RouteRequestDto;
+    if (route.group && JSON.stringify(route.group.args).length > MAX_GROUP_ARGS_LENGTH) {
+      throw new BadRequestException("O campo group.args é grande demais.");
+    }
+    return { source, request, route };
+  }
+
+  async start(body: Record<string, unknown> | undefined, actor?: Actor): Promise<StartedSearch> {
+    const { source, request, route } = await this.validate(body);
     const identity = source.identity(request);
     const key = requestKey(source.id, identity, searchDay());
     const requestedBy = actor?.kind === "user" ? actor.username : null;
     const trackLeg = (jobId: string, startedNew: boolean) => {
       if (route.group) this.feed.addLeg({ ...route.group, source: source.id, by: requestedBy }, jobId, startedNew);
     };
-    if (route.group && JSON.stringify(route.group.args).length > MAX_GROUP_ARGS_LENGTH) {
-      throw new BadRequestException("O campo group.args é grande demais.");
-    }
-
     const active = this.jobs.findActive(key);
     if (active) {
       trackLeg(active.jobId, false);

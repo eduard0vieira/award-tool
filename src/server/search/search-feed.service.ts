@@ -14,6 +14,7 @@ type FeedEvent =
   | { type: "hello"; version: string | null }
   | { type: "group"; group: SearchGroup; snapshot?: true }
   | { type: "history" }
+  | { type: "queue" }
   | { type: "ping" };
 
 // ngrok drops a connection that stays silent for too long.
@@ -73,6 +74,10 @@ export class SearchFeed {
 
   historyChanged() {
     this.events.next({ type: "history" });
+  }
+
+  queueChanged() {
+    this.events.next({ type: "queue" });
   }
 
   stream(): Observable<MessageEvent> {

@@ -14,6 +14,7 @@ model User {
   passwordHash String
   createdAt    DateTime @default(now())
   searches     Search[]
+  queueItems   QueueItem[]
 }
 
 model Search {
@@ -45,4 +46,31 @@ model Search {
   @@index([requestKey, createdAt])
   @@index([createdAt])
   @@index([groupId])
+}
+
+// A card queued to run on its own, now or later (the Fila tab). Each leg runs
+// as an ordinary search of whoever queued it, under this item's id as the card's
+// group, so the history reopens it and colleagues follow it live.
+model QueueItem {
+  id         String    @id
+  user       User?     @relation(fields: [userId], references: [id])
+  userId     Int?
+  source     String
+  // The card's arguments and one validated request body per leg.
+  args       String
+  legs       String
+  label      String
+  runAfter   DateTime
+  // waiting | running | done | partial | error | cancelled
+  status     String
+  // Legs already finished, so a restart resumes at the next one.
+  nextLeg    Int       @default(0)
+  partial    Boolean   @default(false)
+  jobId      String?
+  error      String?
+  createdAt  DateTime  @default(now())
+  startedAt  DateTime?
+  finishedAt DateTime?
+
+  @@index([status, runAfter])
 }

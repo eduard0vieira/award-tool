@@ -19,15 +19,18 @@ import { FeedController } from "./feed.controller.ts";
 import { HistoryController } from "./history.controller.ts";
 import { SearchFeed } from "./search-feed.service.ts";
 import { SearchHistory } from "./search-history.service.ts";
+import { QueueController } from "../queue/queue.controller.ts";
+import { QueueService } from "../queue/queue.service.ts";
 import { SearchController } from "./search.controller.ts";
 import { SearchService } from "./search.service.ts";
 
 @Module({
   imports: [JobsModule, TapModule, SeatspyModule, AaModule, IberiaModule, SmilesModule, LatamModule],
-  controllers: [SearchController, HistoryController, FeedController],
+  controllers: [SearchController, HistoryController, FeedController, QueueController],
   providers: [
     SearchService,
     SearchHistory,
+    QueueService,
     SearchFeed,
     {
       provide: SEARCH_SOURCES,

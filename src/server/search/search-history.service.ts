@@ -19,19 +19,25 @@ export type NewSearch = {
 
 type SearchUpdate = { status: string; result?: string; error?: string; finishedAt?: Date; flights?: string };
 
-function updateFor(event: JobEvent): SearchUpdate | null {
-  if (event.type === "started") return { status: "running" };
+// How a finished job is recorded: the history and the queue must agree on it.
+export function finishedStatus(event: JobEvent): "done" | "partial" | "error" | "cancelled" | null {
   if (event.type === "done") {
-    const { type: _type, ...result } = event;
     // A partial result is kept for the history but never handed to someone
     // else as if it were the whole answer.
-    const partial = Boolean(result.partialNotice) || result.stoppedByUser === true;
-    return { status: partial ? "partial" : "done", result: JSON.stringify(result), finishedAt: new Date() };
+    return event.partialNotice || event.stoppedByUser === true ? "partial" : "done";
   }
-  if (event.type === "error") {
-    const message = String(event.message);
-    return { status: message === CANCELLED ? "cancelled" : "error", error: message, finishedAt: new Date() };
+  if (event.type === "error") return String(event.message) === CANCELLED ? "cancelled" : "error";
+  return null;
+}
+
+function updateFor(event: JobEvent): SearchUpdate | null {
+  if (event.type === "started") return { status: "running" };
+  const status = finishedStatus(event);
+  if (status === "done" || status === "partial") {
+    const { type: _type, ...result } = event;
+    return { status, result: JSON.stringify(result), finishedAt: new Date() };
   }
+  if (status) return { status, error: String(event.message), finishedAt: new Date() };
   return null;
 }
 
@@ -117,12 +123,21 @@ export class SearchHistory implements OnModuleInit {
 
   // Every saved leg of one card, in order, with what rebuilds the card.
   async getGroup(groupId: string) {
-    const rows = await this.prisma.search.findMany({
+    const all = await this.prisma.search.findMany({
       where: { groupId },
-      orderBy: { groupLeg: "asc" },
+      orderBy: [{ groupLeg: "asc" }, { createdAt: "desc" }],
       omit: { flights: true },
       include: { user: { select: { username: true } } },
     });
+    // A queued card rerun after a restart has two rows for a leg: the one that
+    // finished wins over the one the restart cut, and the newest over older ones.
+    const finished = (status: string) => status === "done" || status === "partial";
+    const byLeg = new Map<number | null, (typeof all)[number]>();
+    for (const row of all) {
+      const kept = byLeg.get(row.groupLeg);
+      if (!kept || (!finished(kept.status) && finished(row.status))) byLeg.set(row.groupLeg, row);
+    }
+    const rows = [...byLeg.values()];
     const first = rows[0];
     if (!first?.groupArgs) throw new NotFoundException("Essa busca não está no histórico.");
     return {
