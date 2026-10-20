@@ -18,7 +18,7 @@ export const DEFAULT_MAX_AGE_HOURS = 120;
 
 const NOT_TRACKED = "O AwardTool não acompanha a TAP nesse trecho.";
 // The calendar covers about a year ahead; the Panorama fallback reads the same span.
-const PANORAMA_FALLBACK_DAYS = 360;
+const PANORAMA_FALLBACK_DAYS = 365;
 
 function todayInSaoPaulo() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });

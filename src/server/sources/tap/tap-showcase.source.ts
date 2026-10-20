@@ -11,7 +11,8 @@ import { DEFAULT_CALENDAR_ECONOMY_CEILING_K, DEFAULT_MAX_AGE_HOURS } from "./tap
 import { TapCalendarSearchDto } from "./tap-calendar-search.dto.ts";
 import { TAP_POOL } from "./tap.source.ts";
 
-const SHOWCASE_DAYS = 360;
+// TAP sells about 361 days ahead; a few days more only make the last window short.
+const SHOWCASE_DAYS = 365;
 // Panorama has missed whole Brazil-Portugal routes the calendar has (SSA-LIS), and
 // those are the ones with the upgrade alert, so their calendars are read too.
 const CALENDAR_ROUTES = [...[...TAP_BRAZIL_AIRPORTS].map((origin) => `${origin}-LIS`), "GRU-OPO", "GIG-OPO"];
@@ -83,12 +84,13 @@ export class TapShowcaseSource implements SearchSource<TapCalendarSearchDto> {
       };
 
       job.log("Buscando Brasil → Europa no Panorama do AwardTool...");
-      const steps = 4 + CALENDAR_ROUTES.length;
+      const windows = panoramaWindows(todayInSaoPaulo(), SHOWCASE_DAYS);
+      const steps = windows.length + CALENDAR_ROUTES.length;
       const sweep = await sweepPanorama(
         page,
         baseUrl,
         { from: "BR_2", to: "EUMAJOR_1" },
-        panoramaWindows(todayInSaoPaulo(), SHOWCASE_DAYS),
+        windows,
         job.log,
         (done) => job.progress(done / steps),
       );
@@ -105,7 +107,7 @@ export class TapShowcaseSource implements SearchSource<TapCalendarSearchDto> {
           job.log(`  (calendário de ${route} falhou: ${message})`);
           failedRoutes.push(route);
         }
-        job.progress((5 + index) / steps);
+        job.progress((windows.length + index + 1) / steps);
       }
 
       const now = Math.floor(Date.now() / 1000);
