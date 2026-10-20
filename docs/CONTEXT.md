@@ -132,6 +132,17 @@ three, and `core/` imports nothing.
   front always asks for it and shows "Buscar de novo" on such a card, which
   repeats the search with `reuseRecent: false`. A card that joined someone
   else's job hides its stop button, so nobody stops another person's search.
+- **Queue** (`QueueItem`, the Fila tab, `/api/queue`): a card queued from a
+  form's "Adicionar à fila", to run now or from a set hour. The server runs one
+  item at a time per browser lane (the AwardTool searches in one, Smiles, AA and
+  LATAM, which share the real Chrome, in another), each leg as an ordinary
+  search of whoever queued it under the item's id as `groupId`, always with
+  `reuseRecent: false`. So the card shows up live for everyone, the Histórico
+  opens it, and the supervisor sees it as a running search. `nextLeg` lets a
+  restart resume at the leg it cut; a leg past `QUEUE_LEG_MAX_HOURS` (4) is
+  stopped. SeatSpy (paid credit) and the TAP live search (it stops to ask) are
+  not queued. The front builds every leg from `LEG_BODIES_BY_SOURCE`, the same
+  function "Buscar" uses.
 - **Jobs in memory**: a `Map<jobId, {...}>` in the process. Restart the server
   and everything that was running is gone; the history marks those as errors.
 - **The Histórico tab and the repeat warning** read `/api/history`, so they
@@ -302,6 +313,7 @@ BOT_AUTH_USER, BOT_AUTH_PASS                      # machine credential (alerts, 
 SEED_USERS                                        # people's users, created on start if missing
 LOGIN_DISABLED                                    # true turns the login off (local only)
 SEARCH_REUSE_HOURS, SEARCH_RESULT_RETENTION_DAYS  # identical-search reuse and history size
+QUEUE_LEG_MAX_HOURS                               # a queued leg running longer is stopped
 *_CONCURRENCY                                     # simultaneous jobs per source
 IDLE_MINUTES                                      # closes an idle session (0 turns it off)
 *_SEARCH_INTERVAL_MS                              # rate limiter
