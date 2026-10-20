@@ -1458,6 +1458,7 @@ function resultFromEvent(event) {
     confirmation: event.confirmation,
     stoppedByUser: event.stoppedByUser,
     filters: event.filters,
+    upgrade: event.upgrade,
     coverage: event.coverage,
     notices: event.notices,
   };
@@ -1659,65 +1660,49 @@ function computeUpgrade(businessDays, economyDays) {
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
-// TAP sells the economy-to-business miles upgrade at a fixed price per region.
-// Only the Brazil–mainland Portugal price is known here; another region would
-// put a made-up total in the alert.
-const TAP_UPGRADE_K = 81.6;
-const TAP_BRAZIL_AIRPORTS = new Set(["BEL", "BSB", "CNF", "FLN", "FOR", "GIG", "GRU", "MCZ", "NAT", "POA", "REC", "SSA", "VCP"]);
-const MAINLAND_PORTUGAL_AIRPORTS = new Set(["LIS", "OPO", "FAO"]);
-const TAP_UPGRADE_TIP =
-  "⬆️ *Pulo do gato:* emita em Econômica e peça à TAP o upgrade com milhas para a Executiva " +
-  "(81.600 milhas no trecho Brasil–Portugal continental). O valor acima já soma os dois.";
-
-function tapUpgradeCostK(origin, destination) {
-  const linked = (from, to) => TAP_BRAZIL_AIRPORTS.has(from) && MAINLAND_PORTUGAL_AIRPORTS.has(to);
-  return linked(origin, destination) || linked(destination, origin) ? TAP_UPGRADE_K : null;
+// The tip that goes in the upgrade alert's caption, with the price the server applied.
+function tapUpgradeTip(costK) {
+  const miles = Math.round(costK * 1000).toLocaleString("pt-BR");
+  return (
+    "⬆️ *Pulo do gato:* emita em Econômica e peça à TAP o upgrade com milhas para a Executiva " +
+    `(${miles} milhas no trecho Brasil–Portugal continental). O valor acima já soma os dois.`
+  );
 }
 
-// With a known price, only the days where economy plus upgrade beats that day's
-// business fare: on the others the upgrade is not worth offering.
-function upgradeSection(leg, costK) {
-  const crossed = computeUpgrade(leg.business, leg.economy);
-  const days = crossed
-    .filter((day) => costK === null || (day.economyK != null && day.businessK != null && day.economyK + costK < day.businessK))
-    .map((day) => {
-      if (costK === null) {
-        return {
-          date: day.date,
-          valueK: day.economyK,
-          link: day.link,
-          hint: `Econômica ${day.economyK}K, Executiva direta ${day.businessK}K`,
-        };
-      }
-      const totalK = Math.round((day.economyK + costK) * 10) / 10;
-      return {
-        date: day.date,
-        valueK: totalK,
-        link: day.link,
-        hint: `Econômica ${day.economyK}K + upgrade ${costK}K = ${totalK}K. Executiva direta: ${day.businessK}K`,
-      };
-    });
+// Results saved before the server sent the upgrade only know which days have both cabins.
+function legacyUpgradeSection(leg) {
+  const days = computeUpgrade(leg.business, leg.economy).map((day) => ({ ...day, valueK: day.economyK }));
   const values = days.map((day) => day.valueK).filter((value) => value != null);
-  const emptyReason =
-    crossed.length === 0
-      ? "Nenhum dia com Econômica e Executiva juntas nesse período."
-      : "Nos dias com as duas cabines, a Executiva direta sai mais barata que Econômica + upgrade.";
   return {
     min: values.length > 0 ? Math.min(...values) : null,
     max: values.length > 0 ? Math.max(...values) : null,
     days,
     text: daysText(days),
-    ...(days.length === 0 && { emptyReason }),
+    ...(days.length === 0 && { emptyReason: "Nenhum dia com Econômica e Executiva juntas nesse período." }),
   };
+}
+
+function withUpgradeHints(section, costK) {
+  const days = section.days.map((day) => ({
+    ...day,
+    hint:
+      costK === null
+        ? `Econômica ${day.economyK}K, Executiva direta ${day.businessK}K`
+        : `Econômica ${day.economyK}K + upgrade ${costK}K = ${day.valueK}K. Executiva direta: ${day.businessK}K`,
+  }));
+  return { ...section, days };
 }
 
 // Built once when the search ends: the alert button and the edits in the
 // Upgrade tab must share the same sections, or a date taken out would come back.
-function prepareUpgrade(card, origin, destination) {
-  const costK = tapUpgradeCostK(origin, destination);
+function prepareUpgrade(card) {
+  const costK = card.upgradeLegs[0]?.upgrade?.costK ?? null;
   card.upgrade = {
     costK,
-    legs: card.upgradeLegs.map((leg) => ({ label: leg.label, section: upgradeSection(leg, costK) })),
+    legs: card.upgradeLegs.map((leg) => ({
+      label: leg.label,
+      section: withUpgradeHints(leg.upgrade?.section ?? legacyUpgradeSection(leg), costK),
+    })),
   };
 }
 
@@ -2086,7 +2071,12 @@ async function runTapSearch(session, request, origin, destination, roundTrip, de
     notices.push(...(outbound.notices || []).map((notice) => (roundTrip ? `Ida: ${notice}` : notice)));
     const outboundLabel = roundTrip ? `Ida: ${origin} → ${destination}` : `${origin} → ${destination}`;
     renderTapLeg(card.resultEl, outboundLabel, outboundReport);
-    card.upgradeLegs.push({ label: outboundLabel, business: outboundReport.business.days, economy: outboundReport.economy.days });
+    card.upgradeLegs.push({
+      label: outboundLabel,
+      business: outboundReport.business.days,
+      economy: outboundReport.economy.days,
+      upgrade: outbound.upgrade,
+    });
     recordLegForCopy(card, [
       { label: "Executiva", ...outboundReport.business },
       { label: "Econômica", ...outboundReport.economy },
@@ -2111,7 +2101,12 @@ async function runTapSearch(session, request, origin, destination, roundTrip, de
       if (outbound.appliedCeilings && inbound.coverage) setTapFacts(card, [outbound, inbound]);
       const returnLabel = `Volta: ${destination} → ${origin}`;
       renderTapLeg(card.resultEl, returnLabel, returnReport);
-      card.upgradeLegs.push({ label: returnLabel, business: returnReport.business.days, economy: returnReport.economy.days });
+      card.upgradeLegs.push({
+        label: returnLabel,
+        business: returnReport.business.days,
+        economy: returnReport.economy.days,
+        upgrade: inbound.upgrade,
+      });
       recordLegForCopy(card, [
         { label: "Executiva", ...returnReport.business },
         { label: "Econômica", ...returnReport.economy },
@@ -2124,7 +2119,7 @@ async function runTapSearch(session, request, origin, destination, roundTrip, de
     card.subtabsEl.hidden = card.minimized;
     showPartialNotices(card, [...partialNotices, ...notices]);
     updateCardActions(card);
-    prepareUpgrade(card, origin, destination);
+    prepareUpgrade(card);
     const [upgradeOutbound, upgradeInbound] = card.upgrade.legs;
     showAlertButtons(card, "tap", origin, destination, [
       { cabinClass: "Executiva", outbound: outboundReport.business, inbound: returnReport?.business },
@@ -2134,7 +2129,7 @@ async function runTapSearch(session, request, origin, destination, roundTrip, de
         buttonLabel: "Executiva com upgrade",
         outbound: upgradeOutbound?.section,
         inbound: upgradeInbound?.section,
-        tip: TAP_UPGRADE_TIP,
+        tip: tapUpgradeTip(card.upgrade.costK),
       },
     ].filter(Boolean));
   } catch (err) {
