@@ -88,6 +88,28 @@ had been refreshed between the two reads).
 - A route with zero TAP rows is "AwardTool does not track TAP here", never "no
   availability".
 
+## Neither page is complete
+
+Compared on 2026-10-19, December to February, Brazil to Europe:
+
+- The **calendar** had no TAP row for FOR-LIS; a Panorama search had 19 dates
+  (53 over the year). On every route where the calendar had TAP, Panorama never
+  had a date the calendar lacked.
+- **Panorama** had nothing for SSA-LIS, searched alone or by region, while the
+  calendar had 88 dates. REC-LIS came with 49 dates in one run and 83 in the next.
+- So the route search reads the calendar and, only when it has no TAP row, sweeps
+  Panorama for the year (four 90-day windows, about a minute) before saying the
+  route is not tracked.
+
+## A Panorama row
+
+Same fields as the calendar's, with two differences: a cabin without a fare has
+**no key** (the calendar sends `null`), and `points_ns` may carry only `ls`. The
+segments in `c_s` say which cabins have a fare, so the reader requires both to
+agree. Searches longer than 90 days return nothing. A region search
+(`from=BR_2&to=EUMAJOR_1`) brought 60 routes for 90 days in 6 s, 4 to 53 rows per
+2-day response (no fixed cap seen).
+
 ## Freshness
 
 - **Request Refresh** on the calendar (`routes_refresh`) only queues the route
