@@ -46,6 +46,7 @@
       <button type="button" role="tab" id="tab-latam" aria-controls="panel-latam" aria-selected="false" tabindex="-1" class="tab-button" data-tab="latam">LATAM</button>
       <button type="button" role="tab" id="tab-smiles" aria-controls="panel-smiles" aria-selected="false" tabindex="-1" class="tab-button" data-tab="smiles">Smiles</button>
       <button type="button" role="tab" id="tab-iberia" aria-controls="panel-iberia" aria-selected="false" tabindex="-1" class="tab-button" data-tab="iberia" disabled title="Em breve">Iberia <span class="tab-soon">Em breve</span></button>
+      <button type="button" role="tab" id="tab-queue" aria-controls="panel-queue" aria-selected="false" tabindex="-1" class="tab-button" data-tab="queue">Fila <span class="tab-count" id="queue-count" hidden></span></button>
       <button type="button" role="tab" id="tab-history" aria-controls="panel-history" aria-selected="false" tabindex="-1" class="tab-button" data-tab="history">Histórico</button>
     </div>
 
@@ -70,6 +71,7 @@
           <input type="checkbox" id="tap-calendar-round-trip" name="round-trip" checked />
           Ida e volta
         </label>
+        <button type="button" class="action-button queue-button" data-queue-source="tap-calendar">Adicionar à fila</button>
         <button type="submit">Buscar</button>
 
         <div class="ceilings-row">
@@ -105,6 +107,7 @@
         <p class="hint">Lê as datas que o AwardTool guarda da TAP, sem gastar consulta. Cada data foi vista por ele há algumas horas ou dias: confirme no site da TAP antes de emitir.</p>
         <div class="showcase-start">
           <button type="button" id="tap-showcase-button" class="action-button">Montar vitrine Brasil → Europa</button>
+          <button type="button" class="action-button queue-button" data-queue-source="tap-showcase">Pôr a vitrine na fila</button>
           <span class="hint">Todas as rotas da TAP do Brasil para a Europa com a faixa de milhas e as conexões acima, só com datas conferidas pelo AwardTool nos últimos 8 dias, para escolher o que mandar. Leva uns 5 minutos.</span>
         </div>
       </form>
@@ -251,6 +254,7 @@
           <input type="checkbox" id="aa-round-trip" name="round-trip" checked />
           Ida e volta
         </label>
+        <button type="button" class="action-button queue-button" data-queue-source="aa">Adicionar à fila</button>
         <button type="submit">Buscar</button>
 
         <div class="ceilings-row">
@@ -365,6 +369,7 @@
           <input type="checkbox" id="latam-confirm-miles" name="confirm-miles" checked />
           Confirmar em milhas
         </label>
+        <button type="button" class="action-button queue-button" data-queue-source="latam">Adicionar à fila</button>
         <button type="submit">Buscar</button>
       </form>
 
@@ -404,6 +409,7 @@
           </div>
         </div>
 
+        <button type="button" class="action-button queue-button" data-queue-source="smiles">Adicionar à fila</button>
         <button type="submit">Buscar</button>
 
         <!-- Values are the Smiles Club fare, the one the site's calendar reports.
@@ -428,6 +434,25 @@
       <p id="smiles-notice" class="notice" hidden></p>
 
       <div id="smiles-queue" class="search-queue"></div>
+    </section>
+
+    <section id="panel-queue" class="panel" role="tabpanel" aria-labelledby="tab-queue" tabindex="-1" hidden>
+      <fieldset class="queue-schedule">
+        <legend>Quando rodam os próximos itens que você puser na fila</legend>
+        <label class="checkbox">
+          <input type="radio" name="queue-when" value="now" checked />
+          Assim que possível
+        </label>
+        <label class="checkbox">
+          <input type="radio" name="queue-when" value="at" />
+          A partir das
+        </label>
+        <input type="time" id="queue-time" value="02:00" aria-label="Horário em que os próximos itens começam" />
+        <p class="hint">Um item por vez em cada navegador do bot: as buscas do AwardTool numa fila, Smiles, American e LATAM em outra. O SeatSpy fica fora porque gasta crédito.</p>
+      </fieldset>
+      <p id="queue-notice" class="notice" hidden></p>
+      <p id="queue-empty" class="history-empty" hidden>A fila está vazia. Use "Adicionar à fila" nas abas AwardTool, American, LATAM e Smiles.</p>
+      <div id="queue-list" class="history-list"></div>
     </section>
 
     <section id="panel-history" class="panel" role="tabpanel" aria-labelledby="tab-history" tabindex="-1" hidden>

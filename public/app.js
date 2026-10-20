@@ -225,6 +225,7 @@ const panels = {
   iberia: document.getElementById("panel-iberia"),
   smiles: document.getElementById("panel-smiles"),
   latam: document.getElementById("panel-latam"),
+  queue: document.getElementById("panel-queue"),
   history: document.getElementById("panel-history"),
 };
 const historyList = document.getElementById("history-list");
@@ -291,6 +292,7 @@ function selectTab(button) {
   const tab = button.dataset.tab;
   for (const [name, panel] of Object.entries(panels)) panel.hidden = name !== tab;
   if (tab === "history") renderHistory();
+  if (tab === "queue") renderQueue();
   window.history.replaceState(null, "", `#${tab}`);
 }
 
@@ -1159,6 +1161,25 @@ function persistSession(session) {
 const ownGroupIds = new Set(loadSearches().map((search) => search.id));
 
 // `args` must be serializable: it is what rebuilds the search later.
+// The request body of every leg a card sends, from the card's arguments: the
+// one place both "Buscar" and the queue take them from, so a queued search is
+// the very search the button would run (same identity, same group arguments).
+function withReturn(body, roundTrip) {
+  return roundTrip ? [body, { ...body, origin: body.destination, destination: body.origin }] : [body];
+}
+
+const LEG_BODIES_BY_SOURCE = {
+  tap: ([origin, destination, roundTrip, ceilings]) => withReturn({ origin, destination, ceilings }, roundTrip),
+  "tap-calendar": ([origin, destination, roundTrip, options]) => withReturn({ ...options, origin, destination }, roundTrip),
+  "tap-showcase": ([options]) => [{ ...options, origin: "BR", destination: "EU" }],
+  smiles: ([origin, destination, ceilings, roundTrip, period]) => withReturn({ origin, destination, ceilings, period }, roundTrip),
+  aa: ([origin, destination, cabin, maxStops, ceiling, roundTrip, passengers]) =>
+    withReturn({ origin, destination, cabin, maxStops, ceiling, passengers }, roundTrip),
+  latam: ([origin, destination, ceilings, confirmMiles]) => [
+    { origin, destination, ceilings, confirmMiles, outboundMarginReais: 100, returnMarginReais: 300 },
+  ],
+};
+
 function newSession(source, args) {
   const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   ownGroupIds.add(id);
@@ -1443,6 +1464,7 @@ function openFeed(attempt = 0) {
       feedOnline(event.version);
     } else if (event.type === "group") followSharedGroup(event.group, event.snapshot === true);
     else if (event.type === "history") refreshVisibleHistory();
+    else if (event.type === "queue") refreshQueue();
   };
   feed.onerror = () => {
     feedOffline();
@@ -2027,18 +2049,20 @@ function showPartialNotices(card, notices) {
 }
 
 function startTapSearch(origin, destination, roundTrip, ceilings, session) {
-  session = session || newSession("tap", [origin, destination, roundTrip, ceilings]);
-  return runTapSearch(session, { source: "tap", ceilings }, origin, destination, roundTrip);
+  const args = [origin, destination, roundTrip, ceilings];
+  session = session || newSession("tap", args);
+  return runTapSearch(session, "tap", LEG_BODIES_BY_SOURCE.tap(args), origin, destination, roundTrip);
 }
 
 // The stored calendar costs no query and is refreshed by AwardTool all the time,
 // so it never takes someone's earlier result.
 function startTapCalendarSearch(origin, destination, roundTrip, options, session) {
+  const args = [origin, destination, roundTrip, options];
   if (!session) {
-    session = newSession("tap-calendar", [origin, destination, roundTrip, options]);
+    session = newSession("tap-calendar", args);
     session.forceFresh = true;
   }
-  return runTapSearch(session, { source: "tap-calendar", ...options }, origin, destination, roundTrip, "Panorama");
+  return runTapSearch(session, "tap-calendar", LEG_BODIES_BY_SOURCE["tap-calendar"](args), origin, destination, roundTrip, "Panorama");
 }
 
 function milesRangeText(floorK, ceilingK) {
@@ -2075,7 +2099,8 @@ async function startTapShowcase(options, session) {
   session = session || newSession("tap-showcase", [options]);
   const card = createJobCard(tapQueue, { program: "TAP", detail: "Vitrine", origin: "Brasil", destination: "Europa" });
   try {
-    const showcase = await runOnServer(card, { source: "tap-showcase", origin: "BR", destination: "EU", ...options }, "Montando a vitrine…", session);
+    const [body] = LEG_BODIES_BY_SOURCE["tap-showcase"]([options]);
+    const showcase = await runOnServer(card, { source: "tap-showcase", ...body }, "Montando a vitrine…", session);
     setTapFacts(card, [showcase]);
     renderShowcase(card.resultEl, showcase.result.routes, options);
     card.setStatus("Pronto", "status-done");
@@ -2203,7 +2228,7 @@ function renderShowcase(targetEl, routes, options) {
   targetEl.append(sortBar, table);
 }
 
-async function runTapSearch(session, request, origin, destination, roundTrip, detail) {
+async function runTapSearch(session, source, legs, origin, destination, roundTrip, detail) {
   const card = createJobCard(tapQueue, { program: "TAP", detail, origin, destination, roundTrip });
   const partialNotices = [];
   const notices = [];
@@ -2211,7 +2236,7 @@ async function runTapSearch(session, request, origin, destination, roundTrip, de
   try {
     const outbound = await runOnServer(
       card,
-      { ...request, origin, destination },
+      { source, ...legs[0] },
       roundTrip ? "Buscando ida…" : "Buscando…",
       session,
     );
@@ -2241,7 +2266,7 @@ async function runTapSearch(session, request, origin, destination, roundTrip, de
     } else if (roundTrip) {
       const inbound = await runOnServer(
         card,
-        { ...request, origin: destination, destination: origin },
+        { source, ...legs[1] },
         "Buscando volta…",
         session,
       );
@@ -2390,12 +2415,12 @@ async function startSmilesSearch(origin, destination, ceilings, roundTrip, perio
   session = session || newSession("smiles", [origin, destination, ceilings, roundTrip, period]);
   const card = createJobCard(smilesQueue, { program: "Smiles", origin, destination, roundTrip });
   const partialNotices = [];
-  const baseBody = { source: "smiles", ceilings, period };
+  const legs = LEG_BODIES_BY_SOURCE.smiles([origin, destination, ceilings, roundTrip, period]);
 
   try {
     const outbound = await runOnServer(
       card,
-      { ...baseBody, origin, destination },
+      { source: "smiles", ...legs[0] },
       roundTrip ? "Buscando ida…" : "Buscando…",
       session,
     );
@@ -2410,7 +2435,7 @@ async function startSmilesSearch(origin, destination, ceilings, roundTrip, perio
     if (roundTrip) {
       const inbound = await runOnServer(
         card,
-        { ...baseBody, origin: destination, destination: origin },
+        { source: "smiles", ...legs[1] },
         "Buscando volta…",
         session,
       );
@@ -2987,12 +3012,12 @@ async function startAaSearch(origin, destination, cabin, maxStops, ceiling, roun
     roundTrip,
   });
   const partialNotices = [];
-  const baseBody = { source: "aa", cabin, maxStops, ceiling, passengers };
+  const legs = LEG_BODIES_BY_SOURCE.aa([origin, destination, cabin, maxStops, ceiling, roundTrip, passengers]);
 
   try {
     const outbound = await runOnServer(
       card,
-      { ...baseBody, origin, destination },
+      { source: "aa", ...legs[0] },
       roundTrip ? "Buscando ida…" : "Buscando…",
       session,
     );
@@ -3007,7 +3032,7 @@ async function startAaSearch(origin, destination, cabin, maxStops, ceiling, roun
     if (roundTrip) {
       const inbound = await runOnServer(
         card,
-        { ...baseBody, origin: destination, destination: origin },
+        { source: "aa", ...legs[1] },
         "Buscando volta…",
         session,
       );
@@ -3187,7 +3212,7 @@ async function startLatamSearch(origin, destination, ceilings, confirmMiles, ses
   try {
     const { result: legs, partialNotice, confirmation } = await runOnServer(
       card,
-      { source: "latam", origin, destination, ceilings, confirmMiles, outboundMarginReais: 100, returnMarginReais: 300 },
+      { source: "latam", ...LEG_BODIES_BY_SOURCE.latam([origin, destination, ceilings, confirmMiles])[0] },
       "Buscando ida e volta…",
       session,
     );
@@ -3361,40 +3386,50 @@ function tapCalendarOptions() {
   return { ceilings, floors, nonstopOnly: tapCalendarStopsSelect.value === "nonstop", maxAgeHours };
 }
 
-tapCalendarForm.addEventListener("submit", (event) => {
-  event.preventDefault();
+// Each form's search arguments, or null after showing what is missing. "Buscar"
+// and "Adicionar à fila" both start from them.
+function tapCalendarArgs() {
   clearNotice(tapNotice);
   const origin = tapCalendarOriginInput.value.trim().toUpperCase();
   const destination = tapCalendarDestinationInput.value.trim().toUpperCase();
   if (!origin || !destination) {
     showNotice(tapNotice, "Preencha origem e destino.");
-    return;
+    return null;
   }
   const options = tapCalendarOptions();
-  if (options) startTapCalendarSearch(origin, destination, tapCalendarRoundTripCheckbox.checked, options);
+  return options && [origin, destination, tapCalendarRoundTripCheckbox.checked, options];
+}
+
+tapCalendarForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const args = tapCalendarArgs();
+  if (args) startTapCalendarSearch(...args);
 });
 
 // A date AwardTool has not seen for longer may well have been issued already.
 const SHOWCASE_MAX_AGE_HOURS = 8 * 24;
 
-tapShowcaseButton.addEventListener("click", () => {
+function tapShowcaseArgs() {
   clearNotice(tapNotice);
   const options = tapCalendarOptions();
-  if (options) startTapShowcase({ ...options, maxAgeHours: SHOWCASE_MAX_AGE_HOURS });
+  return options && [{ ...options, maxAgeHours: SHOWCASE_MAX_AGE_HOURS }];
+}
+
+tapShowcaseButton.addEventListener("click", () => {
+  const args = tapShowcaseArgs();
+  if (args) startTapShowcase(...args);
 });
 
-latamForm.addEventListener("submit", (event) => {
-  event.preventDefault();
+function latamArgs() {
   clearNotice(latamNotice);
   const origin = latamOriginInput.value.trim().toUpperCase();
   const destination = latamDestinationInput.value.trim().toUpperCase();
   if (!origin || !destination) {
     showNotice(latamNotice, "Preencha origem e destino.");
-    return;
+    return null;
   }
   const ceiling = parseFloat(latamCeilingInput.value);
-  // Searching LATAM is free, so there is no repeat warning like the paid sources have.
-  startLatamSearch(
+  return [
     origin,
     destination,
     {
@@ -3402,7 +3437,14 @@ latamForm.addEventListener("submit", (event) => {
       lowestFareOnly: latamLowestFareCheckbox.checked,
     },
     latamConfirmMilesCheckbox.checked,
-  );
+  ];
+}
+
+latamForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  // Searching LATAM is free, so there is no repeat warning like the paid sources have.
+  const args = latamArgs();
+  if (args) startLatamSearch(...args);
 });
 
 // One direction per job, like AA. No cabin: the grid returns one value per day
@@ -3477,18 +3519,16 @@ iberiaForm.addEventListener("submit", (event) => {
   );
 });
 
-aaForm.addEventListener("submit", (event) => {
-  event.preventDefault();
+function aaArgs() {
   clearNotice(aaNotice);
   const origin = aaOriginInput.value.trim().toUpperCase();
   const destination = aaDestinationInput.value.trim().toUpperCase();
   if (!origin || !destination) {
     showNotice(aaNotice, "Preencha origem e destino.");
-    return;
+    return null;
   }
   const ceilingK = parseFloat(aaCeilingInput.value);
-  // Searching AA is free, so there is no repeat warning like the paid sources have.
-  startAaSearch(
+  return [
     origin,
     destination,
     aaCabinSelect.value,
@@ -3496,7 +3536,14 @@ aaForm.addEventListener("submit", (event) => {
     Number.isFinite(ceilingK) && ceilingK > 0 ? ceilingK * 1000 : null,
     aaRoundTripCheckbox.checked,
     Number(aaPassengersSelect.value) || 1,
-  );
+  ];
+}
+
+aaForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  // Searching AA is free, so there is no repeat warning like the paid sources have.
+  const args = aaArgs();
+  if (args) startAaSearch(...args);
 });
 
 // "31/12/2026" → "2026-12-31". A date that does not exist (31/02) is null, never
@@ -3610,22 +3657,20 @@ function readPeriod() {
   return { period };
 }
 
-smilesForm.addEventListener("submit", (event) => {
-  event.preventDefault();
+function smilesArgs() {
   clearNotice(smilesNotice);
   const origin = smilesOriginInput.value.trim().toUpperCase();
   const destination = smilesDestinationInput.value.trim().toUpperCase();
   if (!origin || !destination) {
     showNotice(smilesNotice, "Preencha origem e destino.");
-    return;
+    return null;
   }
   const { period, invalidInput } = readPeriod();
   if (invalidInput) {
     invalidInput.focus();
-    return;
+    return null;
   }
-  // Searching Smiles is free: no repeat warning like the paid sources have.
-  startSmilesSearch(
+  return [
     origin,
     destination,
     {
@@ -3635,7 +3680,14 @@ smilesForm.addEventListener("submit", (event) => {
     },
     smilesRoundTripCheckbox.checked,
     period,
-  );
+  ];
+}
+
+smilesForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  // Searching Smiles is free: no repeat warning like the paid sources have.
+  const args = smilesArgs();
+  if (args) startSmilesSearch(...args);
 });
 
 // The form warns about a route the airline does not fly while it is typed, from
@@ -3762,6 +3814,254 @@ seatspyForm.addEventListener("submit", async (event) => {
     startSeatspySearch(...args, choice === "fresh" ? freshSession("seatspy", args) : undefined),
   );
 });
+
+// The queue: searches that run on the server by themselves, now or from a set
+// hour, one at a time per browser of the bot. The server runs each leg as an
+// ordinary search of whoever queued it, so the result opens like the history's.
+const queueList = document.getElementById("queue-list");
+const queueEmpty = document.getElementById("queue-empty");
+const queueNotice = document.getElementById("queue-notice");
+const queueCount = document.getElementById("queue-count");
+const queueTimeInput = document.getElementById("queue-time");
+const queueWhenInputs = document.querySelectorAll('input[name="queue-when"]');
+const QUEUE_SCHEDULE_KEY = "awardtool.queue.schedule";
+
+const QUEUE_ARGS_BY_SOURCE = {
+  "tap-calendar": [tapCalendarArgs, tapNotice],
+  "tap-showcase": [tapShowcaseArgs, tapNotice],
+  aa: [aaArgs, aaNotice],
+  latam: [latamArgs, latamNotice],
+  smiles: [smilesArgs, smilesNotice],
+};
+
+const QUEUE_STATUS_LABELS = {
+  waiting: "Aguardando",
+  running: "Rodando",
+  done: "Pronta",
+  partial: "Parcial",
+  error: "Erro",
+  cancelled: "Cancelada",
+};
+
+function queueLabel(source, args) {
+  if (source === "tap-showcase") return "Vitrine TAP Brasil → Europa";
+  const [origin, destination] = args;
+  const roundTrip = source === "latam" || (source === "aa" ? args[5] : args[source === "smiles" ? 3 : 2]);
+  const detail = source === "aa" ? `, ${AA_CABIN_LABELS[args[2]] || args[2]}` : "";
+  return `${PROGRAM_LABELS[source] || PROGRAM_LABELS[PROGRAM_BY_SOURCE[source]] || source} ${origin} → ${destination}${roundTrip ? ", ida e volta" : ""}${detail}`;
+}
+
+function loadQueueSchedule() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(QUEUE_SCHEDULE_KEY));
+    if (saved?.when === "at" && /^\d{2}:\d{2}$/.test(saved.time)) {
+      queueTimeInput.value = saved.time;
+      for (const input of queueWhenInputs) input.checked = input.value === "at";
+    }
+  } catch (err) {
+    console.debug("Horário da fila não lido do navegador:", err);
+  }
+}
+
+function saveQueueSchedule() {
+  const when = [...queueWhenInputs].find((input) => input.checked)?.value ?? "now";
+  try {
+    localStorage.setItem(QUEUE_SCHEDULE_KEY, JSON.stringify({ when, time: queueTimeInput.value }));
+  } catch (err) {
+    console.debug("Horário da fila não guardado no navegador:", err);
+  }
+}
+
+// The next time this clock shows the chosen hour: 02:00 asked at 23:00 is tonight,
+// asked at 03:00 it is tomorrow.
+function queueRunAfter() {
+  const when = [...queueWhenInputs].find((input) => input.checked)?.value;
+  if (when !== "at" || !queueTimeInput.value) return null;
+  const [hours, minutes] = queueTimeInput.value.split(":").map(Number);
+  const next = new Date();
+  next.setHours(hours, minutes, 0, 0);
+  if (next <= new Date()) next.setDate(next.getDate() + 1);
+  return next;
+}
+
+function queueWhenText(date) {
+  if (date <= new Date()) return "assim que possível";
+  const today = new Date().toDateString() === date.toDateString();
+  const time = date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  return today ? `hoje às ${time}` : `amanhã às ${time}`;
+}
+
+async function enqueueFromForm(button) {
+  const source = button.dataset.queueSource;
+  const [readArgs, noticeEl] = QUEUE_ARGS_BY_SOURCE[source];
+  const args = readArgs();
+  if (!args) return;
+  const runAfter = queueRunAfter();
+  const label = queueLabel(source, args);
+  button.disabled = true;
+  try {
+    const response = await apiFetch("/api/queue", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        source,
+        args,
+        legs: LEG_BODIES_BY_SOURCE[source](args),
+        label,
+        ...(runAfter && { runAfter: runAfter.toISOString() }),
+      }),
+    });
+    const body = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(body?.error || "Não deu para pôr na fila.");
+    showNotice(noticeEl, `Na fila: ${label}, roda ${queueWhenText(new Date(body.runAfter))}. Acompanhe na aba Fila.`);
+  } catch (err) {
+    showNotice(noticeEl, err.message);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function createQueueItem(item) {
+  const row = document.createElement("div");
+  row.className = `history-item queue-item history-item-${item.status}`;
+
+  const main = document.createElement("div");
+  main.className = "history-item-main queue-item-main";
+  const label = document.createElement("span");
+  label.className = "queue-item-label";
+  label.textContent = item.label;
+  main.appendChild(label);
+  const who = whoSearched(item);
+  if (who) {
+    const user = document.createElement("span");
+    user.className = "history-item-user";
+    user.textContent = `por ${who}`;
+    main.appendChild(user);
+  }
+
+  const right = document.createElement("div");
+  right.className = "history-item-right";
+  const status = document.createElement("span");
+  status.className = `history-item-status history-status-${item.status}`;
+  status.textContent = QUEUE_STATUS_LABELS[item.status] || item.status;
+  const when = document.createElement("span");
+  when.className = "history-item-relative queue-item-when";
+  if (item.status === "waiting") when.textContent = queueWhenText(new Date(item.runAfter));
+  else if (item.status === "running") when.textContent = item.legCount > 1 ? `perna ${item.nextLeg + 1} de ${item.legCount}` : "rodando";
+  else if (item.finishedAt) when.textContent = formatRelativeTime(Date.parse(item.finishedAt));
+  right.append(status, when);
+
+  const actions = document.createElement("div");
+  actions.className = "history-item-actions";
+  const action = (text, onClick, spoken) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "action-button";
+    button.textContent = text;
+    button.setAttribute("aria-label", `${spoken}: ${item.label}`);
+    button.addEventListener("click", () => onClick(button));
+    actions.appendChild(button);
+  };
+  const post = async (button, path) => {
+    clearNotice(queueNotice);
+    button.disabled = true;
+    try {
+      const response = await apiFetch(`/api/queue/${encodeURIComponent(item.id)}/${path}`, { method: "POST" });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(body?.error || "Não deu para mudar esse item.");
+      refreshQueue();
+    } catch (err) {
+      showNotice(queueNotice, err.message);
+      button.disabled = false;
+    }
+  };
+  if (item.status === "waiting" && Date.parse(item.runAfter) > Date.now()) action("Rodar agora", (button) => post(button, "run-now"), "Rodar agora");
+  if (item.status === "running") action("Ver", () => activateTab(TAB_BY_SOURCE[item.source]), "Ver a busca rodando");
+  if (item.status === "waiting" || item.status === "running") action("Cancelar", (button) => post(button, "cancel"), "Cancelar");
+  if (item.status === "done" || item.status === "partial") {
+    action("Abrir", (button) => openFromHistory({ groupId: item.id }, button, queueNotice), "Abrir o resultado");
+  }
+
+  row.append(main, right, actions);
+  if (item.error) {
+    const error = document.createElement("p");
+    error.className = "queue-item-error";
+    error.textContent = item.error;
+    row.appendChild(error);
+  }
+  return row;
+}
+
+const QUEUE_GROUPS = [
+  ["Rodando", (item) => item.status === "running"],
+  ["Aguardando", (item) => item.status === "waiting"],
+  ["Terminados nas últimas 48 h", (item) => !["running", "waiting"].includes(item.status)],
+];
+
+let queueLoad = null;
+
+async function loadQueue() {
+  const response = await apiFetch("/api/queue");
+  const body = await response.json().catch(() => null);
+  if (!response.ok || !Array.isArray(body)) throw new Error(body?.error || "Não deu para carregar a fila.");
+  const pending = body.filter((item) => item.status === "waiting" || item.status === "running").length;
+  queueCount.textContent = pending;
+  queueCount.hidden = pending === 0;
+  return body;
+}
+
+async function renderQueue() {
+  clearNotice(queueNotice);
+  let items;
+  try {
+    items = await loadQueue();
+  } catch (err) {
+    showNotice(queueNotice, err.message);
+    return;
+  }
+  queueList.innerHTML = "";
+  queueEmpty.hidden = items.length > 0;
+  for (const [title, belongs] of QUEUE_GROUPS) {
+    const group = items.filter(belongs);
+    if (group.length === 0) continue;
+    // Finished ones newest first; the others in the order they run.
+    if (title.startsWith("Terminados")) group.sort((a, b) => Date.parse(b.finishedAt) - Date.parse(a.finishedAt));
+    const section = document.createElement("section");
+    section.className = "day-group";
+    const header = document.createElement("div");
+    header.className = "day-header";
+    const label = document.createElement("h2");
+    label.className = "day-label queue-group-title";
+    label.textContent = title;
+    const count = document.createElement("span");
+    count.className = "day-subtitle";
+    count.textContent = plural(group.length, "item", "itens");
+    header.append(label, count);
+    section.appendChild(header);
+    for (const item of group) section.appendChild(createQueueItem(item));
+    queueList.appendChild(section);
+  }
+}
+
+// Every change on the server ends up here; the count on the tab stays current
+// even with the tab closed.
+function refreshQueue() {
+  clearTimeout(queueLoad);
+  queueLoad = setTimeout(() => {
+    if (panels.queue.hidden) loadQueue().catch((err) => console.debug("Contagem da fila não atualizada:", err));
+    else renderQueue();
+  }, 300);
+}
+
+for (const button of document.querySelectorAll(".queue-button")) {
+  button.addEventListener("click", () => enqueueFromForm(button));
+}
+for (const input of [...queueWhenInputs, queueTimeInput]) input.addEventListener("change", saveQueueSchedule);
+queueTimeInput.addEventListener("input", () => {
+  for (const input of queueWhenInputs) input.checked = input.value === "at";
+});
+loadQueueSchedule();
+refreshQueue();
 
 // Runs last: every source's functions and form elements must already exist.
 const tabFromUrl = location.hash.slice(1);
