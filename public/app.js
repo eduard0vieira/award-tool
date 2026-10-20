@@ -3370,10 +3370,13 @@ tapCalendarForm.addEventListener("submit", (event) => {
   if (options) startTapCalendarSearch(origin, destination, tapCalendarRoundTripCheckbox.checked, options);
 });
 
+// A date AwardTool has not seen for longer may well have been issued already.
+const SHOWCASE_MAX_AGE_HOURS = 6 * 24;
+
 tapShowcaseButton.addEventListener("click", () => {
   clearNotice(tapNotice);
   const options = tapCalendarOptions();
-  if (options) startTapShowcase(options);
+  if (options) startTapShowcase({ ...options, maxAgeHours: SHOWCASE_MAX_AGE_HOURS });
 });
 
 latamForm.addEventListener("submit", (event) => {
