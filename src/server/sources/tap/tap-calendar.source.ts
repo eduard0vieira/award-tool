@@ -1,6 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { SessionPool } from "../../../core/session-pool.ts";
 import { buildTapCalendarReport, readRouteCalendar } from "../../../scrapers/tap/tap-calendar.ts";
+import { panoramaWindows, sweepPanorama } from "../../../scrapers/tap/tap-panorama.ts";
 import { DEFAULT_BUSINESS_CEILING_K, type TapSession } from "../../../scrapers/tap/tap.scraper.ts";
 import { JobRunner } from "../../jobs/job-runner.service.ts";
 import { JobStore } from "../../jobs/job-store.service.ts";
@@ -15,6 +16,12 @@ export const DEFAULT_CALENDAR_ECONOMY_CEILING_K = 60;
 export const DEFAULT_MAX_AGE_HOURS = 120;
 
 const NOT_TRACKED = "O AwardTool não acompanha a TAP nesse trecho.";
+// The calendar covers about a year ahead; the Panorama fallback reads the same span.
+const PANORAMA_FALLBACK_DAYS = 360;
+
+function todayInSaoPaulo() {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+}
 
 @Injectable()
 export class TapCalendarSource implements SearchSource<TapCalendarSearchDto> {
@@ -59,7 +66,29 @@ export class TapCalendarSource implements SearchSource<TapCalendarSearchDto> {
       const job = this.jobs.callbacks(jobId);
       job.log(`Lendo o calendário do AwardTool para ${origin}-${destination}...`);
       job.progress(0.1);
-      const dates = await readRouteCalendar(page, baseUrl, origin, destination);
+      let dates = await readRouteCalendar(page, baseUrl, origin, destination);
+      const notices: string[] = [];
+      let partialNotice: string | undefined;
+      // The calendar has missed TAP on routes Panorama has (FOR-LIS), so an empty
+      // calendar is only "not tracked" once Panorama agrees.
+      if (dates.length === 0) {
+        job.log("O calendário não tem a TAP nesse trecho; conferindo no Panorama...");
+        const route = `${origin}-${destination}`;
+        const sweep = await sweepPanorama(
+          page,
+          baseUrl,
+          { from: `${origin}_4`, to: `${destination}_4` },
+          panoramaWindows(todayInSaoPaulo(), PANORAMA_FALLBACK_DAYS),
+          job.log,
+          (done, total) => job.progress(0.1 + (0.8 * done) / total),
+        );
+        dates = sweep.dates.filter((date) => date.route === route);
+        if (dates.length > 0) notices.push("Datas vindas do Panorama: o calendário do AwardTool não tem a TAP nesse trecho.");
+        if (sweep.incompleteWindows.length > 0) {
+          const missing = sweep.incompleteWindows.map((window) => `${window.start} a ${window.end}`).join(", ");
+          partialNotice = `O Panorama não respondeu por inteiro em ${missing}. As datas desse período podem estar faltando.`;
+        }
+      }
       const report = buildTapCalendarReport(dates, {
         ...filters,
         ceilingsK,
@@ -69,7 +98,7 @@ export class TapCalendarSource implements SearchSource<TapCalendarSearchDto> {
       });
       job.progress(1);
 
-      if (report.kind === "not_tracked") {
+      if (report.kind === "not_tracked" && !partialNotice) {
         const empty = { min: null, max: null, days: [], text: NOT_TRACKED, emptyReason: NOT_TRACKED };
         this.jobs.complete(jobId, {
           report: { business: empty, economy: empty },
@@ -81,7 +110,12 @@ export class TapCalendarSource implements SearchSource<TapCalendarSearchDto> {
         return;
       }
 
-      const notices: string[] = [];
+      if (report.kind === "not_tracked") {
+        const reason = "Nenhuma data da TAP chegou do AwardTool, mas parte do Panorama não respondeu.";
+        const empty = { min: null, max: null, days: [], text: reason, emptyReason: reason };
+        this.jobs.complete(jobId, { report: { business: empty, economy: empty }, appliedCeilings, filters, partialNotice });
+        return;
+      }
       if (report.staleDates > 0) {
         const newest = report.newestStaleSeenAt === null ? "" : `, a mais recente vista em ${seenAtText(report.newestStaleSeenAt)}`;
         notices.push(
@@ -114,6 +148,7 @@ export class TapCalendarSource implements SearchSource<TapCalendarSearchDto> {
         filters,
         coverage: { until: report.coveredUntil, seenBetween: report.seenBetween },
         notices,
+        partialNotice,
       });
     });
   }
