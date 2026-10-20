@@ -2045,6 +2045,10 @@ function milesRangeText(floorK, ceilingK) {
   return floorK ? `${floorK}–${ceilingK}K` : `${ceilingK}K`;
 }
 
+function maxAgeText(hours) {
+  return hours % 24 === 0 && hours >= 48 ? `${hours / 24} dias` : `${hours} h`;
+}
+
 // On a round trip the legs can end on different dates; the earlier one is what both cover.
 function setTapFacts(card, legs) {
   const [{ appliedCeilings, filters }] = legs;
@@ -2054,8 +2058,8 @@ function setTapFacts(card, legs) {
     `Executiva ${milesRangeText(appliedCeilings.businessFloorK, appliedCeilings.businessK)}`,
     `Econômica ${milesRangeText(appliedCeilings.economyFloorK, appliedCeilings.economyK)}`,
     filters && (filters.nonstopOnly ? "Só voo direto" : "Com ou sem conexão"),
-    filters && `Visto há até ${filters.maxAgeHours} h`,
-    coveredUntil && `Dados até ${coveredUntil.split("-").reverse().join("/")}`,
+    filters && `Visto há até ${maxAgeText(filters.maxAgeHours)}`,
+    coveredUntil && `Voos até ${coveredUntil.split("-").reverse().join("/")}`,
   ]);
   card.ceilingsEl.hidden = false;
 }
@@ -2134,7 +2138,7 @@ function renderShowcase(targetEl, routes, options) {
   table.className = "showcase-table";
   table.innerHTML = `
     <caption class="visually-hidden">Rotas da TAP do Brasil para a Europa, com os dias dentro da faixa de milhas</caption>
-    <thead><tr><th scope="col">Rota</th><th scope="col">Executiva</th><th scope="col">Econômica</th><th scope="col">Upgrade</th><th scope="col">Dados até</th><th scope="col"><span class="visually-hidden">Ação</span></th></tr></thead>
+    <thead><tr><th scope="col">Rota</th><th scope="col">Executiva</th><th scope="col">Econômica</th><th scope="col">Upgrade</th><th scope="col">Voos até</th><th scope="col"><span class="visually-hidden">Ação</span></th></tr></thead>
     <tbody></tbody>`;
   const body = table.querySelector("tbody");
   const widest = Object.fromEntries(
@@ -3371,7 +3375,7 @@ tapCalendarForm.addEventListener("submit", (event) => {
 });
 
 // A date AwardTool has not seen for longer may well have been issued already.
-const SHOWCASE_MAX_AGE_HOURS = 6 * 24;
+const SHOWCASE_MAX_AGE_HOURS = 8 * 24;
 
 tapShowcaseButton.addEventListener("click", () => {
   clearNotice(tapNotice);
