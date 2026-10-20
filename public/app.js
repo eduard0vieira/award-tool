@@ -1175,6 +1175,23 @@ const LEG_BODIES_BY_SOURCE = {
   smiles: ([origin, destination, ceilings, roundTrip, period]) => withReturn({ origin, destination, ceilings, period }, roundTrip),
   aa: ([origin, destination, cabin, maxStops, ceiling, roundTrip, passengers]) =>
     withReturn({ origin, destination, cabin, maxStops, ceiling, passengers }, roundTrip),
+  // SeatSpy's ceilings are not among the card's arguments: they are read off the
+  // form when the search starts or is queued, as before.
+  seatspy: ([program, origin, destination, roundTrip, showSeats]) => [
+    {
+      airline: program,
+      origin,
+      destination,
+      roundTrip,
+      showSeats,
+      ceilings: {
+        economy: ceilingInMiles(seatspyEconomyCeilingInput),
+        premium: ceilingInMiles(seatspyPremiumCeilingInput),
+        business: ceilingInMiles(seatspyBusinessCeilingInput),
+        first: ceilingInMiles(seatspyFirstCeilingInput),
+      },
+    },
+  ],
   latam: ([origin, destination, ceilings, confirmMiles]) => [
     { origin, destination, ceilings, confirmMiles, outboundMarginReais: 100, returnMarginReais: 300 },
   ],
@@ -2320,22 +2337,10 @@ async function startSeatspySearch(program, origin, destination, roundTrip, showS
   const card = createJobCard(seatspyQueue, { program: PROGRAM_LABELS[program] || program, origin, destination, roundTrip });
 
   try {
+    const [body] = LEG_BODIES_BY_SOURCE.seatspy([program, origin, destination, roundTrip, showSeats]);
     const { result: legs } = await runOnServer(
       card,
-      {
-        source: "seatspy",
-        airline: program,
-        origin,
-        destination,
-        roundTrip,
-        showSeats,
-        ceilings: {
-          economy: ceilingInMiles(seatspyEconomyCeilingInput),
-          premium: ceilingInMiles(seatspyPremiumCeilingInput),
-          business: ceilingInMiles(seatspyBusinessCeilingInput),
-          first: ceilingInMiles(seatspyFirstCeilingInput),
-        },
-      },
+      { source: "seatspy", ...body },
       roundTrip ? "Buscando ida e volta…" : "Buscando…",
       session,
     );
@@ -3788,17 +3793,22 @@ seatspyOriginInput.addEventListener("input", updateSeatspyHints);
 seatspyDestinationInput.addEventListener("input", updateSeatspyHints);
 document.getElementById("tab-seatspy").addEventListener("click", updateSeatspyHints);
 
-seatspyForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
+function seatspyArgs() {
   clearNotice(seatspyNotice);
-  const program = seatspyProgramSelect.value;
   const origin = seatspyOriginInput.value.trim().toUpperCase();
   const destination = seatspyDestinationInput.value.trim().toUpperCase();
-  const roundTrip = seatspyRoundTripCheckbox.checked;
   if (!origin || !destination) {
     showNotice(seatspyNotice, "Preencha origem e destino.");
-    return;
+    return null;
   }
+  return [seatspyProgramSelect.value, origin, destination, seatspyRoundTripCheckbox.checked, true];
+}
+
+seatspyForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const formArgs = seatspyArgs();
+  if (!formArgs) return;
+  const [program, origin, destination, roundTrip] = formArgs;
   const choice = await repeatWarning(program, origin, destination, roundTrip, { canOpen: true });
   if (!choice) return;
   if (choice.open) {
@@ -3832,6 +3842,7 @@ const QUEUE_ARGS_BY_SOURCE = {
   aa: [aaArgs, aaNotice],
   latam: [latamArgs, latamNotice],
   smiles: [smilesArgs, smilesNotice],
+  seatspy: [seatspyArgs, seatspyNotice],
 };
 
 const QUEUE_STATUS_LABELS = {
@@ -3845,6 +3856,10 @@ const QUEUE_STATUS_LABELS = {
 
 function queueLabel(source, args) {
   if (source === "tap-showcase") return "Vitrine TAP Brasil → Europa";
+  if (source === "seatspy") {
+    const [program, origin, destination, roundTrip] = args;
+    return `${PROGRAM_LABELS[program] || program} (SeatSpy) ${origin} → ${destination}${roundTrip ? ", ida e volta" : ""}`;
+  }
   const [origin, destination] = args;
   const roundTrip = source === "latam" || (source === "aa" ? args[5] : args[source === "smiles" ? 3 : 2]);
   const detail = source === "aa" ? `, ${AA_CABIN_LABELS[args[2]] || args[2]}` : "";

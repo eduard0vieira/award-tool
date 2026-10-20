@@ -176,6 +176,7 @@
           <input type="checkbox" id="seatspy-round-trip" name="round-trip" checked />
           Ida e volta
         </label>
+        <button type="button" class="action-button queue-button" data-queue-source="seatspy">Adicionar à fila</button>
         <button type="submit">Buscar</button>
 
         <div class="reveal route-hint" id="seatspy-route-hint-reveal">
@@ -448,10 +449,10 @@
           A partir das
         </label>
         <input type="time" id="queue-time" value="02:00" aria-label="Horário em que os próximos itens começam" />
-        <p class="hint">Um item por vez em cada navegador do bot: as buscas do AwardTool numa fila, Smiles, American e LATAM em outra. O SeatSpy fica fora porque gasta crédito.</p>
+        <p class="hint">Um item por vez em cada navegador do bot: as buscas do AwardTool numa fila, as do SeatSpy em outra, e Smiles, American e LATAM numa terceira, porque dividem o mesmo Chrome.</p>
       </fieldset>
       <p id="queue-notice" class="notice" hidden></p>
-      <p id="queue-empty" class="history-empty" hidden>A fila está vazia. Use "Adicionar à fila" nas abas AwardTool, American, LATAM e Smiles.</p>
+      <p id="queue-empty" class="history-empty" hidden>A fila está vazia. Use "Adicionar à fila" nas abas AwardTool, SeatSpy, American, LATAM e Smiles.</p>
       <div id="queue-list" class="history-list"></div>
     </section>
 

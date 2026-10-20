@@ -134,14 +134,14 @@ three, and `core/` imports nothing.
   else's job hides its stop button, so nobody stops another person's search.
 - **Queue** (`QueueItem`, the Fila tab, `/api/queue`): a card queued from a
   form's "Adicionar à fila", to run now or from a set hour. The server runs one
-  item at a time per browser lane (the AwardTool searches in one, Smiles, AA and
-  LATAM, which share the real Chrome, in another), each leg as an ordinary
+  item at a time per browser lane (the AwardTool searches in one, SeatSpy in
+  another, Smiles, AA and LATAM, which share the real Chrome, in a third), each leg as an ordinary
   search of whoever queued it under the item's id as `groupId`, always with
   `reuseRecent: false`. So the card shows up live for everyone, the Histórico
   opens it, and the supervisor sees it as a running search. `nextLeg` lets a
   restart resume at the leg it cut; a leg past `QUEUE_LEG_MAX_HOURS` (4) is
-  stopped. SeatSpy (paid credit) and the TAP live search (it stops to ask) are
-  not queued. The front builds every leg from `LEG_BODIES_BY_SOURCE`, the same
+  stopped. The TAP live search is not queued: AwardTool dropped TAP from it, and it
+  stops to ask a question nobody answers at night. The front builds every leg from `LEG_BODIES_BY_SOURCE`, the same
   function "Buscar" uses.
 - **Jobs in memory**: a `Map<jobId, {...}>` in the process. Restart the server
   and everything that was running is gone; the history marks those as errors.

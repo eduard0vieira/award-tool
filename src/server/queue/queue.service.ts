@@ -8,13 +8,15 @@ import { SearchFeed } from "../search/search-feed.service.ts";
 import { SearchService } from "../search/search.service.ts";
 import { QueueItemDto } from "./queue-item.dto.ts";
 
-// One queued card at a time per browser: the three AwardTool searches share one
-// session pool and rate limiter, and AA, LATAM and Smiles share the real Chrome
-// whose IP Akamai and Smiles watch. SeatSpy spends a paid credit and the TAP live
-// search stops to ask questions nobody answers at night, so neither is queued.
+// One queued card at a time per browser: the AwardTool searches share one session
+// pool and rate limiter, and AA, LATAM and Smiles share the real Chrome whose IP
+// Akamai and Smiles watch. The TAP live search is left out: AwardTool dropped TAP
+// from it, so it ends in empty windows and stops to ask a question nobody
+// answers at night.
 const LANES: Record<string, string> = {
   "tap-calendar": "awardtool",
   "tap-showcase": "awardtool",
+  seatspy: "seatspy",
   smiles: "chrome",
   aa: "chrome",
   latam: "chrome",

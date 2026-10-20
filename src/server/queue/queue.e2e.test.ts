@@ -84,7 +84,7 @@ describe("search queue", () => {
       .overrideProvider(SEARCH_SOURCES)
       .useFactory({
         factory: (runner: JobRunner, jobs: JobStore) => {
-          fakes = Object.fromEntries(["smiles", "aa", "tap-calendar", "seatspy"].map((id) => [id, new FakeSource(id, runner, jobs)]));
+          fakes = Object.fromEntries(["smiles", "aa", "tap-calendar", "seatspy", "tap"].map((id) => [id, new FakeSource(id, runner, jobs)]));
           return new Map(Object.entries(fakes));
         },
         inject: [JobRunner, JobStore],
@@ -152,12 +152,15 @@ describe("search queue", () => {
     const first = (await enqueue(roundTrip("smiles", "GRU", "MIA"))).body;
     const second = (await enqueue({ ...roundTrip("aa", "GIG", "JFK"), legs: [{ origin: "GIG", destination: "JFK" }] })).body;
     const third = (await enqueue({ ...roundTrip("tap-calendar", "REC", "LIS"), legs: [{ origin: "REC", destination: "LIS" }] })).body;
+    const fourth = (await enqueue({ ...roundTrip("seatspy", "GRU", "LHR"), legs: [{ origin: "GRU", destination: "LHR" }] })).body;
     const running = queue.runDue();
     await settle();
-    // AA shares the real Chrome with Smiles; the AwardTool calendar does not.
+    // AA shares the real Chrome with Smiles; the AwardTool calendar and SeatSpy do not.
     assert.equal(await statusOf(second.id), "waiting");
     assert.equal(await statusOf(third.id), "running");
+    assert.equal(await statusOf(fourth.id), "running");
     await fakes["tap-calendar"]!.finish("REC");
+    await fakes.seatspy!.finish("GRU");
     await fakes.smiles!.finish("GRU");
     await fakes.smiles!.finish("MIA");
     await running;
@@ -234,9 +237,9 @@ describe("search queue", () => {
     const bad = await enqueue({ ...roundTrip("smiles", "GRU", "LIS"), legs: [{ origin: "GRU" }] });
     assert.equal(bad.status, 400);
     assert.match(bad.body.error, /destination/);
-    const paid = await enqueue(roundTrip("seatspy", "GRU", "LHR"));
-    assert.equal(paid.status, 400);
-    assert.match(paid.body.error, /não roda buscas de "seatspy"/);
+    const asking = await enqueue(roundTrip("tap", "GRU", "LIS"));
+    assert.equal(asking.status, 400);
+    assert.match(asking.body.error, /não roda buscas de "tap"/);
     assert.equal(await prisma.queueItem.count(), 0);
   });
 
