@@ -1377,6 +1377,203 @@ input[type="number"] {
   gap: var(--e4);
 }
 
+/* Showcase: a departures board ranked by availability. The bar under each
+   count is the only accent, sized against the route with the most days. */
+.showcase-start {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e2) var(--e4);
+  padding-top: var(--e4);
+  border-top: 1px solid var(--line);
+}
+
+.showcase-start .hint {
+  flex: 1 1 32ch;
+  max-width: 80ch;
+  font-size: var(--text-sm);
+  color: var(--ink-soft);
+}
+
+.showcase-sort {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--e1) var(--e4);
+  margin-bottom: var(--e3);
+  font-size: var(--text-sm);
+  color: var(--ink-soft);
+}
+
+.showcase-sort-button {
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.showcase-sort-button:hover {
+  color: var(--ink);
+}
+
+.showcase-sort-button[aria-pressed="true"] {
+  border-bottom-color: var(--ink);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.showcase-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.showcase-table th,
+.showcase-table td {
+  padding: var(--e2) var(--e3) var(--e2) 0;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.showcase-table thead th {
+  padding-top: 0;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--ink-soft);
+}
+
+.showcase-route {
+  font-family: var(--font-data);
+  font-size: var(--text-md);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.showcase-cell {
+  min-width: 112px;
+}
+
+.showcase-count {
+  font-family: var(--font-data);
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+
+.showcase-unit,
+.showcase-from,
+.showcase-until {
+  font-size: var(--text-sm);
+  color: var(--ink-soft);
+}
+
+.showcase-from {
+  margin-left: var(--e2);
+}
+
+.showcase-bar {
+  display: block;
+  height: 3px;
+  margin-top: var(--e1);
+  background: currentColor;
+  transform: scaleX(var(--share));
+  transform-origin: left;
+}
+
+.showcase-business .showcase-bar {
+  color: var(--business);
+}
+
+.showcase-economy .showcase-bar {
+  color: var(--economy);
+}
+
+.showcase-upgrade .showcase-bar {
+  color: var(--business);
+  opacity: 0.55;
+}
+
+.showcase-empty .showcase-count,
+.showcase-none {
+  color: var(--ink-soft);
+}
+
+.showcase-action {
+  padding-right: 0;
+  text-align: right;
+}
+
+@media (max-width: 640px) {
+  .showcase-table thead {
+    display: none;
+  }
+
+  .showcase-table tbody tr {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: center;
+    gap: var(--e1) var(--e3);
+    padding: var(--e3) 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .showcase-table tbody th,
+  .showcase-table tbody td {
+    padding: 0;
+    border-bottom: 0;
+  }
+
+  .showcase-route {
+    grid-column: 1 / 3;
+  }
+
+  .showcase-action {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  .showcase-cell {
+    min-width: 0;
+  }
+
+  .showcase-cell::before {
+    display: block;
+    font-size: var(--text-xs);
+    color: var(--ink-soft);
+  }
+
+  .showcase-business::before {
+    content: "Executiva";
+  }
+
+  .showcase-economy::before {
+    content: "Econômica";
+  }
+
+  .showcase-upgrade::before {
+    content: "Upgrade";
+  }
+
+  .showcase-from {
+    display: block;
+    margin-left: 0;
+  }
+
+  .showcase-until {
+    grid-column: 1 / -1;
+  }
+
+  .showcase-until::before {
+    content: "Dados até ";
+  }
+}
+
 /* Generated alerts and confirmations */
 
 .alert-result,

@@ -159,6 +159,7 @@ const tapCalendarBusinessFloorInput = document.getElementById("tap-calendar-floo
 const tapCalendarEconomyFloorInput = document.getElementById("tap-calendar-floor-economy");
 const tapCalendarStopsSelect = document.getElementById("tap-calendar-stops");
 const tapCalendarMaxAgeInput = document.getElementById("tap-calendar-max-age");
+const tapShowcaseButton = document.getElementById("tap-showcase-button");
 
 const seatspyForm = document.getElementById("seatspy-search-form");
 const seatspyProgramSelect = document.getElementById("seatspy-program");
@@ -239,6 +240,7 @@ const TOLERANCE_MS = TOLERANCE_DAYS * 24 * 60 * 60 * 1000;
 const PROGRAM_LABELS = {
   tap: "TAP",
   "tap-calendar": "TAP (Panorama)",
+  "tap-showcase": "Vitrine TAP",
   AA: "American Airlines",
   LATAM: "LATAM",
   SMILES: "Smiles",
@@ -304,7 +306,7 @@ function activateTab(tab) {
 // The history used to live under another key with Portuguese fields. It is
 // moved once, then the old key goes away so clearing the history cannot bring it back.
 // The history is the server's: every search anyone ran, kept in its database.
-const PROGRAM_BY_SOURCE = { tap: "tap", "tap-calendar": "tap-calendar", aa: "AA", latam: "LATAM", smiles: "SMILES", iberia: "IBERIA" };
+const PROGRAM_BY_SOURCE = { tap: "tap", "tap-calendar": "tap-calendar", "tap-showcase": "tap-showcase", aa: "AA", latam: "LATAM", smiles: "SMILES", iberia: "IBERIA" };
 // Failed and cancelled searches stay on the server, but nobody has dates from them.
 const LISTED_STATUSES = new Set(["queued", "running", "done", "partial"]);
 let currentUser = null;
@@ -416,7 +418,11 @@ function dayLabel(timestamp) {
 
 // Fills the right tab's form with the history route and switches to it.
 function repeatSearch(item) {
-  if (item.program === "tap-calendar") {
+  if (item.program === "tap-showcase") {
+    activateTab("tap");
+    selectTapMode(tapModeButtons[0]);
+    tapShowcaseButton.focus();
+  } else if (item.program === "tap-calendar") {
     tapCalendarOriginInput.value = item.origin;
     tapCalendarDestinationInput.value = item.destination;
     tapCalendarRoundTripCheckbox.checked = Boolean(item.roundTrip);
@@ -588,7 +594,7 @@ async function renderHistory() {
 }
 
 function historyCabins(item) {
-  if (item.program === "tap" || item.program === "tap-calendar") return [["Executiva", "cabin-business"], ["Econômica", "cabin-economy"]];
+  if (item.program === "tap" || item.program === "tap-calendar" || item.program === "tap-showcase") return [["Executiva", "cabin-business"], ["Econômica", "cabin-economy"]];
   if (item.program === "LATAM" || item.program === "IBERIA") return [["Econômica", "cabin-economy"]];
   if (item.program === "SMILES") return [["Econômica", "cabin-economy"], ["Conforto", "cabin-premium"], ["Executiva", "cabin-business"]];
   if (item.program === "AA") {
@@ -678,7 +684,7 @@ function createHistoryItem(item) {
   return row;
 }
 
-const TAB_BY_SOURCE = { tap: "tap", "tap-calendar": "tap", seatspy: "seatspy", aa: "aa", latam: "latam", smiles: "smiles", iberia: "iberia" };
+const TAB_BY_SOURCE = { tap: "tap", "tap-calendar": "tap", "tap-showcase": "tap", seatspy: "seatspy", aa: "aa", latam: "latam", smiles: "smiles", iberia: "iberia" };
 
 // Rebuilds the whole card from what the server saved: same dates, copy and alert
 // buttons, no new search and no credit spent.
@@ -1167,6 +1173,7 @@ function newSession(source, args) {
 const RESUME_BY_SOURCE = {
   tap: (...args) => startTapSearch(...args),
   "tap-calendar": (...args) => startTapCalendarSearch(...args),
+  "tap-showcase": (...args) => startTapShowcase(...args),
   seatspy: (...args) => startSeatspySearch(...args),
   smiles: (...args) => startSmilesSearch(...args),
   aa: (...args) => startAaSearch(...args),
@@ -1313,7 +1320,7 @@ const spectatedGroups = new Map();
 // The originator's browser starts the next leg as soon as the previous one ends.
 const SHARED_LEG_WAIT_MS = 2 * 60 * 1000;
 // The session goes in right after these arguments; a different count would put it in the wrong one.
-const ARG_COUNT_BY_SOURCE = { tap: 4, "tap-calendar": 4, seatspy: 5, smiles: 5, aa: 7, latam: 4, iberia: 7 };
+const ARG_COUNT_BY_SOURCE = { tap: 4, "tap-calendar": 4, "tap-showcase": 1, seatspy: 5, smiles: 5, aa: 7, latam: 4, iberia: 7 };
 
 function followSharedGroup(group, fromSnapshot) {
   if (ownGroupIds.has(group.id)) return;
@@ -2051,6 +2058,145 @@ function setTapFacts(card, legs) {
     coveredUntil && `Dados até ${coveredUntil.split("-").reverse().join("/")}`,
   ]);
   card.ceilingsEl.hidden = false;
+}
+
+const SHOWCASE_SORTS = [
+  ["business", "Executiva"],
+  ["economy", "Econômica"],
+  ["upgrade", "Upgrade"],
+];
+
+// The showcase is read from what AwardTool stores, so seeing an hour-old one again is fine.
+async function startTapShowcase(options, session) {
+  session = session || newSession("tap-showcase", [options]);
+  const card = createJobCard(tapQueue, { program: "TAP", detail: "Vitrine", origin: "Brasil", destination: "Europa" });
+  try {
+    const showcase = await runOnServer(card, { source: "tap-showcase", origin: "BR", destination: "EU", ...options }, "Montando a vitrine…", session);
+    setTapFacts(card, [showcase]);
+    renderShowcase(card.resultEl, showcase.result.routes, options);
+    card.setStatus("Pronto", "status-done");
+    card.resultEl.hidden = card.minimized;
+    showPartialNotices(card, showcase.partialNotice ? [showcase.partialNotice] : []);
+    updateCardActions(card);
+  } catch (err) {
+    showFailure(card, err);
+  } finally {
+    card.progressEl.hidden = true;
+  }
+}
+
+function showcaseCell(cabin, summary, widest) {
+  const cell = document.createElement("td");
+  cell.className = `showcase-cell showcase-${cabin}`;
+  if (!summary) {
+    cell.classList.add("showcase-none");
+    cell.textContent = "–";
+    cell.title = "O preço do upgrade só está cadastrado entre o Brasil e Portugal continental.";
+    return cell;
+  }
+  const count = document.createElement("span");
+  count.className = "showcase-count";
+  count.textContent = summary.days;
+  const unit = document.createElement("span");
+  unit.className = "showcase-unit";
+  unit.textContent = summary.days === 1 ? " dia" : " dias";
+  const from = document.createElement("span");
+  from.className = "showcase-from";
+  from.textContent = summary.minK != null ? `desde ${summary.minK}K` : "";
+  const bar = document.createElement("span");
+  bar.className = "showcase-bar";
+  bar.setAttribute("aria-hidden", "true");
+  bar.style.setProperty("--share", widest > 0 ? String(summary.days / widest) : "0");
+  cell.append(count, unit, from, bar);
+  if (summary.days === 0) cell.classList.add("showcase-empty");
+  return cell;
+}
+
+function renderShowcase(targetEl, routes, options) {
+  targetEl.innerHTML = "";
+  if (routes.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "history-empty";
+    empty.textContent = "Nenhuma rota da TAP do Brasil para a Europa veio do AwardTool.";
+    targetEl.appendChild(empty);
+    return;
+  }
+
+  const sortBar = document.createElement("div");
+  sortBar.className = "showcase-sort";
+  sortBar.setAttribute("role", "group");
+  sortBar.setAttribute("aria-label", "Ordenar a vitrine");
+  const sortLabel = document.createElement("span");
+  sortLabel.textContent = "Ordenar por";
+  sortBar.appendChild(sortLabel);
+
+  const table = document.createElement("table");
+  table.className = "showcase-table";
+  table.innerHTML = `
+    <caption class="visually-hidden">Rotas da TAP do Brasil para a Europa, com os dias dentro da faixa de milhas</caption>
+    <thead><tr><th scope="col">Rota</th><th scope="col">Executiva</th><th scope="col">Econômica</th><th scope="col">Upgrade</th><th scope="col">Dados até</th><th scope="col"><span class="visually-hidden">Ação</span></th></tr></thead>
+    <tbody></tbody>`;
+  const body = table.querySelector("tbody");
+  const widest = Object.fromEntries(
+    ["business", "economy", "upgrade"].map((cabin) => [cabin, Math.max(0, ...routes.map((route) => route[cabin]?.days ?? 0))]),
+  );
+
+  const draw = (sortBy) => {
+    const sorted = [...routes].sort(
+      (a, b) => (b[sortBy]?.days ?? -1) - (a[sortBy]?.days ?? -1) || a.route.localeCompare(b.route),
+    );
+    body.replaceChildren(
+      ...sorted.map((route) => {
+        const row = document.createElement("tr");
+        const name = document.createElement("th");
+        name.scope = "row";
+        name.className = "showcase-route";
+        name.textContent = `${route.origin} → ${route.destination}`;
+        const until = document.createElement("td");
+        until.className = "showcase-until";
+        until.textContent = route.coveredUntil.split("-").reverse().join("/");
+        const action = document.createElement("td");
+        action.className = "showcase-action";
+        const open = document.createElement("button");
+        open.type = "button";
+        open.className = "action-button";
+        open.textContent = "Buscar";
+        open.setAttribute("aria-label", `Buscar ${route.origin} para ${route.destination} no Panorama`);
+        open.addEventListener("click", () => {
+          tapCalendarOriginInput.value = route.origin;
+          tapCalendarDestinationInput.value = route.destination;
+          selectTapMode(tapModeButtons[0]);
+          startTapCalendarSearch(route.origin, route.destination, tapCalendarRoundTripCheckbox.checked, options);
+          tapQueue.querySelector(".search-job")?.scrollIntoView({ block: "start", behavior: "smooth" });
+        });
+        action.appendChild(open);
+        row.append(
+          name,
+          showcaseCell("business", route.business, widest.business),
+          showcaseCell("economy", route.economy, widest.economy),
+          showcaseCell("upgrade", route.upgrade, widest.upgrade),
+          until,
+          action,
+        );
+        return row;
+      }),
+    );
+  };
+
+  for (const [cabin, label] of SHOWCASE_SORTS) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "showcase-sort-button";
+    button.textContent = label;
+    button.setAttribute("aria-pressed", String(cabin === "business"));
+    button.addEventListener("click", () => {
+      for (const other of sortBar.querySelectorAll("button")) other.setAttribute("aria-pressed", String(other === button));
+      draw(cabin);
+    });
+    sortBar.appendChild(button);
+  }
+  draw("business");
+  targetEl.append(sortBar, table);
 }
 
 async function runTapSearch(session, request, origin, destination, roundTrip, detail) {
@@ -3188,20 +3334,13 @@ tapModeButtons.forEach((button) => {
   button.addEventListener("keydown", (event) => onTabListKeydown(event, tapModeButtons, selectTapMode));
 });
 
-tapCalendarForm.addEventListener("submit", (event) => {
-  event.preventDefault();
-  clearNotice(tapNotice);
-  const origin = tapCalendarOriginInput.value.trim().toUpperCase();
-  const destination = tapCalendarDestinationInput.value.trim().toUpperCase();
-  const roundTrip = tapCalendarRoundTripCheckbox.checked;
+// The miles range, stops and data age from the Panorama form, or null after
+// showing what is wrong with them. The showcase uses the same ones.
+function tapCalendarOptions() {
   const maxAgeHours = Number(tapCalendarMaxAgeInput.value);
-  if (!origin || !destination) {
-    showNotice(tapNotice, "Preencha origem e destino.");
-    return;
-  }
   if (!Number.isInteger(maxAgeHours) || maxAgeHours < 1 || maxAgeHours > 720) {
     showNotice(tapNotice, "A idade máxima do dado deve ser um número inteiro de horas, de 1 a 720.");
-    return;
+    return null;
   }
   const inK = (input) => {
     const value = parseFloat(input.value);
@@ -3213,15 +3352,28 @@ tapCalendarForm.addEventListener("submit", (event) => {
   const inverted = ["business", "economy"].find((cabin) => floors[cabin] && floors[cabin] > (ceilings[cabin] ?? defaults[cabin]));
   if (inverted) {
     showNotice(tapNotice, `O mínimo da ${inverted === "business" ? "Executiva" : "Econômica"} está acima do máximo.`);
+    return null;
+  }
+  return { ceilings, floors, nonstopOnly: tapCalendarStopsSelect.value === "nonstop", maxAgeHours };
+}
+
+tapCalendarForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  clearNotice(tapNotice);
+  const origin = tapCalendarOriginInput.value.trim().toUpperCase();
+  const destination = tapCalendarDestinationInput.value.trim().toUpperCase();
+  if (!origin || !destination) {
+    showNotice(tapNotice, "Preencha origem e destino.");
     return;
   }
-  const options = {
-    ceilings,
-    floors,
-    nonstopOnly: tapCalendarStopsSelect.value === "nonstop",
-    maxAgeHours,
-  };
-  startTapCalendarSearch(origin, destination, roundTrip, options);
+  const options = tapCalendarOptions();
+  if (options) startTapCalendarSearch(origin, destination, tapCalendarRoundTripCheckbox.checked, options);
+});
+
+tapShowcaseButton.addEventListener("click", () => {
+  clearNotice(tapNotice);
+  const options = tapCalendarOptions();
+  if (options) startTapShowcase(options);
 });
 
 latamForm.addEventListener("submit", (event) => {
