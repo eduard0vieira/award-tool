@@ -2245,7 +2245,7 @@ function renderShowcase(targetEl, routes, options) {
   targetEl.append(sortBar, table);
 }
 
-async function runTapSearch(session, source, legs, origin, destination, roundTrip, detail) {
+async function runTapSearch(session, source, legBodies, origin, destination, roundTrip, detail) {
   const card = createJobCard(tapQueue, { program: "TAP", detail, origin, destination, roundTrip });
   const partialNotices = [];
   const notices = [];
@@ -2253,7 +2253,7 @@ async function runTapSearch(session, source, legs, origin, destination, roundTri
   try {
     const outbound = await runOnServer(
       card,
-      { source, ...legs[0] },
+      { source, ...legBodies[0] },
       roundTrip ? "Buscando ida…" : "Buscando…",
       session,
     );
@@ -2283,7 +2283,7 @@ async function runTapSearch(session, source, legs, origin, destination, roundTri
     } else if (roundTrip) {
       const inbound = await runOnServer(
         card,
-        { source, ...legs[1] },
+        { source, ...legBodies[1] },
         "Buscando volta…",
         session,
       );
@@ -2420,12 +2420,12 @@ async function startSmilesSearch(origin, destination, ceilings, roundTrip, perio
   session = session || newSession("smiles", [origin, destination, ceilings, roundTrip, period]);
   const card = createJobCard(smilesQueue, { program: "Smiles", origin, destination, roundTrip });
   const partialNotices = [];
-  const legs = LEG_BODIES_BY_SOURCE.smiles([origin, destination, ceilings, roundTrip, period]);
+  const legBodies = LEG_BODIES_BY_SOURCE.smiles([origin, destination, ceilings, roundTrip, period]);
 
   try {
     const outbound = await runOnServer(
       card,
-      { source: "smiles", ...legs[0] },
+      { source: "smiles", ...legBodies[0] },
       roundTrip ? "Buscando ida…" : "Buscando…",
       session,
     );
@@ -2440,7 +2440,7 @@ async function startSmilesSearch(origin, destination, ceilings, roundTrip, perio
     if (roundTrip) {
       const inbound = await runOnServer(
         card,
-        { source: "smiles", ...legs[1] },
+        { source: "smiles", ...legBodies[1] },
         "Buscando volta…",
         session,
       );
@@ -3017,12 +3017,12 @@ async function startAaSearch(origin, destination, cabin, maxStops, ceiling, roun
     roundTrip,
   });
   const partialNotices = [];
-  const legs = LEG_BODIES_BY_SOURCE.aa([origin, destination, cabin, maxStops, ceiling, roundTrip, passengers]);
+  const legBodies = LEG_BODIES_BY_SOURCE.aa([origin, destination, cabin, maxStops, ceiling, roundTrip, passengers]);
 
   try {
     const outbound = await runOnServer(
       card,
-      { source: "aa", ...legs[0] },
+      { source: "aa", ...legBodies[0] },
       roundTrip ? "Buscando ida…" : "Buscando…",
       session,
     );
@@ -3037,7 +3037,7 @@ async function startAaSearch(origin, destination, cabin, maxStops, ceiling, roun
     if (roundTrip) {
       const inbound = await runOnServer(
         card,
-        { source: "aa", ...legs[1] },
+        { source: "aa", ...legBodies[1] },
         "Buscando volta…",
         session,
       );
