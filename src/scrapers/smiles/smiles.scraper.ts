@@ -667,6 +667,37 @@ const BLOCK_RECHECK_MS = Number(process.env.SMILES_BLOCK_RECHECK_MS) || 10 * 60_
 const MAX_BLOCK_WAIT_MS = Number(process.env.SMILES_MAX_BLOCK_WAIT_MS) || 3 * 60 * 60_000;
 const MAX_CONSECUTIVE_FAILURES = 3;
 
+// Calls in flight at once. Smiles takes 4-8 s to answer, so a second call while
+// the first waits roughly halves a sweep without asking for more: the limiter
+// still spaces every start by SMILES_SEARCH_INTERVAL_MS. Read per sweep so the
+// tests can pin it.
+function smilesParallel(): number {
+  return Math.max(1, Number(process.env.SMILES_PARALLEL) || 2);
+}
+
+// Runs `work` over the items with up to `limit` in flight, in order of start.
+// `work` returns false to stop handing out items; an error stops them too and
+// is rethrown once the calls already in flight have settled.
+async function eachConcurrently<T>(items: T[], limit: number, work: (item: T, index: number) => Promise<boolean>): Promise<number> {
+  let next = 0;
+  let stopped = false;
+  let failure: unknown = null;
+  const worker = async () => {
+    while (!stopped && next < items.length) {
+      const index = next++;
+      try {
+        if (!(await work(items[index]!, index))) stopped = true;
+      } catch (err) {
+        if (!stopped) failure = err;
+        stopped = true;
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  if (failure) throw failure;
+  return items.length - next;
+}
+
 function addDays(date: string, days: number): string {
   const result = new Date(`${date}T12:00:00Z`);
   result.setUTCDate(result.getUTCDate() + days);
@@ -737,7 +768,8 @@ export async function searchSmilesYear(
   const withinSaleWindow = (date: string) => saleWindow.rejectedFrom == null || date < saleWindow.rejectedFrom;
   // Per block, not per sweep: a partner route needs several block cycles to
   // cover the window, and a cumulative limit would end it partial for nothing.
-  let blockedMs = 0;
+  // Measured on the clock: calls in parallel wait out the same block together.
+  let blockedSince: number | null = null;
   let consecutiveDayFailures = 0;
   let cancelReported = false;
 
@@ -752,16 +784,19 @@ export async function searchSmilesYear(
     for (;;) {
       try {
         const response = await fetchSmilesDay(page, route, date, onLog);
-        blockedMs = 0;
+        blockedSince = null;
         return response;
       } catch (err) {
-        if (!(err instanceof SmilesBudgetError) || blockedMs >= MAX_BLOCK_WAIT_MS) throw err;
+        if (!(err instanceof SmilesBudgetError)) throw err;
+        blockedSince ??= Date.now();
+        const blockedMs = Date.now() - blockedSince;
+        if (blockedMs >= MAX_BLOCK_WAIT_MS) throw err;
         onLog(
           `O Smiles bloqueou as consultas deste IP (406). Esperando ${Math.round(BLOCK_RECHECK_MS / 60000)} min ` +
             `para tentar ${date} de novo (${Math.round(blockedMs / 60000)} de no máximo ` +
             `${Math.round(MAX_BLOCK_WAIT_MS / 60000)} min de espera neste bloqueio).`,
         );
-        blockedMs += await waitUnlessStopped(BLOCK_RECHECK_MS, shouldStop);
+        await waitUnlessStopped(BLOCK_RECHECK_MS, shouldStop);
         if (shouldStop()) throw new SearchCancelledError(date);
       }
     }
@@ -800,20 +835,27 @@ export async function searchSmilesYear(
   // error has to stop it the same way it stops the sampling.
   const fetchDays = async (dates: string[]) => {
     consecutiveDayFailures = 0;
-    for (let i = 0; i < dates.length; i++) {
+    let done = 0;
+    let stopReason: "cancel" | "failures" | null = null;
+    const notStarted = await eachConcurrently(dates, smilesParallel(), async (date) => {
       if (shouldStop()) {
-        reportCancel(`a busca foi cancelada: ${dates.length - i} dia(s) do período não chegaram a ser consultados`);
-        return;
+        stopReason = "cancel";
+        return false;
       }
-      if (!withinSaleWindow(dates[i]!)) return;
-      await fetchDay(dates[i]!);
+      if (!withinSaleWindow(date)) return true;
+      await fetchDay(date);
+      onProgress(0.6 + 0.4 * (++done / dates.length));
       if (consecutiveDayFailures >= MAX_CONSECUTIVE_FAILURES) {
-        const remaining = dates.length - i - 1;
-        onLog(`${consecutiveDayFailures} dias seguidos falharam. Parando com o que já veio.`);
-        if (remaining > 0) gaps.push(`a varredura parou cedo: ${remaining} dia(s) do período não chegaram a ser consultados`);
-        return;
+        stopReason = "failures";
+        return false;
       }
-      onProgress(0.6 + 0.4 * ((i + 1) / dates.length));
+      return true;
+    });
+    if (stopReason === "cancel") {
+      reportCancel(`a busca foi cancelada: ${notStarted} dia(s) do período não chegaram a ser consultados`);
+    } else if (stopReason === "failures") {
+      onLog(`${consecutiveDayFailures} dias seguidos falharam. Parando com o que já veio.`);
+      if (notStarted > 0) gaps.push(`a varredura parou cedo: ${notStarted} dia(s) do período não chegaram a ser consultados`);
     }
   };
 
@@ -827,22 +869,31 @@ export async function searchSmilesYear(
 
   let consecutiveFailures = 0;
   try {
-    for (let i = 0; i < samples.length; i++) {
+    let sampled = 0;
+    let stopReason: "cancel" | "failures" | null = null;
+    const notSampled = await eachConcurrently(samples, smilesParallel(), async (sample) => {
       if (shouldStop()) {
-        reportCancel(`a busca foi cancelada: ${samples.length - i} sondagem(ns) do período não chegaram a ser feitas`);
-        break;
+        stopReason = "cancel";
+        return false;
       }
-      const response = await fetchDay(samples[i]!);
-      if (saleWindow.rejectedFrom) break;
+      // A sample in flight may still land on the far side of a rejection another one found.
+      if (!withinSaleWindow(sample)) return false;
+      const response = await fetchDay(sample);
+      onProgress(0.6 * (++sampled / samples.length));
+      if (saleWindow.rejectedFrom) return false;
       if (response) {
         consecutiveFailures = 0;
       } else if (++consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
-        const remaining = samples.length - i - 1;
-        onLog(`${consecutiveFailures} sondagens seguidas falharam. Parando com o que já veio.`);
-        if (remaining > 0) gaps.push(`a varredura parou cedo: ${remaining} sondagem(ns) do período não chegaram a ser feitas`);
-        break;
+        stopReason = "failures";
+        return false;
       }
-      onProgress(0.6 * ((i + 1) / samples.length));
+      return true;
+    });
+    if (stopReason === "cancel") {
+      reportCancel(`a busca foi cancelada: ${notSampled} sondagem(ns) do período não chegaram a ser feitas`);
+    } else if (stopReason === "failures") {
+      onLog(`${consecutiveFailures} sondagens seguidas falharam. Parando com o que já veio.`);
+      if (notSampled > 0) gaps.push(`a varredura parou cedo: ${notSampled} sondagem(ns) do período não chegaram a ser feitas`);
     }
 
     if (shouldStop()) {

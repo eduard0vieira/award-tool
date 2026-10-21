@@ -757,6 +757,15 @@ input[type="number"] {
   border-top: 1px solid var(--line);
 }
 
+.ceilings-row > .hint {
+  flex-basis: 100%;
+  max-width: 80ch;
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  color: var(--ink-soft);
+}
+
 /* Notices */
 
 .notice,

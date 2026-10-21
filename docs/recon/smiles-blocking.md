@@ -182,3 +182,8 @@ becomes a failed day.
   the window is was not measured.
 - A round trip (~660 calls) does not fit in the 372 known to pass, so the
   second leg will likely wait out at least one block.
+- Since 2026-10-21 a sweep keeps `SMILES_PARALLEL` (2) calls in flight. The
+  limiter still spaces every start by 4 s, so the count of calls is the same
+  and the pace goes from ~1 per 7-8 s to ~1 per 4 s. Not yet measured against
+  the budget: the 372 calls above were at the old pace. A 406 at the new pace
+  is the signal to go back to 1.

@@ -3688,6 +3688,26 @@ function smilesArgs() {
   ];
 }
 
+// The ceilings are what keeps a sweep short, so the form keeps the last ones.
+const SMILES_CEILINGS_KEY = "awardtool.smiles.ceilings";
+const smilesCeilingInputs = [smilesEconomyCeilingInput, smilesPremiumCeilingInput, smilesBusinessCeilingInput];
+
+try {
+  const saved = JSON.parse(localStorage.getItem(SMILES_CEILINGS_KEY));
+  if (Array.isArray(saved)) smilesCeilingInputs.forEach((input, index) => (input.value = saved[index] ?? ""));
+} catch (err) {
+  console.debug("Tetos da Smiles não lidos do navegador:", err);
+}
+for (const input of smilesCeilingInputs) {
+  input.addEventListener("change", () => {
+    try {
+      localStorage.setItem(SMILES_CEILINGS_KEY, JSON.stringify(smilesCeilingInputs.map((field) => field.value)));
+    } catch (err) {
+      console.debug("Tetos da Smiles não guardados no navegador:", err);
+    }
+  });
+}
+
 smilesForm.addEventListener("submit", (event) => {
   event.preventDefault();
   // Searching Smiles is free: no repeat warning like the paid sources have.

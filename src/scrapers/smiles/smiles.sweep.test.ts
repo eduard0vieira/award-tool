@@ -6,6 +6,7 @@ import type { Page } from "playwright";
 import { FIXTURES_DIR } from "../../core/paths.ts";
 
 process.env.SMILES_SEARCH_INTERVAL_MS = "1";
+process.env.SMILES_PARALLEL = "1";
 process.env.SMILES_BLOCK_RECHECK_MS = "30";
 process.env.SMILES_MAX_BLOCK_WAIT_MS = "200";
 process.env.SMILES_SEARCH_TIMEOUT_MS = "20";
@@ -115,5 +116,56 @@ describe("Smiles sweep on a route without calendar", () => {
     assert.deepEqual(result.failedDays, []);
     assert.equal(result.gaps.length, 1);
     assert.match(result.gaps[0]!, /bloqueio por IP do Smiles não passou/);
+  });
+});
+
+describe("Smiles sweep with two calls in flight", () => {
+  // Answers after a few ms, counting how many calls are open at once.
+  function slowPage(script: (call: number) => { status: number; text: string }) {
+    let calls = 0;
+    let open = 0;
+    let mostOpen = 0;
+    const asked: string[] = [];
+    const page = {
+      evaluate: async (_fn: unknown, { url }: { url: string }) => {
+        asked.push(new URL(url).searchParams.get("departureDate")!);
+        const reply = script(++calls);
+        mostOpen = Math.max(mostOpen, ++open);
+        await new Promise((resolve) => setTimeout(resolve, 15));
+        open--;
+        return reply;
+      },
+      goto: async () => ({ status: () => 403 }),
+      waitForTimeout: async () => {},
+      context: () => ({ clearCookies: async () => {} }),
+    };
+    return { page: page as unknown as Page, asked, mostOpen: () => mostOpen };
+  }
+
+  test("asks every day once, never more than two at a time", async () => {
+    process.env.SMILES_PARALLEL = "2";
+    try {
+      const { page, asked, mostOpen } = slowPage(() => partnerDay);
+      const result = await searchSmilesYear(page, { origin: "MMM", destination: "NNN" }, {}, () => {}, () => {}, () => false, tenDays);
+      assert.equal(result.days.length, 10);
+      assert.deepEqual(result.failedDays, []);
+      assert.equal(new Set(asked).size, 10);
+      assert.equal(asked.length, 10);
+      assert.equal(mostOpen(), 2);
+    } finally {
+      process.env.SMILES_PARALLEL = "1";
+    }
+  });
+
+  test("both calls wait out the same 406 and the sweep resumes", async () => {
+    process.env.SMILES_PARALLEL = "2";
+    try {
+      const { page } = slowPage((call) => (call === 4 || call === 5 ? blocked : partnerDay));
+      const result = await searchSmilesYear(page, { origin: "OOO", destination: "PPP" }, {}, () => {}, () => {}, () => false, tenDays);
+      assert.equal(result.days.length, 10);
+      assert.deepEqual(result.gaps, []);
+    } finally {
+      process.env.SMILES_PARALLEL = "1";
+    }
   });
 });

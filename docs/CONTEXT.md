@@ -317,6 +317,7 @@ QUEUE_LEG_MAX_HOURS                               # a queued leg running longer 
 *_CONCURRENCY                                     # simultaneous jobs per source
 IDLE_MINUTES                                      # closes an idle session (0 turns it off)
 *_SEARCH_INTERVAL_MS                              # rate limiter
+SMILES_PARALLEL                                   # Smiles calls in flight in a sweep (2)
 AA_CHROME_PROFILE, AA_CDP_PORT                    # the bot Chrome's profile/port
 ```
 
