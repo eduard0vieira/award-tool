@@ -18,6 +18,7 @@
     "format-dates": "tsx scripts/format-dates.ts",
     "iberia": "tsx scripts/search-iberia.ts",
     "recon:iberia": "tsx scripts/recon-iberia.ts",
+    "login:iberia": "tsx scripts/login-iberia.ts",
     "recon:latam": "tsx scripts/recon-latam-round-trip.ts"
   },
   "keywords": [],

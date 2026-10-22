@@ -214,7 +214,7 @@ async function declineCookies(page: Page, onLog: OnLog) {
 
 // Automatic login with what is in .env. Credentials are never printed or
 // stored, only typed into the site's own form.
-async function logIn(page: Page, onLog: OnLog) {
+export async function logIn(page: Page, onLog: OnLog) {
   const email = process.env.IBERIA_EMAIL;
   const password = process.env.IBERIA_PASSWORD;
   if (!email || !password) {
