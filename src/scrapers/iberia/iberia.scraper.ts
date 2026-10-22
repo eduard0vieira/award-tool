@@ -189,6 +189,29 @@ async function waitForScreenToSettle(page: Page) {
   await page.waitForTimeout(2000);
 }
 
+// The OneTrust notice lays a dark filter over the whole page that swallows every
+// click: the login's submit "worked" and nothing happened. Declines the
+// non-essential cookies (never accepts) and, if the filter stays, moves it out
+// of the way, which answers nothing.
+async function declineCookies(page: Page, onLog: OnLog) {
+  const visible = (selector: string) => page.locator(selector).first().isVisible().catch(() => false);
+  if (await visible("#onetrust-reject-all-handler")) {
+    await page.locator("#onetrust-reject-all-handler").first().click({ timeout: 5000 });
+  } else if (await visible("#onetrust-pc-btn-handler")) {
+    await page.locator("#onetrust-pc-btn-handler").first().click({ timeout: 5000 });
+    await page.locator(".ot-pc-refuse-all-handler").first().click({ timeout: 10_000 });
+  } else {
+    return;
+  }
+  await page.waitForTimeout(1000);
+  const removed = await page.evaluate(`(() => {
+    const filters = [...document.querySelectorAll(".onetrust-pc-dark-filter")];
+    for (const element of filters) element.remove();
+    return filters.length;
+  })()`);
+  onLog(`Aviso de cookies da Iberia: recusei os não essenciais${removed ? " e tirei a cobertura que ficou" : ""}.`);
+}
+
 // Automatic login with what is in .env. Credentials are never printed or
 // stored, only typed into the site's own form.
 async function logIn(page: Page, onLog: OnLog) {
@@ -216,6 +239,7 @@ async function logIn(page: Page, onLog: OnLog) {
     if (!form) await page.waitForTimeout(1500);
   }
   if (!form) throw new Error("A tela de login apareceu, mas não achei o campo de e-mail em nenhum frame.");
+  await declineCookies(page, onLog);
 
   // Type and check, not type and hope: the login form is Visualforce and
   // re-renders after loading, erasing what was typed. The symptom is cruel: the
