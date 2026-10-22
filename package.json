@@ -19,6 +19,7 @@
     "iberia": "tsx scripts/search-iberia.ts",
     "recon:iberia": "tsx scripts/recon-iberia.ts",
     "login:iberia": "tsx scripts/login-iberia.ts",
+    "login:latam": "tsx scripts/login-latam.ts",
     "recon:latam": "tsx scripts/recon-latam-round-trip.ts"
   },
   "keywords": [],
