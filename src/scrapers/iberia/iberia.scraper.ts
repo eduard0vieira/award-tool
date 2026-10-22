@@ -212,9 +212,14 @@ async function declineCookies(page: Page, onLog: OnLog) {
   onLog(`Aviso de cookies da Iberia: recusei os não essenciais${removed ? " e tirei a cobertura que ficou" : ""}.`);
 }
 
+// How long a login that stopped for a person (a code, a captcha, a refused
+// password) waits for them to finish in the bot's window.
+const LOGIN_WAIT_MS = Number(process.env.IBERIA_LOGIN_WAIT_MS) || 5 * 60_000;
+
 // Automatic login with what is in .env. Credentials are never printed or
-// stored, only typed into the site's own form.
-export async function logIn(page: Page, onLog: OnLog) {
+// stored, only typed into the site's own form. Whatever the form leaves to a
+// person is announced on the card and waited for, in the visible bot window.
+export async function logIn(page: Page, onLog: OnLog, onNotice: OnNotice = () => {}) {
   const email = process.env.IBERIA_EMAIL;
   const password = process.env.IBERIA_PASSWORD;
   if (!email || !password) {
@@ -284,10 +289,26 @@ export async function logIn(page: Page, onLog: OnLog) {
   }
   if (!(await submitLogin(form))) throw new Error("Não achei o botão de enviar na tela de login da Iberia.");
 
-  const loginDeadline = Date.now() + 90_000;
-  while (Date.now() < loginDeadline && /login\.iberia\.com/.test(page.url())) await page.waitForTimeout(2000);
-  if (/login\.iberia\.com/.test(page.url())) {
-    throw new Error("O login foi enviado mas a Iberia continuou na tela de login (2FA ou captcha?).");
+  const onLoginPage = () => /login\.iberia\.com/.test(page.url());
+  const automaticDeadline = Date.now() + 30_000;
+  while (Date.now() < automaticDeadline && onLoginPage()) await page.waitForTimeout(2000);
+  if (onLoginPage()) {
+    const minutes = Math.round(LOGIN_WAIT_MS / 60000);
+    const notice =
+      "A Iberia pediu algo além de e-mail e senha no login (código, captcha ou senha recusada). " +
+      `Termine na janela do Chrome do bot; a busca continua sozinha. Tempo limite: ${minutes} min.`;
+    await page.bringToFront().catch(() => {});
+    onNotice(notice);
+    onLog(notice);
+    const manualDeadline = Date.now() + LOGIN_WAIT_MS;
+    while (Date.now() < manualDeadline && onLoginPage()) await page.waitForTimeout(2000);
+    onNotice("");
+    if (onLoginPage()) {
+      throw new Error(
+        `O login da Iberia continuou parado por ${minutes} min. Confira IBERIA_EMAIL e IBERIA_PASSWORD no .env ` +
+          "ou rode `npm run login:iberia` e termine na janela.",
+      );
+    }
   }
   onLog("Login refeito.");
 }
@@ -316,7 +337,13 @@ async function gotoIgnoringHashAbort(page: Page, url: string) {
   });
 }
 
-async function openResultsPage(page: Page, params: IberiaSearchParams, date: string, onLog: OnLog) {
+async function openResultsPage(
+  page: Page,
+  params: IberiaSearchParams,
+  date: string,
+  onLog: OnLog,
+  onNotice: OnNotice = () => {},
+) {
   const url = iberiaBookingLink(params, date);
   onLog(`Abrindo busca em Avios ${params.origin} → ${params.destination}...`);
   await gotoIgnoringHashAbort(page, url);
@@ -341,7 +368,7 @@ async function openResultsPage(page: Page, params: IberiaSearchParams, date: str
   // login is routine, not an exception: log in and repeat the search. Without
   // credentials in .env nothing can be done alone, and the error says exactly that.
   if (/login\.iberia\.com/.test(page.url())) {
-    await logIn(page, onLog);
+    await logIn(page, onLog, onNotice);
     await gotoIgnoringHashAbort(page, url);
     await waitForScreenToSettle(page);
     if (/login\.iberia\.com/.test(page.url())) {
@@ -442,7 +469,7 @@ export async function searchIberiaYear(
   params: IberiaSearchParams,
   onLog: OnLog = () => {},
   onProgress: OnProgress = () => {},
-  _onNotice: OnNotice = () => {},
+  onNotice: OnNotice = () => {},
   shouldStop: ShouldStop = () => false,
 ): Promise<IberiaResult> {
   const firstDate = daysFromToday(1);
@@ -451,7 +478,7 @@ export async function searchIberiaYear(
   watchAuthorization(page);
   try {
     await iberiaRateLimiter.waitTurn();
-    await openResultsPage(page, params, firstDate, onLog);
+    await openResultsPage(page, params, firstDate, onLog, onNotice);
   } catch (error) {
     return { kind: "error", reason: error instanceof Error ? error.message : String(error) };
   }
@@ -481,7 +508,7 @@ export async function searchIberiaYear(
 
     let grid: Awaited<ReturnType<typeof fetchGrid>>;
     try {
-      await ensureOnSearchPage(page, params, cursor, onLog);
+      await ensureOnSearchPage(page, params, cursor, onLog, onNotice);
       await iberiaRateLimiter.waitTurn();
       grid = await fetchGrid(page, params, cursor, currentAuthorization(page) ?? authorization);
     } catch (error) {
@@ -735,7 +762,7 @@ export function readFlights(text: string, date: string): IberiaFlight[] {
 //
 // The test is the most direct there is: open the login page. If the form shows
 // up we are not logged in; if Iberia sends us away, we are.
-export async function ensureLoggedIn(page: Page, onLog: OnLog): Promise<void> {
+export async function ensureLoggedIn(page: Page, onLog: OnLog, onNotice: OnNotice = () => {}): Promise<void> {
   await page
     .goto("https://login.iberia.com/IDY_LoginPage?market=BRpt", { waitUntil: "domcontentloaded", timeout: 60_000 })
     .catch((error: Error) => {
@@ -756,17 +783,17 @@ export async function ensureLoggedIn(page: Page, onLog: OnLog): Promise<void> {
     onLog("Sessão da Iberia Club já válida.");
     return;
   }
-  await logIn(page, onLog);
+  await logIn(page, onLog, onNotice);
 }
 
 // Iberia redirects the tab on its own to a login.iberia.com re-authorization
 // page mid-sweep. With the origin changed, the fetch to `ibisservices` becomes
 // cross-origin and the browser cuts it ("Failed to fetch"), which looked like
 // the source blocking and was not. Reopening the search fixes it.
-async function ensureOnSearchPage(page: Page, params: IberiaSearchParams, date: string, onLog: OnLog) {
+async function ensureOnSearchPage(page: Page, params: IberiaSearchParams, date: string, onLog: OnLog, onNotice: OnNotice) {
   if (/^https:\/\/www\.iberia\.com\/flights\//.test(page.url())) return;
   onLog("A aba saiu da página de busca; reabrindo antes de continuar.");
-  await openResultsPage(page, params, date, onLog);
+  await openResultsPage(page, params, date, onLog, onNotice);
 }
 
 export function filterFlights(flights: IberiaFlight[], filters: FlightFilters): IberiaFlight[] {
@@ -808,6 +835,7 @@ export async function detailDays(
   onLog: OnLog = () => {},
   onProgress: OnProgress = () => {},
   shouldStop: ShouldStop = () => false,
+  onNotice: OnNotice = () => {},
 ): Promise<{ flights: IberiaFlight[]; failedDays: FailedDay[] }> {
   const flights: IberiaFlight[] = [];
   const failedDays: FailedDay[] = [];
@@ -816,8 +844,8 @@ export async function detailDays(
   // Without a logged-in account EVERY availability call returns 401: checking
   // once up front saves the whole sweep from failing day by day.
   try {
-    await ensureLoggedIn(page, onLog);
-    await openResultsPage(page, params, dates[0]!, onLog);
+    await ensureLoggedIn(page, onLog, onNotice);
+    await openResultsPage(page, params, dates[0]!, onLog, onNotice);
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     onLog(`Não consegui abrir a busca logada da Iberia: ${reason}`);
@@ -825,7 +853,7 @@ export async function detailDays(
   }
 
   const queryBatch = async (batch: string[]) => {
-    await ensureOnSearchPage(page, params, batch[0]!, onLog);
+    await ensureOnSearchPage(page, params, batch[0]!, onLog, onNotice);
     await iberiaRateLimiter.waitTurn();
     const authorization = currentAuthorization(page);
     if (!authorization) throw new Error("a página de busca não fez nenhuma chamada com Authorization");
@@ -851,7 +879,7 @@ export async function detailDays(
         onLog(`${pending.length} dia(s) do lote falharam; reabrindo a busca e tentando de novo.`);
         await page.waitForTimeout(PAUSE_AFTER_FAILURE_MS);
         try {
-          await openResultsPage(page, params, pending[0]!, onLog);
+          await openResultsPage(page, params, pending[0]!, onLog, onNotice);
         } catch (error) {
           onLog(`Reabrir a busca falhou: ${error instanceof Error ? error.message : String(error)}`);
         }

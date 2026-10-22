@@ -107,6 +107,7 @@ export class IberiaSource implements SearchSource<IberiaSearchDto> {
           job.log,
           (fraction) => job.progress(0.7 + 0.3 * fraction),
           job.shouldStop,
+          job.notice,
         );
         const firstFailure = failedDays[0];
         if (firstFailure) {

@@ -6,7 +6,6 @@
 import { closeChromeSession, openChromeSession } from "../src/core/chrome-session.ts";
 import { logIn } from "../src/scrapers/iberia/iberia.scraper.ts";
 
-const MANUAL_WAIT_MS = 5 * 60_000;
 const onLoginPage = (url: string) => /login\.iberia\.com/.test(url);
 
 const session = await openChromeSession(false, "login-iberia");
@@ -22,18 +21,15 @@ try {
   if (!onLoginPage(page.url())) {
     console.log("A conta já estava logada nesse perfil. Nada a fazer.");
   } else {
-    try {
-      await logIn(page, console.log);
-    } catch (error) {
-      console.log(`\nO login automático não terminou: ${error instanceof Error ? error.message : String(error)}`);
+    // The same routine a search runs: it waits in the window for whatever is left to a person.
+    const showScreen = async (notice: string) => {
+      if (!notice) return;
       const screen = await page.locator("body").innerText().catch(() => "");
-      console.log("O que a tela de login mostra agora:\n---");
+      console.log(`\n${notice}\nO que a tela de login mostra agora:\n---`);
       console.log(screen.split("\n").filter((line) => line.trim()).slice(0, 25).join("\n"));
       console.log("---");
-      console.log(`\nSe for código, captcha ou senha, termine na janela do Chrome. Espero até ${MANUAL_WAIT_MS / 60000} min...`);
-      const deadline = Date.now() + MANUAL_WAIT_MS;
-      while (Date.now() < deadline && onLoginPage(page.url())) await page.waitForTimeout(2000);
-    }
+    };
+    await logIn(page, console.log, (notice) => void showScreen(notice)).catch((error: Error) => console.log(`\n${error.message}`));
     console.log(
       onLoginPage(page.url())
         ? "\nContinua na tela de login. Confira IBERIA_EMAIL e IBERIA_PASSWORD no .env."
