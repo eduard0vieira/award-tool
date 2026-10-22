@@ -4,7 +4,7 @@ import path from "node:path";
 import type { Page } from "playwright";
 import { openChromeSession } from "../src/core/chrome-session.ts";
 import { FIXTURES_DIR, ROOT_DIR } from "../src/core/paths.ts";
-import { isAskingForLogin, waitForManualLogin } from "../src/scrapers/latam/latam.scraper.ts";
+import { isAskingForLogin, logInToLatam } from "../src/scrapers/latam/latam.scraper.ts";
 
 // Finds out WHERE LATAM's round-trip price comes from.
 //
@@ -88,7 +88,7 @@ async function main() {
   await page.goto(roundTripUrl(), { waitUntil: "domcontentloaded", timeout: 90_000 });
 
   if (isAskingForLogin(page)) {
-    await waitForManualLogin(page, (message) => console.log(`   ${message}`), () => {});
+    await logInToLatam(page, (message) => console.log(`   ${message}`), () => {});
     await page.goto(roundTripUrl(), { waitUntil: "domcontentloaded", timeout: 90_000 });
     if (isAskingForLogin(page)) {
       console.log("❌ Continuou na tela de login. Faça o login na janela do bot e rode de novo.");

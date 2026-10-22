@@ -369,11 +369,13 @@ export function readRedemptionOptions(body: unknown): { feeReais: number; option
 // When the session drops, the way back is logging in on the BOT'S WINDOW
 // (open and visible): the login stays in the profile for the next searches.
 //
-// With LATAM_EMAIL and LATAM_PASSWORD in .env the bot pre-fills both fields; the
-// verification code (and any captcha) is always yours. If the form changed and
-// pre-filling misses, that is NOT an error: the bot says so and waits for you.
-// No password ever shows up in a log.
+// With LATAM_EMAIL and LATAM_PASSWORD in .env the bot goes through the screens
+// the recon recorded (docs/recon/latam.md, "Login"): identifier, then password,
+// each with its own submit. The verification code that may follow (WhatsApp or
+// email) is always yours, as is any captcha. If a screen changed, that is NOT
+// an error: the bot says so and waits for you. No password ever shows up in a log.
 const LOGIN_WAIT_MS = Number(process.env.LATAM_LOGIN_WAIT_MS) || 300_000;
+const LOGIN_STEP_TIMEOUT_MS = 15_000;
 
 const AUTH_HOST = "auth.latamairlines.com";
 
@@ -383,39 +385,52 @@ export function isAskingForLogin(page: Page): boolean {
   return new URL(page.url()).host === AUTH_HOST || /login|iniciar-sesion|signin|sign-in/i.test(page.url());
 }
 
-async function fillCredentials(page: Page, onLog: OnLog): Promise<void> {
-  const email = process.env.LATAM_EMAIL;
-  const password = process.env.LATAM_PASSWORD;
-  if (!email || !password) {
+const LOGIN_STEPS = [
+  { path: "/u/login/identifier", field: 'input[name="alias"]', value: () => process.env.LATAM_EMAIL, label: "identificador" },
+  { path: "/u/login/password", field: 'input[name="password"]', value: () => process.env.LATAM_PASSWORD, label: "senha" },
+];
+
+// Fills and submits every screen it knows, and stops at the first it does not:
+// what is left is the person's.
+async function fillLoginScreens(page: Page, onLog: OnLog): Promise<void> {
+  if (!process.env.LATAM_EMAIL || !process.env.LATAM_PASSWORD) {
     onLog("Sem LATAM_EMAIL/LATAM_PASSWORD no .env. O login é todo manual na janela do bot.");
     return;
   }
-
-  try {
-    const emailField = page.locator('input[type="email"], input[name="email"], #email').first();
-    const passwordField = page.locator('input[type="password"]').first();
-    await emailField.waitFor({ state: "visible", timeout: 15000 });
-    await emailField.fill(email);
-    // LATAM sometimes asks for the password only on the next screen; if it is
-    // not here, leave the rest to the user instead of chasing a changed selector.
-    if (await passwordField.isVisible().catch(() => false)) {
-      await passwordField.fill(password);
+  for (let screens = 0; screens < LOGIN_STEPS.length; screens++) {
+    const path = new URL(page.url()).pathname;
+    const step = LOGIN_STEPS.find((candidate) => path.startsWith(candidate.path));
+    if (!step) return;
+    try {
+      const field = page.locator(step.field).first();
+      await field.waitFor({ state: "visible", timeout: LOGIN_STEP_TIMEOUT_MS });
+      await field.fill(step.value()!);
+      await page.locator("#primary-button").first().click({ timeout: LOGIN_STEP_TIMEOUT_MS });
+      await page.waitForURL((url) => !url.pathname.startsWith(step.path), { timeout: LOGIN_STEP_TIMEOUT_MS });
+      onLog(`Login da LATAM: ${step.label} enviado.`);
+    } catch (err) {
+      const reason = err instanceof Error ? err.message.split("\n")[0] : String(err);
+      onLog(`Login da LATAM: a tela de ${step.label} não andou sozinha (${reason}). Conclua na janela do bot.`);
+      return;
     }
-    onLog("Login da LATAM: e-mail (e senha, se o campo estava na tela) preenchidos. Confirme na janela do bot.");
-  } catch (err) {
-    const reason = err instanceof Error ? err.message.split("\n")[0] : String(err);
-    onLog(`Preenchimento automático do login falhou (${reason}). Conclua na janela do bot.`);
   }
 }
 
-export async function waitForManualLogin(page: Page, onLog: OnLog, onNotice: OnNotice): Promise<void> {
+export async function logInToLatam(page: Page, onLog: OnLog, onNotice: OnNotice): Promise<void> {
   await page.bringToFront().catch(() => {});
-  await fillCredentials(page, onLog);
+  await fillLoginScreens(page, onLog);
+  if (!isAskingForLogin(page)) {
+    onLog("Login da LATAM concluído sozinho. Retomando a busca em milhas.");
+    return;
+  }
 
   const minutes = Math.round(LOGIN_WAIT_MS / 60000);
+  const asksForCode = new URL(page.url()).pathname.startsWith("/u/mfa");
   const notice =
-    `A LATAM pediu login. Entre na janela do Chrome do bot que está aberta (é a que o bot usa); ` +
-    `assim que a sessão voltar, a busca continua sozinha. Tempo limite: ${minutes} min.`;
+    (asksForCode
+      ? "A LATAM pediu o código de verificação (WhatsApp ou e-mail). Escolha e digite o código na janela do Chrome do bot"
+      : "A LATAM pediu login. Termine na janela do Chrome do bot que está aberta (é a que o bot usa)") +
+    `; assim que a sessão voltar, a busca continua sozinha. Tempo limite: ${minutes} min.`;
   onNotice(notice);
   onLog(notice);
 
@@ -431,7 +446,7 @@ export async function waitForManualLogin(page: Page, onLog: OnLog, onNotice: OnN
 
   onNotice("");
   throw new Error(
-    `A LATAM continuou pedindo login por ${minutes} min. Faça o login na janela do bot e rode a busca de novo ` +
+    `A LATAM continuou pedindo login por ${minutes} min. Rode \`npm run login:latam\`, termine na janela do bot e busque de novo ` +
       "(o login fica salvo no perfil, então isso não deve se repetir a cada busca).",
   );
 }
@@ -500,7 +515,7 @@ export async function confirmPairInMiles(
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: 90_000 });
 
     if (isAskingForLogin(page)) {
-      await waitForManualLogin(page, onLog, onNotice);
+      await logInToLatam(page, onLog, onNotice);
       await page.goto(url, { waitUntil: "domcontentloaded", timeout: 90_000 });
       if (isAskingForLogin(page)) {
         throw new Error("A LATAM voltou para a tela de entrada mesmo após o login. Refaça a busca.");
