@@ -20,6 +20,7 @@ const LANES: Record<string, string> = {
   smiles: "chrome",
   aa: "chrome",
   latam: "chrome",
+  "latam-pairs": "chrome",
 };
 
 const TICK_MS = 15_000;

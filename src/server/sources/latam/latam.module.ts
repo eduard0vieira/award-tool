@@ -4,6 +4,7 @@ import { closeChromeSession, isSessionAlive } from "../../../core/chrome-session
 import { config } from "../../config.ts";
 import { JobsModule } from "../../jobs/jobs.module.ts";
 import { sessionPoolProvider } from "../session-pool.provider.ts";
+import { LatamPairsSource } from "./latam-pairs.source.ts";
 import { LATAM_POOL, LatamSource } from "./latam.source.ts";
 
 @Module({
@@ -17,7 +18,8 @@ import { LATAM_POOL, LatamSource } from "./latam.source.ts";
       closeSession: closeChromeSession,
     }),
     LatamSource,
+    LatamPairsSource,
   ],
-  exports: [LatamSource],
+  exports: [LatamSource, LatamPairsSource],
 })
 export class LatamModule {}

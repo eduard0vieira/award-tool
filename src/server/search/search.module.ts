@@ -5,6 +5,7 @@ import { AaSource } from "../sources/aa/aa.source.ts";
 import { IberiaModule } from "../sources/iberia/iberia.module.ts";
 import { IberiaSource } from "../sources/iberia/iberia.source.ts";
 import { LatamModule } from "../sources/latam/latam.module.ts";
+import { LatamPairsSource } from "../sources/latam/latam-pairs.source.ts";
 import { LatamSource } from "../sources/latam/latam.source.ts";
 import { SeatspyModule } from "../sources/seatspy/seatspy.module.ts";
 import { SeatspySource } from "../sources/seatspy/seatspy.source.ts";
@@ -35,7 +36,7 @@ import { SearchService } from "./search.service.ts";
     {
       provide: SEARCH_SOURCES,
       useFactory: (...sources: SearchSource[]) => new Map(sources.map((source) => [source.id, source])),
-      inject: [TapSource, TapCalendarSource, TapShowcaseSource, SeatspySource, AaSource, IberiaSource, SmilesSource, LatamSource],
+      inject: [TapSource, TapCalendarSource, TapShowcaseSource, SeatspySource, AaSource, IberiaSource, SmilesSource, LatamSource, LatamPairsSource],
     },
   ],
 })
