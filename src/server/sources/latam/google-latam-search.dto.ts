@@ -10,4 +10,8 @@ export class GoogleLatamSearchDto extends RouteRequestDto {
   // Google's calendar only takes one trip length per call.
   @OptionalIntField("stayDays", 3, 30)
   stayDays?: number;
+
+  // The dates kept: up to this much above Google's cheapest round trip.
+  @OptionalIntField("bandPercent", 0, 100)
+  bandPercent?: number;
 }

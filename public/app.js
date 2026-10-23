@@ -225,6 +225,7 @@ const latamGoogleOriginInput = document.getElementById("latam-google-origin");
 const latamGoogleDestinationInput = document.getElementById("latam-google-destination");
 const latamGoogleCabinSelect = document.getElementById("latam-google-cabin");
 const latamGoogleStayInput = document.getElementById("latam-google-stay");
+const latamGoogleBandInput = document.getElementById("latam-google-band");
 const latamNotice = document.getElementById("latam-notice");
 const latamQueue = document.getElementById("latam-queue");
 
@@ -1221,7 +1222,7 @@ const LEG_BODIES_BY_SOURCE = {
       },
     },
   ],
-  "google-latam": ([origin, destination, cabin, stayDays]) => [{ origin, destination, cabin, stayDays }],
+  "google-latam": ([origin, destination, cabin, stayDays, bandPercent]) => [{ origin, destination, cabin, stayDays, bandPercent }],
   "latam-pairs": ([origin, destination, cabin, dates]) => [
     { origin, destination, cabin, outboundDates: dates.outbound, returnDates: dates.return },
   ],
@@ -1393,7 +1394,7 @@ const spectatedGroups = new Map();
 // The originator's browser starts the next leg as soon as the previous one ends.
 const SHARED_LEG_WAIT_MS = 2 * 60 * 1000;
 // The session goes in right after these arguments; a different count would put it in the wrong one.
-const ARG_COUNT_BY_SOURCE = { tap: 4, "tap-calendar": 4, "tap-showcase": 1, "latam-pairs": 4, "google-latam": 4, seatspy: 5, smiles: 5, aa: 7, latam: 4, iberia: 7 };
+const ARG_COUNT_BY_SOURCE = { tap: 4, "tap-calendar": 4, "tap-showcase": 1, "latam-pairs": 4, "google-latam": 5, seatspy: 5, smiles: 5, aa: 7, latam: 4, iberia: 7 };
 
 function followSharedGroup(group, fromSnapshot) {
   if (ownGroupIds.has(group.id)) return;
@@ -3178,11 +3179,11 @@ function milesOf(pairs) {
 // price. "These are the dates with availability" is what the client wants, not
 // "these three pairs I checked". Without a confirmation there is no button: a
 // LATAM alert without the points number would be a card with a blank price.
-function showLatamAlertButton(card, origin, destination, legs, confirmation) {
+function showLatamAlertButton(card, origin, destination, legs, confirmation, cabinClass = "Econômica") {
   const pairs = confirmation?.pairs ?? [];
   if (pairs.length === 0) return;
 
-  const economyOf = (leg) => leg?.sections?.find((section) => section.label === "Econômica");
+  const economyOf = (leg) => leg?.sections?.find((section) => section.label === cabinClass);
   const outboundSection = economyOf(legs[0]);
   const inboundSection = economyOf(legs[1]);
   if (!hasDays(outboundSection) && !hasDays(inboundSection)) return;
@@ -3198,16 +3199,16 @@ function showLatamAlertButton(card, origin, destination, legs, confirmation) {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "alert-button";
-  setAlertButtonState(button, "Econômica", "idle");
+  setAlertButtonState(button, cabinClass, "idle");
   button.title = "Todas as datas do calendário, com os pontos vindos dos pares confirmados";
   button.addEventListener("click", async () => {
     button.disabled = true;
-    setAlertButtonState(button, "Econômica", "busy");
+    setAlertButtonState(button, cabinClass, "busy");
     try {
       const outbound = keptSection(outboundSection);
       const inbound = keptSection(inboundSection);
       if (!hasDays(outbound) && !hasDays(inbound)) {
-        throw new Error("Todas as datas da Econômica foram tiradas do alerta.");
+        throw new Error(`Todas as datas da ${cabinClass} foram tiradas do alerta.`);
       }
       // A pair whose date was taken out cannot lend its price: the card would
       // announce points for a day that is no longer in it.
@@ -3222,23 +3223,23 @@ function showLatamAlertButton(card, origin, destination, legs, confirmation) {
         source: "LATAM",
         origin,
         destination,
-        cabinClass: "Econômica",
+        cabinClass,
         minK: Math.min(...perLeg) / 1000,
         maxK: Math.max(...perLeg) / 1000,
         outboundText: hasDays(outbound) ? outbound.text : "",
         returnText: hasDays(inbound) ? inbound.text : "",
       });
       showGeneratedAlert(card, alert);
-      setAlertButtonState(button, "Econômica", "done");
+      setAlertButtonState(button, cabinClass, "done");
     } catch (err) {
-      setAlertButtonState(button, "Econômica", "idle");
+      setAlertButtonState(button, cabinClass, "idle");
       showNotice(card.noticeEl, err.message || "Falha ao gerar o alerta.");
     } finally {
       button.disabled = false;
     }
   });
   card.root.addEventListener("alert-dates-changed", () => {
-    if (!button.disabled) setAlertButtonState(button, "Econômica", "idle");
+    if (!button.disabled) setAlertButtonState(button, cabinClass, "idle");
   });
   bar.appendChild(button);
   card.root.querySelector(".job-header").after(bar);
@@ -3283,8 +3284,8 @@ function showTestedPairs(card, tested, cabinLabel, origin, destination) {
 }
 
 // Google Flights filtered to LATAM, its cheapest round trips, each confirmed in miles on LATAM's site.
-async function startGoogleLatamSearch(origin, destination, cabin, stayDays, session) {
-  const args = [origin, destination, cabin, stayDays];
+async function startGoogleLatamSearch(origin, destination, cabin, stayDays, bandPercent, session) {
+  const args = [origin, destination, cabin, stayDays, bandPercent];
   session = session || newSession("google-latam", args);
   const cabinLabel = LATAM_CABIN_LABELS[cabin] || cabin;
   const card = createJobCard(latamQueue, { program: "LATAM", detail: `${cabinLabel}, via Google Flights`, origin, destination, roundTrip: true });
@@ -3296,11 +3297,22 @@ async function startGoogleLatamSearch(origin, destination, cabin, stayDays, sess
         { text: "Google Flights", className: "fact-lead" },
         `menor ida e volta ${reaisFormat.format(tested.google.lowestReais)}`,
         `${tested.google.stayDays} dias de viagem`,
-        `${tested.google.days} datas lidas`,
+        `${tested.google.kept} de ${tested.google.days} datas até ${tested.google.bandPercent}% acima`,
       ]);
       card.ceilingsEl.hidden = false;
     }
-    showTestedPairs(card, tested, cabinLabel, origin, destination);
+    // Every Google date of the band; the confirmed pairs only lend the points, as in the calendar search.
+    const legs = tested.result;
+    for (const leg of legs) {
+      renderLegSections(card.resultEl, leg.label, leg.sections);
+      recordLegForCopy(card, leg.sections);
+    }
+    showMilesConfirmation(card, tested.confirmation);
+    card.setStatus("Pronto", "status-done");
+    card.resultEl.hidden = card.minimized;
+    showPartialNotices(card, [tested.partialNotice, ...(tested.notices || [])].filter(Boolean));
+    updateCardActions(card);
+    showLatamAlertButton(card, origin, destination, legs, tested.confirmation, cabinLabel);
   } catch (err) {
     showFailure(card, err);
   } finally {
@@ -3633,7 +3645,13 @@ function latamGoogleArgs() {
     latamGoogleStayInput.focus();
     return null;
   }
-  return [origin, destination, latamGoogleCabinSelect.value, stayDays];
+  const bandPercent = Number(latamGoogleBandInput.value);
+  if (!Number.isInteger(bandPercent) || bandPercent < 0 || bandPercent > 100) {
+    showNotice(latamNotice, "A faixa acima do menor preço deve ser um número inteiro de 0 a 100.");
+    latamGoogleBandInput.focus();
+    return null;
+  }
+  return [origin, destination, latamGoogleCabinSelect.value, stayDays, bandPercent];
 }
 
 latamGoogleForm.addEventListener("submit", (event) => {

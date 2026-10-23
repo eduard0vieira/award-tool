@@ -431,9 +431,13 @@
           <label for="latam-google-stay">Dias de viagem</label>
           <input id="latam-google-stay" name="stay" type="number" min="3" max="30" step="1" value="7" required autocomplete="off" />
         </div>
+        <div class="field">
+          <label for="latam-google-band">Até % acima do menor</label>
+          <input id="latam-google-band" name="band" type="number" min="0" max="100" step="1" value="10" required autocomplete="off" />
+        </div>
         <button type="button" class="action-button queue-button" data-queue-source="google-latam">Adicionar à fila</button>
         <button type="submit">Buscar</button>
-        <p class="hint">Lê o calendário do Google Flights só com a LATAM, nessa cabine e com ida e volta desse número de dias, pega os pares mais baratos (até 5, espalhados pelo ano) e confere cada um em milhas no site da LATAM, com o print da tela. Precisa da conta LATAM Pass logada no Chrome do bot.</p>
+        <p class="hint">Lê o calendário do Google Flights só com a LATAM, nessa cabine e com ida e volta desse número de dias, e traz todas as datas até essa porcentagem acima do menor preço. Até 5 pares delas, espalhados pelo ano, são conferidos em milhas no site da LATAM, com o print da tela, para o alerta saber quantos pontos custa. Precisa da conta LATAM Pass logada no Chrome do bot.</p>
       </form>
 
       <p id="latam-notice" class="notice" hidden></p>
