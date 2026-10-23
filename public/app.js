@@ -1263,7 +1263,9 @@ async function restoreSearches() {
 
   const alive = [];
   for (const record of saved) {
-    if (!RESUME_BY_SOURCE[record.source]) continue;
+    // A card saved by an older version has fewer arguments, and the session would
+    // land in the slot of the one added since.
+    if (!RESUME_BY_SOURCE[record.source] || record.args.length !== ARG_COUNT_BY_SOURCE[record.source]) continue;
 
     // A step is usable when its result is saved (no server needed) or its job
     // still exists there. If the server restarted mid-step there is nothing to
