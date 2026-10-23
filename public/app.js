@@ -218,7 +218,8 @@ const latamPairsForm = document.getElementById("latam-pairs-form");
 const latamPairsOriginInput = document.getElementById("latam-pairs-origin");
 const latamPairsDestinationInput = document.getElementById("latam-pairs-destination");
 const latamPairsCabinSelect = document.getElementById("latam-pairs-cabin");
-const latamPairsDatesInput = document.getElementById("latam-pairs-dates");
+const latamPairsOutboundInput = document.getElementById("latam-pairs-outbound");
+const latamPairsReturnInput = document.getElementById("latam-pairs-return");
 const latamNotice = document.getElementById("latam-notice");
 const latamQueue = document.getElementById("latam-queue");
 
@@ -432,7 +433,7 @@ function repeatSearch(item) {
     latamPairsDestinationInput.value = item.destination;
     activateTab("latam");
     selectLatamMode(latamModeButtons[1]);
-    latamPairsDatesInput.focus();
+    latamPairsOutboundInput.focus();
   } else if (item.program === "tap-showcase") {
     activateTab("tap");
     selectTapMode(tapModeButtons[0]);
@@ -1208,7 +1209,9 @@ const LEG_BODIES_BY_SOURCE = {
       },
     },
   ],
-  "latam-pairs": ([origin, destination, cabin, pairs]) => [{ origin, destination, cabin, pairs }],
+  "latam-pairs": ([origin, destination, cabin, dates]) => [
+    { origin, destination, cabin, outboundDates: dates.outbound, returnDates: dates.return },
+  ],
   latam: ([origin, destination, ceilings, confirmMiles]) => [
     { origin, destination, ceilings, confirmMiles, outboundMarginReais: 100, returnMarginReais: 300 },
   ],
@@ -3231,14 +3234,14 @@ const LATAM_CABIN_LABELS = { Business: "Executiva", Economy: "Econômica" };
 // Pairs picked by hand (from Google Flights, say): each one confirmed in miles on
 // LATAM's site with its capture. The card lists the confirmed dates per
 // direction, so they go to an alert like any other card's.
-async function startLatamPairsSearch(origin, destination, cabin, pairs, session) {
-  const args = [origin, destination, cabin, pairs];
+async function startLatamPairsSearch(origin, destination, cabin, dates, session) {
+  const args = [origin, destination, cabin, dates];
   session = session || newSession("latam-pairs", args);
   const cabinLabel = LATAM_CABIN_LABELS[cabin] || cabin;
   const card = createJobCard(latamQueue, { program: "LATAM", detail: `${cabinLabel}, datas testadas`, origin, destination, roundTrip: true });
   try {
     const [body] = LEG_BODIES_BY_SOURCE["latam-pairs"](args);
-    const tested = await runOnServer(card, { source: "latam-pairs", ...body }, `Conferindo ${plural(pairs.length, "par", "pares")} em milhas…`, session);
+    const tested = await runOnServer(card, { source: "latam-pairs", ...body }, "Sorteando e conferindo os pares em milhas…", session);
     const legs = tested.result;
     for (const leg of legs) {
       renderLegSections(card.resultEl, leg.label, leg.sections);
@@ -3514,9 +3517,33 @@ latamModeButtons.forEach((button) => {
   button.addEventListener("keydown", (event) => onTabListKeydown(event, latamModeButtons, selectLatamMode));
 });
 
-const MAX_LATAM_PAIRS = 10;
+// "10/12/2026, 12/12/2026" or the alert's own "Dez 2026: 10, 12 (4), 15", mixed
+// freely. Returns the ISO dates and what could not be read.
+function readDateList(text) {
+  const dates = new Set();
+  const wrong = [];
+  for (const token of text.match(/\d{1,2}\/\d{1,2}\/\d{4}/g) ?? []) {
+    const [day, month, year] = token.split("/");
+    const iso = parseTypedDate(`${day.padStart(2, "0")}/${month.padStart(2, "0")}/${year}`);
+    if (iso) dates.add(iso);
+    else wrong.push(token);
+  }
+  for (const [, monthName, year, days] of text.matchAll(/([A-Za-zç]{3})[a-zç]*\.?\s+(\d{4})[ \t]*:[ \t]*([\d,() \t]+)/gi)) {
+    const month = MONTHS_PT.findIndex((name) => name.toLowerCase() === monthName.toLowerCase()) + 1;
+    if (month === 0) {
+      wrong.push(`${monthName} ${year}`);
+      continue;
+    }
+    // "(4)" is the seat count some alerts carry after the day.
+    for (const day of days.replace(/\(\d+\)/g, "").match(/\d{1,2}/g) ?? []) {
+      const iso = parseTypedDate(`${day.padStart(2, "0")}/${String(month).padStart(2, "0")}/${year}`);
+      if (iso) dates.add(iso);
+      else wrong.push(`${day}/${month}/${year}`);
+    }
+  }
+  return { dates: [...dates].sort(), wrong };
+}
 
-// "10/12/2026 20/12/2026" per line, any separator between the two dates.
 function latamPairsArgs() {
   clearNotice(latamNotice);
   const origin = latamPairsOriginInput.value.trim().toUpperCase();
@@ -3525,26 +3552,24 @@ function latamPairsArgs() {
     showNotice(latamNotice, "Preencha origem e destino.");
     return null;
   }
-  const lines = latamPairsDatesInput.value.split("\n").map((line) => line.trim()).filter(Boolean);
-  const pairs = [];
-  const wrong = [];
-  for (const line of lines) {
-    const dates = line.match(/\d{2}\/\d{2}\/\d{4}/g) ?? [];
-    const [outbound, back] = dates.map(parseTypedDate);
-    if (dates.length !== 2 || !outbound || !back || back <= outbound) wrong.push(line);
-    else pairs.push({ outbound, return: back });
+  const outbound = readDateList(latamPairsOutboundInput.value);
+  const back = readDateList(latamPairsReturnInput.value);
+  for (const [list, input, label] of [
+    [outbound, latamPairsOutboundInput, "ida"],
+    [back, latamPairsReturnInput, "volta"],
+  ]) {
+    if (list.wrong.length > 0) {
+      showNotice(latamNotice, `Datas de ${label} que não existem: ${list.wrong.join(", ")}.`);
+      input.focus();
+      return null;
+    }
+    if (list.dates.length === 0) {
+      showNotice(latamNotice, `Informe as datas de ${label}, como 10/12/2026 ou Dez 2026: 10, 12.`);
+      input.focus();
+      return null;
+    }
   }
-  if (wrong.length > 0) {
-    showNotice(latamNotice, `Linha(s) que não são um par de ida e volta válido (DD/MM/AAAA DD/MM/AAAA, volta depois da ida): ${wrong.join("; ")}`);
-    latamPairsDatesInput.focus();
-    return null;
-  }
-  if (pairs.length === 0 || pairs.length > MAX_LATAM_PAIRS) {
-    showNotice(latamNotice, `Informe de 1 a ${MAX_LATAM_PAIRS} pares, um por linha.`);
-    latamPairsDatesInput.focus();
-    return null;
-  }
-  return [origin, destination, latamPairsCabinSelect.value, pairs];
+  return [origin, destination, latamPairsCabinSelect.value, { outbound: outbound.dates, return: back.dates }];
 }
 
 latamPairsForm.addEventListener("submit", (event) => {
@@ -3979,8 +4004,8 @@ const QUEUE_STATUS_LABELS = {
 function queueLabel(source, args) {
   if (source === "tap-showcase") return "Vitrine TAP Brasil → Europa";
   if (source === "latam-pairs") {
-    const [origin, destination, cabin, pairs] = args;
-    return `LATAM ${origin} → ${destination}, ${plural(pairs.length, "par testado", "pares testados")} na ${LATAM_CABIN_LABELS[cabin] || cabin}`;
+    const [origin, destination, cabin] = args;
+    return `LATAM ${origin} → ${destination}, datas testadas na ${LATAM_CABIN_LABELS[cabin] || cabin}`;
   }
   if (source === "seatspy") {
     const [program, origin, destination, roundTrip] = args;

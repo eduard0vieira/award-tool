@@ -397,11 +397,17 @@
         </div>
         <button type="button" class="action-button queue-button" data-queue-source="latam-pairs">Adicionar à fila</button>
         <button type="submit">Testar</button>
-        <div class="field field-wide">
-          <label for="latam-pairs-dates">Datas de ida e volta, um par por linha</label>
-          <textarea id="latam-pairs-dates" name="pairs" rows="4" spellcheck="false" placeholder="10/12/2026 20/12/2026&#10;15/01/2027 25/01/2027"></textarea>
+        <div class="dates-pair-row">
+          <div class="field">
+            <label for="latam-pairs-outbound">Datas de ida</label>
+            <textarea id="latam-pairs-outbound" name="outbound" rows="3" spellcheck="false" placeholder="Dez 2026: 10, 12, 15&#10;ou 10/12/2026, 12/12/2026"></textarea>
+          </div>
+          <div class="field">
+            <label for="latam-pairs-return">Datas de volta</label>
+            <textarea id="latam-pairs-return" name="return" rows="3" spellcheck="false" placeholder="Dez 2026: 20, 22, 26&#10;ou 20/12/2026, 22/12/2026"></textarea>
+          </div>
         </div>
-        <p class="hint">Cada par é conferido em milhas no site da LATAM, com o print da tela, como na confirmação do calendário. Até 10 pares por teste. Precisa da conta LATAM Pass logada no Chrome do bot.</p>
+        <p class="hint">O bot sorteia os pares de ida e volta como na confirmação do calendário (até 5, espalhados pelo período, de 3 a 14 dias de viagem) e confere cada um em milhas no site da LATAM, com o print da tela. Precisa da conta LATAM Pass logada no Chrome do bot.</p>
       </form>
 
       <p id="latam-notice" class="notice" hidden></p>

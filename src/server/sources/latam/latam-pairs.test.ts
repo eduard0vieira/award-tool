@@ -4,19 +4,29 @@ import { describe, test } from "node:test";
 import type { PairConfirmation } from "../../../scrapers/latam/latam.scraper.ts";
 import { validateBody } from "../../validation.ts";
 import { LatamPairsSearchDto } from "./latam-pairs-search.dto.ts";
-import { confirmedSection } from "./latam-pairs.source.ts";
+import { confirmedSection, drawPairs } from "./latam-pairs.source.ts";
 
-const body = (pairs: unknown) => ({ origin: "gru", destination: "jfk", cabin: "Business", pairs });
+const body = (outboundDates: unknown, returnDates: unknown) => ({ origin: "gru", destination: "jfk", cabin: "Business", outboundDates, returnDates });
 
 describe("LATAM date pairs", () => {
-  test("accepts business pairs and refuses a return before the outbound", async () => {
-    const request = await validateBody(LatamPairsSearchDto, body([{ outbound: "2026-12-10", return: "2026-12-20" }]));
+  test("accepts lists of dates and refuses a wrong format or cabin", async () => {
+    const request = await validateBody(LatamPairsSearchDto, body(["2026-12-10"], ["2026-12-20"]));
     assert.equal(request.origin, "GRU");
-    await assert.rejects(validateBody(LatamPairsSearchDto, body([{ outbound: "2026-12-20", return: "2026-12-10" }])), /precisa ser depois da ida/);
-    await assert.rejects(validateBody(LatamPairsSearchDto, body([{ outbound: "10/12/2026", return: "2026-12-20" }])), /AAAA-MM-DD/);
-    const eleven = Array.from({ length: 11 }, () => ({ outbound: "2026-12-10", return: "2026-12-20" }));
-    await assert.rejects(validateBody(LatamPairsSearchDto, body(eleven)), /no máximo 10/);
-    await assert.rejects(validateBody(LatamPairsSearchDto, { ...body([{ outbound: "2026-12-10", return: "2026-12-20" }]), cabin: "First" }), /Economy ou Business/);
+    await assert.rejects(validateBody(LatamPairsSearchDto, body(["10/12/2026"], ["2026-12-20"])), /AAAA-MM-DD/);
+    await assert.rejects(validateBody(LatamPairsSearchDto, body([], ["2026-12-20"])), /pelo menos uma data de ida/);
+    await assert.rejects(validateBody(LatamPairsSearchDto, { ...body(["2026-12-10"], ["2026-12-20"]), cabin: "First" }), /Economy ou Business/);
+  });
+
+  test("draws pairs like the calendar: spread out, 3 to 14 days of trip", () => {
+    const pairs = drawPairs(
+      ["2026-12-01", "2026-12-02", "2027-03-10", "2027-06-01"],
+      ["2026-12-02", "2026-12-09", "2027-03-20", "2027-07-30"],
+    );
+    assert.deepEqual(pairs, [
+      { outbound: "2026-12-01", return: "2026-12-09" },
+      { outbound: "2027-03-10", return: "2027-03-20" },
+    ]);
+    assert.deepEqual(drawPairs(["2026-12-10"], ["2026-12-11"]), []);
   });
 
   test("each direction lists its confirmed dates at that leg's points, the lowest when a date repeats", () => {

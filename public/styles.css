@@ -652,6 +652,18 @@ textarea {
   flex: 1 1 100%;
 }
 
+.dates-pair-row {
+  flex: 1 1 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e3) var(--e4);
+}
+
+.dates-pair-row > .field {
+  flex: 1 1 260px;
+  max-width: 40ch;
+}
+
 .field input,
 .field select,
 .field textarea {

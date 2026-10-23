@@ -1,7 +1,14 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { formatDatesByMonth, type FormattedDay } from "../../../core/common.ts";
 import { SessionPool } from "../../../core/session-pool.ts";
-import { latamBookingLink, type LatamSession, type PairConfirmation } from "../../../scrapers/latam/latam.scraper.ts";
+import {
+  latamBookingLink,
+  pickBestPairs,
+  type LatamDay,
+  type LatamSession,
+  type PairConfirmation,
+} from "../../../scrapers/latam/latam.scraper.ts";
+import { config } from "../../config.ts";
 import { JobRunner } from "../../jobs/job-runner.service.ts";
 import { JobStore } from "../../jobs/job-store.service.ts";
 import type { SearchSource } from "../../search/search-source.ts";
@@ -32,9 +39,19 @@ export function confirmedSection(pairs: PairConfirmation[], direction: "outbound
   return { min: Math.min(...values), max: Math.max(...values), days, text: formatDatesByMonth(days.map((day) => day.date)) };
 }
 
-// Tests round-trip dates picked by hand: each pair is confirmed in miles on
-// LATAM's site, with its screen captured, as the calendar search does for the
-// pairs it picks itself.
+// The calendar's own draw, with every date at the same price: pairs spread over
+// the period, 3 to 14 days of trip, the return after the outbound.
+export function drawPairs(outboundDates: string[], returnDates: string[]) {
+  const asDays = (dates: string[]): LatamDay[] => [...new Set(dates)].map((date) => ({ date, price: 0, lowestFare: false }));
+  return pickBestPairs(asDays(outboundDates), asDays(returnDates), config.latamPairs).map((pair) => ({
+    outbound: pair.outbound.date,
+    return: pair.inbound.date,
+  }));
+}
+
+// Tests dates picked by hand: the bot draws round-trip pairs from them and
+// confirms each one in miles on LATAM's site, with its screen captured, as the
+// calendar search does for the pairs it picks itself.
 @Injectable()
 export class LatamPairsSource implements SearchSource<LatamPairsSearchDto> {
   readonly id = "latam-pairs";
@@ -45,7 +62,8 @@ export class LatamPairsSource implements SearchSource<LatamPairsSearchDto> {
       origin: request.origin,
       destination: request.destination,
       cabin: request.cabin,
-      pairs: request.pairs.map((pair) => `${pair.outbound}/${pair.return}`),
+      outboundDates: [...request.outboundDates].sort(),
+      returnDates: [...request.returnDates].sort(),
     };
   }
 
@@ -59,13 +77,12 @@ export class LatamPairsSource implements SearchSource<LatamPairsSearchDto> {
     const { origin, destination, cabin } = request;
     return this.runner.run(this.pool, jobId, async ({ page }) => {
       const job = this.jobs.callbacks(jobId);
-      const { confirmed, withoutOffer, failed } = await confirmPairList(
-        jobId,
-        page,
-        job,
-        { origin, destination, cabin },
-        request.pairs.map((pair) => ({ outbound: pair.outbound, return: pair.return })),
-      );
+      const pairs = drawPairs(request.outboundDates, request.returnDates);
+      if (pairs.length === 0) {
+        throw new Error("Nenhum par de ida e volta com 3 a 14 dias de viagem entre as datas informadas.");
+      }
+      job.log(`Pares sorteados: ${pairs.map((pair) => `${pair.outbound} → ${pair.return}`).join(", ")}.`);
+      const { confirmed, withoutOffer, failed } = await confirmPairList(jobId, page, job, { origin, destination, cabin }, pairs);
       if (confirmed.length === 0 && withoutOffer.length === 0) {
         throw new Error(`Nenhum par pôde ser conferido na LATAM: ${failed.join(" · ")}`);
       }
