@@ -1,22 +1,15 @@
 import { Inject, Injectable } from "@nestjs/common";
-import fs from "node:fs";
-import path from "node:path";
 import type { Page } from "playwright";
 import {
   buildLatamReport,
-  confirmPairInMiles,
   filterByCeilings,
-  LatamFlowError,
   pickBestPairs,
   searchLatamYear,
   type LatamCeilings,
   type LatamDay,
   type LatamSession,
   type PairConfirmation,
-  type PairToConfirm,
 } from "../../../scrapers/latam/latam.scraper.ts";
-import { formatDatesByMonth } from "../../../core/common.ts";
-import { ALERTS_DIR } from "../../../core/paths.ts";
 import { SessionPool } from "../../../core/session-pool.ts";
 import { config } from "../../config.ts";
 import { JobRunner } from "../../jobs/job-runner.service.ts";
@@ -24,11 +17,10 @@ import { JobStore } from "../../jobs/job-store.service.ts";
 import type { JobCallbacks } from "../../jobs/job.types.ts";
 import type { SearchSource } from "../../search/search-source.ts";
 import { recordSearch, type Leg } from "../record-search.ts";
+import { confirmPairList } from "./latam-confirmation.ts";
 import { LatamSearchDto } from "./latam-search.dto.ts";
 
 export const LATAM_POOL = Symbol("LATAM_POOL");
-
-const PAIR_ATTEMPTS = 2;
 
 type Confirmation = { confirmation?: { pairs: PairConfirmation[] }; notice?: string };
 
@@ -151,40 +143,14 @@ export class LatamSource implements SearchSource<LatamSearchDto> {
           "Nenhum par de ida e volta no resultado com 3 a 14 dias de viagem. " +
           "Confirmação em milhas não executada.";
       } else {
-        const folder = `latam-${search.origin}-${search.destination}-${Date.now()}`;
-        fs.mkdirSync(path.join(ALERTS_DIR, folder), { recursive: true });
-
-        const confirmed: PairConfirmation[] = [];
-        const failures: string[] = [];
-        for (const [index, pair] of pairs.entries()) {
-          job.notice(`Confirmando par ${index + 1}/${pairs.length}. ${pair.outbound.date} → ${pair.inbound.date}...`);
-          const file = `par-${index + 1}.png`;
-          try {
-            const offer = await this.confirmWithRetry(page, job, {
-              origin: search.origin,
-              destination: search.destination,
-              outboundDate: pair.outbound.date,
-              returnDate: pair.inbound.date,
-              screenshotPath: path.join(ALERTS_DIR, folder, file),
-            });
-            if (offer) {
-              confirmed.push({
-                ...offer,
-                image: offer.image ? `/alerts/${folder}/${file}` : "",
-                outboundText: formatDatesByMonth([offer.outboundDate]),
-                returnText: formatDatesByMonth([offer.returnDate]),
-              });
-            } else {
-              failures.push(`${pair.outbound.date} → ${pair.inbound.date}: sem oferta em milhas`);
-            }
-          } catch (err) {
-            // One failing pair never drops the others; the notice lists which ones were left out.
-            const reason = err instanceof Error ? err.message : String(err);
-            console.error(`[${jobId}] par ${pair.outbound.date}→${pair.inbound.date} falhou: ${reason}`);
-            failures.push(`${pair.outbound.date} → ${pair.inbound.date}: ${reason}`);
-          }
-        }
-        job.notice("");
+        const { confirmed, withoutOffer, failed } = await confirmPairList(
+          jobId,
+          page,
+          job,
+          { origin: search.origin, destination: search.destination, cabin: "Economy" },
+          pairs.map((pair) => ({ outbound: pair.outbound.date, return: pair.inbound.date })),
+        );
+        const failures = [...withoutOffer.map((pair) => `${pair}: sem oferta em milhas`), ...failed];
 
         if (confirmed.length > 0) {
           result.confirmation = { pairs: confirmed };
@@ -208,20 +174,5 @@ export class LatamSource implements SearchSource<LatamSearchDto> {
     }
     job.notice("");
     return result;
-  }
-
-  // Only a step the site did not complete is tried again; a login or format
-  // error would fail the same way twice.
-  private async confirmWithRetry(page: Page, job: JobCallbacks, pair: PairToConfirm): Promise<PairConfirmation | null> {
-    for (let attempt = 1; ; attempt++) {
-      try {
-        // A login prompt becomes a notice: it is the only way the user learns
-        // the search is waiting for them in the bot's window.
-        return await confirmPairInMiles(page, pair, job.log, job.notice);
-      } catch (err) {
-        if (!(err instanceof LatamFlowError) || attempt >= PAIR_ATTEMPTS) throw err;
-        job.log(`Par ${pair.outboundDate} → ${pair.returnDate} falhou (${err.message}). Tentando de novo.`);
-      }
-    }
   }
 }
