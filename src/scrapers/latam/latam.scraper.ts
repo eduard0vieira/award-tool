@@ -451,12 +451,16 @@ export async function logInToLatam(page: Page, onLog: OnLog, onNotice: OnNotice)
   );
 }
 
+// The site's own search box values (its bundle maps "Premium Business" to "Business").
+export type LatamCabin = "Economy" | "Business";
+
 export type PairToConfirm = {
   origin: string;
   destination: string;
   outboundDate: string;
   returnDate: string;
   screenshotPath: string;
+  cabin?: LatamCabin;
 };
 
 // Confirms the price of a round-trip PAIR, which is not the sum of its legs.
@@ -473,7 +477,7 @@ export async function confirmPairInMiles(
   onLog: OnLog = () => {},
   onNotice: OnNotice = () => {},
 ): Promise<PairConfirmation | null> {
-  const { origin, destination, outboundDate, returnDate, screenshotPath } = pair;
+  const { origin, destination, outboundDate, returnDate, screenshotPath, cabin = "Economy" } = pair;
 
   let outboundSearch: RawOffer | undefined;
   let returnSearch: RawOffer | undefined;
@@ -504,7 +508,7 @@ export async function confirmPairInMiles(
         chd: "0",
         inf: "0",
         trip: "RT",
-        cabin: "Economy",
+        cabin,
         redemption: "true",
         // The site's "Mais baratos": both legs come sorted by miles, so the
         // first card is the cheapest flight. "RECOMMENDED" put pricier ones first.
