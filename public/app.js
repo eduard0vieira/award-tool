@@ -1745,13 +1745,11 @@ function computeUpgrade(businessDays, economyDays) {
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
-// The tip that goes in the upgrade alert's caption, with the price applied.
-function tapUpgradeTip(costK, typedByPerson) {
-  const miles = Math.round(costK * 1000).toLocaleString("pt-BR");
-  const where = typedByPerson ? "no trecho" : "no trecho Brasil–Portugal continental";
+// The tip that goes in the upgrade alert's caption, with how the price was made.
+function tapUpgradeTip(note) {
   return (
     "⬆️ *Pulo do gato:* emita em Econômica e peça à TAP o upgrade com milhas para a Executiva " +
-    `(${miles} milhas ${where}). O valor acima já soma os dois.`
+    `(${note}). O valor acima já soma os dois.`
   );
 }
 
@@ -1783,9 +1781,12 @@ function withUpgradeHints(section, costK) {
 // Upgrade tab must share the same sections, or a date taken out would come back.
 function prepareUpgrade(card, route) {
   const costK = card.upgradeLegs[0]?.upgrade?.costK ?? null;
+  // Results saved before the server sent the note only knew Brazil–Portugal.
+  const note = card.upgradeLegs[0]?.upgrade?.note ?? (costK === null ? null : "81.600 milhas no trecho Brasil–Portugal continental");
   card.upgrade = {
     route,
     costK,
+    note,
     typedByPerson: false,
     legs: card.upgradeLegs.map((leg) => ({
       label: leg.label,
@@ -1816,6 +1817,7 @@ function applyTypedUpgrade(card, costK) {
   card.upgrade = {
     route: base.route,
     costK,
+    note: `${Math.round(costK * 1000).toLocaleString("pt-BR")} milhas de upgrade no trecho`,
     typedByPerson: true,
     legs: base.legs.map(({ label, section }) => ({ label, section: sectionWithTypedUpgrade(section, costK) })),
   };
@@ -1830,7 +1832,7 @@ function applyTypedUpgrade(card, costK) {
       buttonLabel: "Executiva com upgrade",
       outbound: outbound?.section,
       inbound: inbound?.section,
-      tip: tapUpgradeTip(costK, true),
+      tip: tapUpgradeTip(card.upgrade.note),
     },
   ]);
 }
@@ -1844,8 +1846,8 @@ function renderUpgrade(card) {
   upgradeSubpanelEl.querySelector(".upgrade-cost").textContent = costK === null ? "?" : `${costK}K`;
   upgradeSubpanelEl.querySelector(".upgrade-explanation").textContent =
     costK === null
-      ? "O bot só sabe o preço do upgrade entre o Brasil e Portugal continental. Os dias abaixo têm as duas cabines e mostram o valor da Econômica. Digite o upgrade total desse trecho para o bot fazer a conta e liberar o alerta."
-      : "Entram só os dias em que a soma sai mais barata que a Executiva direta do mesmo dia. Passe o mouse num dia para ver a conta.";
+      ? "Esse destino não está na tabela de upgrade da TAP que o bot conhece. Os dias abaixo têm as duas cabines e mostram o valor da Econômica. Digite o upgrade total desse trecho para o bot fazer a conta e liberar o alerta."
+      : `${card.upgrade.note}. Entram só os dias em que a soma sai mais barata que a Executiva direta do mesmo dia. Passe o mouse num dia para ver a conta.`;
   const manual = upgradeSubpanelEl.querySelector(".upgrade-manual");
   // A typed price can be changed; one the server knows cannot.
   manual.hidden = costK !== null && !card.upgrade.typedByPerson;
@@ -2235,7 +2237,7 @@ function showcaseCell(cabin, summary, widest) {
   if (!summary) {
     cell.classList.add("showcase-none");
     cell.textContent = "–";
-    cell.title = "O preço do upgrade só está cadastrado entre o Brasil e Portugal continental.";
+    cell.title = "Esse destino não está na tabela de upgrade da TAP que o bot conhece.";
     return cell;
   }
   const count = document.createElement("span");
@@ -2419,7 +2421,7 @@ async function runTapSearch(session, source, legBodies, origin, destination, rou
         buttonLabel: "Executiva com upgrade",
         outbound: upgradeOutbound?.section,
         inbound: upgradeInbound?.section,
-        tip: tapUpgradeTip(card.upgrade.costK),
+        tip: tapUpgradeTip(card.upgrade.note),
       },
     ].filter(Boolean));
   } catch (err) {

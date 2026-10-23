@@ -1,15 +1,24 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { buildTapUpgradeSection, tapUpgradeCostK } from "./tap-upgrade.ts";
+import { buildTapUpgradeSection, tapUpgradeCost, tapUpgradeCostK } from "./tap-upgrade.ts";
 
 const day = (date: string, valueK: number) => ({ date, valueK });
 
 describe("TAP upgrade", () => {
-  test("knows the price only between Brazil and mainland Portugal, both ways", () => {
+  test("prices the crossing to mainland Portugal and adds the connection by region", () => {
     assert.equal(tapUpgradeCostK("FOR", "LIS"), 81.6);
     assert.equal(tapUpgradeCostK("OPO", "GRU"), 81.6);
-    assert.equal(tapUpgradeCostK("GRU", "MAD"), null);
-    assert.equal(tapUpgradeCostK("GRU", "PDL"), null);
+    assert.equal(tapUpgradeCostK("GRU", "FAO"), 93.5);
+    assert.equal(tapUpgradeCostK("GRU", "PDL"), 96);
+    assert.equal(tapUpgradeCostK("GRU", "MAD"), 96.5);
+    assert.equal(tapUpgradeCostK("LHR", "GIG"), 99.6);
+    assert.equal(tapUpgradeCostK("GIG", "PRG"), 104.4);
+    assert.match(tapUpgradeCost("GIG", "LHR")!.note, /81\.600 .* \+ 18\.000 na conexão até LHR, Europa 1$/);
+  });
+
+  test("has no price outside the table or away from Brazil", () => {
+    assert.equal(tapUpgradeCostK("GRU", "ATH"), null);
+    assert.equal(tapUpgradeCostK("LIS", "MAD"), null);
   });
 
   test("adds the upgrade to economy and keeps only the days it beats business", () => {

@@ -2,7 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import { SessionPool } from "../../../core/session-pool.ts";
 import { buildTapCalendarReport, readRouteCalendar } from "../../../scrapers/tap/tap-calendar.ts";
 import { panoramaWindows, sweepPanorama } from "../../../scrapers/tap/tap-panorama.ts";
-import { buildTapUpgradeSection, tapUpgradeCostK } from "../../../scrapers/tap/tap-upgrade.ts";
+import { buildTapUpgradeSection, tapUpgradeCost } from "../../../scrapers/tap/tap-upgrade.ts";
 import { DEFAULT_BUSINESS_CEILING_K, type TapSession } from "../../../scrapers/tap/tap.scraper.ts";
 import { JobRunner } from "../../jobs/job-runner.service.ts";
 import { JobStore } from "../../jobs/job-store.service.ts";
@@ -56,7 +56,8 @@ export class TapCalendarSource implements SearchSource<TapCalendarSearchDto> {
     };
     const floorsK = { business: request.floors?.business ?? null, economy: request.floors?.economy ?? null };
     const filters = { nonstopOnly: request.nonstopOnly ?? false, maxAgeHours: request.maxAgeHours ?? DEFAULT_MAX_AGE_HOURS };
-    const costK = tapUpgradeCostK(origin, destination);
+    const upgradeCost = tapUpgradeCost(origin, destination);
+    const costK = upgradeCost?.costK ?? null;
     const appliedCeilings = {
       businessK: ceilingsK.business,
       economyK: ceilingsK.economy,
@@ -149,7 +150,7 @@ export class TapCalendarSource implements SearchSource<TapCalendarSearchDto> {
         appliedCeilings,
         filters,
         coverage: { until: report.coveredUntil, seenBetween: report.seenBetween },
-        upgrade: { costK, section: buildTapUpgradeSection(report.business.days, report.economy.days, costK) },
+        upgrade: { costK, note: upgradeCost?.note ?? null, section: buildTapUpgradeSection(report.business.days, report.economy.days, costK) },
         notices,
         partialNotice,
       });

@@ -7,7 +7,7 @@ import {
   searchTapYear,
   type TapSession,
 } from "../../../scrapers/tap/tap.scraper.ts";
-import { buildTapUpgradeSection, tapUpgradeCostK } from "../../../scrapers/tap/tap-upgrade.ts";
+import { buildTapUpgradeSection, tapUpgradeCost } from "../../../scrapers/tap/tap-upgrade.ts";
 import { JobRunner } from "../../jobs/job-runner.service.ts";
 import { JobStore } from "../../jobs/job-store.service.ts";
 import type { SearchSource } from "../../search/search-source.ts";
@@ -86,8 +86,9 @@ export class TapSource implements SearchSource<TapSearchDto> {
         ],
         ceilings: { Executiva: appliedCeilings.businessK, "Econômica": appliedCeilings.economyK },
       });
-      const costK = tapUpgradeCostK(origin, destination);
-      const upgrade = { costK, section: buildTapUpgradeSection(report.business.days, report.economy.days, costK) };
+      const upgradeCost = tapUpgradeCost(origin, destination);
+      const costK = upgradeCost?.costK ?? null;
+      const upgrade = { costK, note: upgradeCost?.note ?? null, section: buildTapUpgradeSection(report.business.days, report.economy.days, costK) };
       this.jobs.complete(jobId, { report, partialNotice, appliedCeilings, stoppedByUser, upgrade });
     });
   }
