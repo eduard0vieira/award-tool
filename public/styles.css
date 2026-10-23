@@ -1407,6 +1407,18 @@ input[type="number"] {
   color: var(--ink-soft);
 }
 
+.upgrade-manual {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--e3);
+  margin: 0 0 var(--e4);
+}
+
+.upgrade-manual .field {
+  width: 24ch;
+}
+
 .upgrade-list {
   display: flex;
   flex-direction: column;

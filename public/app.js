@@ -1745,12 +1745,13 @@ function computeUpgrade(businessDays, economyDays) {
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
-// The tip that goes in the upgrade alert's caption, with the price the server applied.
-function tapUpgradeTip(costK) {
+// The tip that goes in the upgrade alert's caption, with the price applied.
+function tapUpgradeTip(costK, typedByPerson) {
   const miles = Math.round(costK * 1000).toLocaleString("pt-BR");
+  const where = typedByPerson ? "no trecho" : "no trecho Brasil–Portugal continental";
   return (
     "⬆️ *Pulo do gato:* emita em Econômica e peça à TAP o upgrade com milhas para a Executiva " +
-    `(${miles} milhas no trecho Brasil–Portugal continental). O valor acima já soma os dois.`
+    `(${miles} milhas ${where}). O valor acima já soma os dois.`
   );
 }
 
@@ -1780,15 +1781,58 @@ function withUpgradeHints(section, costK) {
 
 // Built once when the search ends: the alert button and the edits in the
 // Upgrade tab must share the same sections, or a date taken out would come back.
-function prepareUpgrade(card) {
+function prepareUpgrade(card, route) {
   const costK = card.upgradeLegs[0]?.upgrade?.costK ?? null;
   card.upgrade = {
+    route,
     costK,
+    typedByPerson: false,
     legs: card.upgradeLegs.map((leg) => ({
       label: leg.label,
       section: withUpgradeHints(leg.upgrade?.section ?? legacyUpgradeSection(leg), costK),
     })),
   };
+}
+
+// The same rule the server applies to Brazil–Portugal (tap-upgrade.ts), with
+// the price the person typed for a route whose price the bot does not know.
+function sectionWithTypedUpgrade(section, costK) {
+  const days = section.days
+    .map((day) => ({ ...day, valueK: Math.round((day.economyK + costK) * 10) / 10 }))
+    .filter((day) => day.valueK < day.businessK);
+  if (days.length === 0) {
+    const emptyReason = section.days.length === 0
+      ? section.emptyReason
+      : "Nos dias com as duas cabines, a Executiva direta sai mais barata que Econômica + upgrade.";
+    return { min: null, max: null, days, text: "Nenhuma disponibilidade encontrada nesse período.", emptyReason };
+  }
+  const values = days.map((day) => day.valueK);
+  return withUpgradeHints({ min: Math.min(...values), max: Math.max(...values), days, text: daysText(days) }, costK);
+}
+
+function applyTypedUpgrade(card, costK) {
+  const base = card.upgradeBase ?? card.upgrade;
+  card.upgradeBase = base;
+  card.upgrade = {
+    route: base.route,
+    costK,
+    typedByPerson: true,
+    legs: base.legs.map(({ label, section }) => ({ label, section: sectionWithTypedUpgrade(section, costK) })),
+  };
+  card.upgradeListEl.innerHTML = "";
+  card.upgradeRendered = false;
+  renderUpgrade(card);
+  card.upgradeAlertBar?.remove();
+  const [outbound, inbound] = card.upgrade.legs;
+  card.upgradeAlertBar = showAlertButtons(card, "tap", base.route.origin, base.route.destination, [
+    {
+      cabinClass: "Executiva",
+      buttonLabel: "Executiva com upgrade",
+      outbound: outbound?.section,
+      inbound: inbound?.section,
+      tip: tapUpgradeTip(costK, true),
+    },
+  ]);
 }
 
 function renderUpgrade(card) {
@@ -1800,8 +1844,23 @@ function renderUpgrade(card) {
   upgradeSubpanelEl.querySelector(".upgrade-cost").textContent = costK === null ? "?" : `${costK}K`;
   upgradeSubpanelEl.querySelector(".upgrade-explanation").textContent =
     costK === null
-      ? "O bot só sabe o preço do upgrade entre o Brasil e Portugal continental. Os dias abaixo têm as duas cabines e mostram o valor da Econômica; esse trecho não gera alerta de upgrade."
+      ? "O bot só sabe o preço do upgrade entre o Brasil e Portugal continental. Os dias abaixo têm as duas cabines e mostram o valor da Econômica. Digite o upgrade total desse trecho para o bot fazer a conta e liberar o alerta."
       : "Entram só os dias em que a soma sai mais barata que a Executiva direta do mesmo dia. Passe o mouse num dia para ver a conta.";
+  const manual = upgradeSubpanelEl.querySelector(".upgrade-manual");
+  // A typed price can be changed; one the server knows cannot.
+  manual.hidden = costK !== null && !card.upgrade.typedByPerson;
+  if (!manual.hidden && !manual.dataset.ready) {
+    manual.dataset.ready = "true";
+    const input = manual.querySelector(".upgrade-manual-input");
+    input.id = `${upgradeSubpanelEl.id}-cost`;
+    manual.querySelector(".upgrade-manual-label").htmlFor = input.id;
+    manual.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const typed = Number(input.value.replace(",", "."));
+      if (!Number.isFinite(typed) || typed <= 0) return;
+      applyTypedUpgrade(card, typed);
+    });
+  }
 
   upgradeEmptyEl.hidden = legs.length > 0;
   for (const { label, section } of legs) {
@@ -2350,7 +2409,7 @@ async function runTapSearch(session, source, legBodies, origin, destination, rou
     card.subtabsEl.hidden = card.minimized;
     showPartialNotices(card, [...partialNotices, ...notices]);
     updateCardActions(card);
-    prepareUpgrade(card);
+    prepareUpgrade(card, { origin, destination });
     const [upgradeOutbound, upgradeInbound] = card.upgrade.legs;
     showAlertButtons(card, "tap", origin, destination, [
       { cabinClass: "Executiva", outbound: outboundReport.business, inbound: returnReport?.business },
@@ -2902,6 +2961,7 @@ function showAlertButtons(card, source, origin, destination, options) {
   // At the top, right under the header: generating the alert is what happens as
   // soon as the search ends, and at the bottom it sat behind months of results.
   card.root.querySelector(".job-header").after(bar);
+  return bar;
 }
 
 // An "images + caption + copy" block, used for the main alert and the combinations one.
