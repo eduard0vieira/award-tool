@@ -73,7 +73,7 @@ export class SearchService {
       }
     }
 
-    const jobId = this.jobs.create({ requestKey: key, requestedBy });
+    const jobId = this.jobs.create({ requestKey: key, requestedBy, source: source.id });
     await this.history.record({
       jobId,
       userId: actor?.kind === "user" ? actor.id : null,

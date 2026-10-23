@@ -25,6 +25,7 @@ const LANES: Record<string, string> = {
 };
 
 const TICK_MS = 15_000;
+
 // A leg that never ends would hold its lane, and every item behind it, forever.
 const LEG_MAX_MS = (Number(process.env.QUEUE_LEG_MAX_HOURS) || 4) * 3_600_000;
 const FINISHED_KEPT_MS = 48 * 3_600_000;
@@ -38,8 +39,13 @@ export class QueueService implements OnModuleInit, OnModuleDestroy {
   private readonly cancelRequested = new Set<string>();
   // Jobs this queue started itself: the only ones it may cancel.
   private readonly ownJobs = new Set<string>();
+  // Every job a queued leg ran on, its own or joined: the rest are searches people started from a tab.
+  private readonly queueJobs = new Set<string>();
   // The e2e tests drive runDue() themselves.
   autoRun = process.env.QUEUE_AUTORUN !== "false";
+  // A round trip searched straight from a tab starts its return a moment after the
+  // outbound ends; the queue waits this long so it does not cut in between.
+  liveGapMs = 20_000;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -136,7 +142,7 @@ export class QueueService implements OnModuleInit, OnModuleDestroy {
     const running: Promise<void>[] = [];
     for (const item of due) {
       const lane = LANES[item.source] ?? item.source;
-      if (this.busyLanes.has(lane)) continue;
+      if (this.busyLanes.has(lane) || this.liveSearchHolds(lane)) continue;
       this.busyLanes.add(lane);
       running.push(
         this.run(item)
@@ -148,6 +154,13 @@ export class QueueService implements OnModuleInit, OnModuleDestroy {
       );
     }
     await Promise.all(running);
+  }
+
+  // A search someone started from a tab holds the same browser the queue would use.
+  private liveSearchHolds(lane: string) {
+    const sources = Object.keys(LANES).filter((source) => LANES[source] === lane);
+    const lastUse = this.jobs.lastUse(sources, this.queueJobs);
+    return lastUse === "running" || (lastUse !== null && Date.now() - lastUse < this.liveGapMs);
   }
 
   private async run(item: { id: string; source: string; args: string; legs: string; nextLeg: number; partial: boolean; user: { id: number; username: string } | null }) {
@@ -173,6 +186,7 @@ export class QueueService implements OnModuleInit, OnModuleDestroy {
         const message = err instanceof Error ? err.message : String(err);
         return this.finish(item.id, { status: "error", error: message, finishedAt: new Date() });
       }
+      this.queueJobs.add(jobId);
       if (!joined) this.ownJobs.add(jobId);
       await this.update(item.id, { jobId });
       const outcome = await this.waitFor(jobId, !joined);

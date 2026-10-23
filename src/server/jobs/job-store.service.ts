@@ -8,7 +8,7 @@ import type { Job, JobCallbacks, JobEvent } from "./job.types.ts";
 export class JobStore {
   private readonly jobs = new Map<string, Job>();
 
-  create(meta: { requestKey?: string; requestedBy?: string | null } = {}): string {
+  create(meta: { requestKey?: string; requestedBy?: string | null; source?: string } = {}): string {
     const jobId = randomUUID();
     this.jobs.set(jobId, { status: "queued", progress: 0, events: new Subject(), ...meta });
     return jobId;
@@ -74,6 +74,7 @@ export class JobStore {
   complete(jobId: string, result: Record<string, unknown>) {
     const job = this.get(jobId);
     job.status = "done";
+    job.endedAt = Date.now();
     job.result = { type: "done", ...result };
     job.events.next(job.result);
   }
@@ -81,6 +82,7 @@ export class JobStore {
   fail(jobId: string, message: string) {
     const job = this.get(jobId);
     job.status = "error";
+    job.endedAt = Date.now();
     job.error = message;
     job.events.next({ type: "error", message });
   }
@@ -103,6 +105,18 @@ export class JobStore {
     // An answer from a stale tab or a double click must not land on a newer question.
     if (questionId && questionId !== job.question.id) throw new ConflictException("Essa pergunta já foi respondida.");
     job.answer(proceed);
+  }
+
+  // When a search of these sources last held a browser: "running" while one does,
+  // else when the latest ended. Null when none ran since the server started.
+  lastUse(sources: string[], ignore: Set<string>): "running" | number | null {
+    let last: number | null = null;
+    for (const [jobId, job] of this.jobs) {
+      if (!job.source || !sources.includes(job.source) || ignore.has(jobId)) continue;
+      if (job.status === "queued" || job.status === "running") return "running";
+      if (job.endedAt !== undefined && (last === null || job.endedAt > last)) last = job.endedAt;
+    }
+    return last;
   }
 
   activeCount(): number {

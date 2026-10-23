@@ -95,6 +95,7 @@ describe("search queue", () => {
     await app.listen(0);
     url = await app.getUrl();
     queue = app.get(QueueService);
+    queue.liveGapMs = 0;
     await prisma.user.create({ data: { username: person.user, passwordHash: await hashPassword(person.pass) } });
     const login = await fetch(`${url}/api/login`, {
       method: "POST",
@@ -170,6 +171,30 @@ describe("search queue", () => {
     await fakes.aa!.finish("GIG");
     await next;
     assert.equal(await statusOf(second.id), "done");
+  });
+
+  test("waits for a search started from a tab on the same browser, then runs", async () => {
+    const live = await fetch(`${url}/api/searches`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", cookie },
+      body: JSON.stringify({ source: "tap-calendar", origin: "GRU", destination: "LIS" }),
+    });
+    assert.equal(live.status, 200);
+    const { body: item } = await enqueue({ ...roundTrip("tap-calendar", "GIG", "LIS"), legs: [{ origin: "GIG", destination: "LIS" }] });
+    await queue.runDue();
+    assert.equal(await statusOf(item.id), "waiting");
+
+    await fakes["tap-calendar"]!.finish("GRU");
+    await settle();
+    queue.liveGapMs = 20_000;
+    await queue.runDue();
+    // The tab's return leg would start right after its outbound: the queue leaves it room.
+    assert.equal(await statusOf(item.id), "waiting");
+    queue.liveGapMs = 0;
+    const running = queue.runDue();
+    await fakes["tap-calendar"]!.finish("GIG");
+    await running;
+    assert.equal(await statusOf(item.id), "done");
   });
 
   test("leaves an item scheduled for later alone until its time", async () => {
