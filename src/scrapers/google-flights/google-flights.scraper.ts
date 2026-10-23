@@ -7,9 +7,9 @@ import { RateLimiter, type OnLog } from "../../core/common.ts";
 //
 // Google signs the page's own calendar requests: measured on 2026-10-23, a body
 // built by the bot, or the page's body with any field changed, comes back with
-// error 13. So the bot drives the page instead: dates in the search URL, the
-// airline in its filter, then the picker paged forward month by month, reading
-// the calls the page makes.
+// error 13. So the bot drives the page instead: a results URL with the dates,
+// cabin and airline, then the picker paged forward month by month, reading the
+// calls the page makes.
 
 const GOOGLE_MIN_INTERVAL_MS = Number(process.env.GOOGLE_FLIGHTS_INTERVAL_MS) || 5000;
 const googleRateLimiter = new RateLimiter(GOOGLE_MIN_INTERVAL_MS);
@@ -97,22 +97,56 @@ function checkCall(call: CalendarCall, query: CalendarQuery) {
   }
 }
 
+// The `tfs` parameter of a results URL is a protobuf of the search, read from
+// real URLs the page wrote after filtering by airline. Building it puts the
+// dates, cabin and airline in the URL, with no search text to parse and no
+// filter left over from the last search.
+function protoField(field: number, value: number | string | Uint8Array): number[] {
+  const varint = (n: number) => {
+    const bytes: number[] = [];
+    for (; n >= 0x80; n = Math.floor(n / 0x80)) bytes.push((n % 0x80) | 0x80);
+    return [...bytes, n];
+  };
+  if (typeof value === "number") return [...varint(field * 8), ...varint(value)];
+  const bytes = typeof value === "string" ? new TextEncoder().encode(value) : value;
+  return [...varint(field * 8 + 2), ...varint(bytes.length), ...bytes];
+}
+
+export function searchUrl(query: CalendarQuery, outbound: string) {
+  const airport = (code: string) => Uint8Array.from([...protoField(1, 1), ...protoField(2, code)]);
+  const leg = (date: string, from: string, to: string) =>
+    Uint8Array.from([...protoField(2, date), ...protoField(6, query.airline), ...protoField(13, airport(from)), ...protoField(14, airport(to))]);
+  const tfs = Uint8Array.from([
+    ...protoField(1, 28),
+    ...protoField(2, 2),
+    ...protoField(3, leg(outbound, query.origin, query.destination)),
+    ...protoField(3, leg(addDays(outbound, query.stayDays), query.destination, query.origin)),
+    ...protoField(8, 1),
+    ...protoField(9, CABIN_CODES[query.cabin]),
+    ...protoField(14, 1),
+    // Copied as the page writes it: a field set to -1.
+    0x82, 0x01, 0x0b, 0x08, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01,
+    ...protoField(19, 1),
+  ]);
+  return `https://www.google.com/travel/flights/search?tfs=${Buffer.from(tfs).toString("base64url")}&hl=pt-BR&curr=BRL`;
+}
+
 async function openSearch(page: Page, query: CalendarQuery, firstOutbound: string) {
-  const cabin = query.cabin === "Business" ? " business class" : "";
-  const words = `Flights from ${query.origin} to ${query.destination} on ${firstOutbound} through ${addDays(firstOutbound, query.stayDays)}${cabin}`;
-  await page.goto(`https://www.google.com/travel/flights?q=${encodeURIComponent(words)}&hl=pt-BR&curr=BRL`, {
-    waitUntil: "domcontentloaded",
-    timeout: 60_000,
+  const url = searchUrl(query, firstOutbound);
+  // The page may come from LATAM's site, whose own redirects can cut this navigation.
+  await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60_000 }).catch(async (error: Error) => {
+    if (!/interrupted by another navigation/.test(error.message)) throw error;
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60_000 });
   });
-  const airlinesChip = page.locator('button[aria-label*="ompanhia"], [role="button"][aria-label*="ompanhia"]').first();
-  await airlinesChip.click({ timeout: 30_000 });
-  const panel = page.locator('[role="dialog"]').filter({ hasText: "Selecionar todas" }).last();
-  await panel.getByRole("switch").first().click({ timeout: 15_000 });
-  await page.waitForTimeout(1000);
-  await panel.getByRole("checkbox", { name: AIRLINE_NAMES[query.airline], exact: true }).first().click({ timeout: 15_000 });
-  await page.waitForTimeout(2000);
-  await page.keyboard.press("Escape");
-  await page.waitForTimeout(1000);
+  const name = AIRLINE_NAMES[query.airline];
+  await page
+    .locator(`[aria-label="${name}, Companhias aéreas, Selecionado"]`)
+    .first()
+    .waitFor({ timeout: 30_000 })
+    .catch(() => {
+      throw new Error(`O Google Flights não abriu a busca ${query.origin} ⇄ ${query.destination} filtrada só pela ${name}.`);
+    });
+  await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => {});
 }
 
 export async function searchGoogleCalendar(

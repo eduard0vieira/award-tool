@@ -15,9 +15,6 @@ const DEFAULT_STAY_DAYS = 7;
 const DEFAULT_BAND_PERCENT = 10;
 // LATAM sells about 330 days ahead; Google's calendar goes about as far.
 const HORIZON_DAYS = 330;
-// Google's search URL does not take an outbound date one day ahead (measured on
-// 2026-10-23: the page opens empty), and the picker opens on that date's month.
-const FIRST_OUTBOUND_DAYS = 3;
 
 const CABINS = {
   Economy: { label: "Econômica", colorClass: "cabin-economy" },
@@ -103,7 +100,7 @@ export class GoogleLatamSource implements SearchSource<GoogleLatamSearchDto> {
       const prices = await searchGoogleCalendar(
         page,
         { origin, destination, airline: "LA", cabin, stayDays },
-        { from: dayFromToday(FIRST_OUTBOUND_DAYS), until: dayFromToday(HORIZON_DAYS) },
+        { from: dayFromToday(1), until: dayFromToday(HORIZON_DAYS) },
         job.log,
       );
       if (prices.length === 0) {
