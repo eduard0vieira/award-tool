@@ -4,6 +4,7 @@ import { closeChromeSession, isSessionAlive } from "../../../core/chrome-session
 import { config } from "../../config.ts";
 import { JobsModule } from "../../jobs/jobs.module.ts";
 import { sessionPoolProvider } from "../session-pool.provider.ts";
+import { GoogleLatamSource } from "./google-latam.source.ts";
 import { LatamPairsSource } from "./latam-pairs.source.ts";
 import { LATAM_POOL, LatamSource } from "./latam.source.ts";
 
@@ -19,7 +20,8 @@ import { LATAM_POOL, LatamSource } from "./latam.source.ts";
     }),
     LatamSource,
     LatamPairsSource,
+    GoogleLatamSource,
   ],
-  exports: [LatamSource, LatamPairsSource],
+  exports: [LatamSource, LatamPairsSource, GoogleLatamSource],
 })
 export class LatamModule {}

@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import type { PairConfirmation } from "../../../scrapers/latam/latam.scraper.ts";
 import { validateBody } from "../../validation.ts";
 import { LatamPairsSearchDto } from "./latam-pairs-search.dto.ts";
+import { cheapestPairs } from "./google-latam.source.ts";
 import { confirmedSection, drawPairs } from "./latam-pairs.source.ts";
 
 const body = (outboundDates: unknown, returnDates: unknown) => ({ origin: "gru", destination: "jfk", cabin: "Business", outboundDates, returnDates });
@@ -41,5 +42,21 @@ describe("LATAM date pairs", () => {
     const back = confirmedSection(pairs, "return", { origin: "JFK", destination: "GRU" });
     assert.deepEqual(back.days.map((day) => day.date), ["2026-12-20"]);
     assert.equal(back.text, "Dez 2026: 20");
+  });
+});
+
+describe("Google Flights pairs for LATAM", () => {
+  test("takes the cheapest round trips within the band, spread over the period", () => {
+    const trip = (outbound: string, priceReais: number) => ({
+      outbound,
+      return: new Date(Date.parse(`${outbound}T12:00:00Z`) + 7 * 86_400_000).toISOString().slice(0, 10),
+      priceReais,
+    });
+    const prices = [trip("2026-12-01", 20000), trip("2026-12-02", 20000), trip("2027-03-10", 21500), trip("2027-06-01", 30000)];
+    assert.deepEqual(cheapestPairs(prices, 7, 3), [
+      { outbound: "2026-12-01", return: "2026-12-08", priceReais: 20000 },
+      { outbound: "2026-12-02", return: "2026-12-09", priceReais: 20000 },
+      { outbound: "2027-03-10", return: "2027-03-17", priceReais: 21500 },
+    ]);
   });
 });

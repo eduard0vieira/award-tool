@@ -220,6 +220,11 @@ const latamPairsDestinationInput = document.getElementById("latam-pairs-destinat
 const latamPairsCabinSelect = document.getElementById("latam-pairs-cabin");
 const latamPairsOutboundInput = document.getElementById("latam-pairs-outbound");
 const latamPairsReturnInput = document.getElementById("latam-pairs-return");
+const latamGoogleForm = document.getElementById("latam-google-form");
+const latamGoogleOriginInput = document.getElementById("latam-google-origin");
+const latamGoogleDestinationInput = document.getElementById("latam-google-destination");
+const latamGoogleCabinSelect = document.getElementById("latam-google-cabin");
+const latamGoogleStayInput = document.getElementById("latam-google-stay");
 const latamNotice = document.getElementById("latam-notice");
 const latamQueue = document.getElementById("latam-queue");
 
@@ -250,6 +255,7 @@ const PROGRAM_LABELS = {
   "tap-calendar": "TAP (Panorama)",
   "tap-showcase": "Vitrine TAP",
   "latam-pairs": "LATAM (datas)",
+  "google-latam": "LATAM (Google Flights)",
   AA: "American Airlines",
   LATAM: "LATAM",
   SMILES: "Smiles",
@@ -316,7 +322,7 @@ function activateTab(tab) {
 // The history used to live under another key with Portuguese fields. It is
 // moved once, then the old key goes away so clearing the history cannot bring it back.
 // The history is the server's: every search anyone ran, kept in its database.
-const PROGRAM_BY_SOURCE = { tap: "tap", "tap-calendar": "tap-calendar", "tap-showcase": "tap-showcase", "latam-pairs": "latam-pairs", aa: "AA", latam: "LATAM", smiles: "SMILES", iberia: "IBERIA" };
+const PROGRAM_BY_SOURCE = { tap: "tap", "tap-calendar": "tap-calendar", "tap-showcase": "tap-showcase", "latam-pairs": "latam-pairs", "google-latam": "google-latam", aa: "AA", latam: "LATAM", smiles: "SMILES", iberia: "IBERIA" };
 // Failed and cancelled searches stay on the server, but nobody has dates from them.
 const LISTED_STATUSES = new Set(["queued", "running", "done", "partial"]);
 let currentUser = null;
@@ -327,7 +333,7 @@ function historyItemFrom(row) {
     program: row.source === "seatspy" ? row.request.airline : PROGRAM_BY_SOURCE[row.source] || row.source,
     origin: row.origin,
     destination: row.destination,
-    roundTrip: row.source === "latam" || row.source === "latam-pairs" || (row.source === "seatspy" && row.request.roundTrip === true),
+    roundTrip: row.source === "latam" || row.source === "latam-pairs" || row.source === "google-latam" || (row.source === "seatspy" && row.request.roundTrip === true),
     cabin: row.request.cabin,
     passengers: row.request.passengers,
     user: row.user,
@@ -428,7 +434,13 @@ function dayLabel(timestamp) {
 
 // Fills the right tab's form with the history route and switches to it.
 function repeatSearch(item) {
-  if (item.program === "latam-pairs") {
+  if (item.program === "google-latam") {
+    latamGoogleOriginInput.value = item.origin;
+    latamGoogleDestinationInput.value = item.destination;
+    activateTab("latam");
+    selectLatamMode(latamModeButtons[2]);
+    latamGoogleOriginInput.focus();
+  } else if (item.program === "latam-pairs") {
     latamPairsOriginInput.value = item.origin;
     latamPairsDestinationInput.value = item.destination;
     activateTab("latam");
@@ -612,7 +624,7 @@ async function renderHistory() {
 function historyCabins(item) {
   if (item.program === "tap" || item.program === "tap-calendar" || item.program === "tap-showcase") return [["Executiva", "cabin-business"], ["Econômica", "cabin-economy"]];
   if (item.program === "LATAM" || item.program === "IBERIA") return [["Econômica", "cabin-economy"]];
-  if (item.program === "latam-pairs") {
+  if (item.program === "latam-pairs" || item.program === "google-latam") {
     return item.cabin === "Economy" ? [["Econômica", "cabin-economy"]] : [["Executiva", "cabin-business"]];
   }
   if (item.program === "SMILES") return [["Econômica", "cabin-economy"], ["Conforto", "cabin-premium"], ["Executiva", "cabin-business"]];
@@ -703,7 +715,7 @@ function createHistoryItem(item) {
   return row;
 }
 
-const TAB_BY_SOURCE = { tap: "tap", "tap-calendar": "tap", "tap-showcase": "tap", "latam-pairs": "latam", seatspy: "seatspy", aa: "aa", latam: "latam", smiles: "smiles", iberia: "iberia" };
+const TAB_BY_SOURCE = { tap: "tap", "tap-calendar": "tap", "tap-showcase": "tap", "latam-pairs": "latam", "google-latam": "latam", seatspy: "seatspy", aa: "aa", latam: "latam", smiles: "smiles", iberia: "iberia" };
 
 // Rebuilds the whole card from what the server saved: same dates, copy and alert
 // buttons, no new search and no credit spent.
@@ -1209,6 +1221,7 @@ const LEG_BODIES_BY_SOURCE = {
       },
     },
   ],
+  "google-latam": ([origin, destination, cabin, stayDays]) => [{ origin, destination, cabin, stayDays }],
   "latam-pairs": ([origin, destination, cabin, dates]) => [
     { origin, destination, cabin, outboundDates: dates.outbound, returnDates: dates.return },
   ],
@@ -1233,6 +1246,7 @@ const RESUME_BY_SOURCE = {
   "tap-calendar": (...args) => startTapCalendarSearch(...args),
   "tap-showcase": (...args) => startTapShowcase(...args),
   "latam-pairs": (...args) => startLatamPairsSearch(...args),
+  "google-latam": (...args) => startGoogleLatamSearch(...args),
   seatspy: (...args) => startSeatspySearch(...args),
   smiles: (...args) => startSmilesSearch(...args),
   aa: (...args) => startAaSearch(...args),
@@ -1379,7 +1393,7 @@ const spectatedGroups = new Map();
 // The originator's browser starts the next leg as soon as the previous one ends.
 const SHARED_LEG_WAIT_MS = 2 * 60 * 1000;
 // The session goes in right after these arguments; a different count would put it in the wrong one.
-const ARG_COUNT_BY_SOURCE = { tap: 4, "tap-calendar": 4, "tap-showcase": 1, "latam-pairs": 4, seatspy: 5, smiles: 5, aa: 7, latam: 4, iberia: 7 };
+const ARG_COUNT_BY_SOURCE = { tap: 4, "tap-calendar": 4, "tap-showcase": 1, "latam-pairs": 4, "google-latam": 4, seatspy: 5, smiles: 5, aa: 7, latam: 4, iberia: 7 };
 
 function followSharedGroup(group, fromSnapshot) {
   if (ownGroupIds.has(group.id)) return;
@@ -1525,6 +1539,7 @@ function resultFromEvent(event) {
     confirmation: event.confirmation,
     stoppedByUser: event.stoppedByUser,
     filters: event.filters,
+    google: event.google,
     upgrade: event.upgrade,
     coverage: event.coverage,
     notices: event.notices,
@@ -3242,19 +3257,50 @@ async function startLatamPairsSearch(origin, destination, cabin, dates, session)
   try {
     const [body] = LEG_BODIES_BY_SOURCE["latam-pairs"](args);
     const tested = await runOnServer(card, { source: "latam-pairs", ...body }, "Sorteando e conferindo os pares em milhas…", session);
-    const legs = tested.result;
-    for (const leg of legs) {
-      renderLegSections(card.resultEl, leg.label, leg.sections);
-      recordLegForCopy(card, leg.sections);
+    showTestedPairs(card, tested, cabinLabel, origin, destination);
+  } catch (err) {
+    showFailure(card, err);
+  } finally {
+    card.progressEl.hidden = true;
+  }
+}
+
+// The card of pairs confirmed in miles, whether they were picked by hand or from Google Flights.
+function showTestedPairs(card, tested, cabinLabel, origin, destination) {
+  const legs = tested.result;
+  for (const leg of legs) {
+    renderLegSections(card.resultEl, leg.label, leg.sections);
+    recordLegForCopy(card, leg.sections);
+  }
+  showMilesConfirmation(card, tested.confirmation);
+  card.setStatus("Pronto", "status-done");
+  card.resultEl.hidden = card.minimized;
+  showPartialNotices(card, [tested.partialNotice, ...(tested.notices || [])].filter(Boolean));
+  updateCardActions(card);
+  showAlertButtons(card, "LATAM", origin, destination, [
+    { cabinClass: cabinLabel, outbound: legs[0]?.sections[0], inbound: legs[1]?.sections[0] },
+  ]);
+}
+
+// Google Flights filtered to LATAM, its cheapest round trips, each confirmed in miles on LATAM's site.
+async function startGoogleLatamSearch(origin, destination, cabin, stayDays, session) {
+  const args = [origin, destination, cabin, stayDays];
+  session = session || newSession("google-latam", args);
+  const cabinLabel = LATAM_CABIN_LABELS[cabin] || cabin;
+  const card = createJobCard(latamQueue, { program: "LATAM", detail: `${cabinLabel}, via Google Flights`, origin, destination, roundTrip: true });
+  try {
+    const [body] = LEG_BODIES_BY_SOURCE["google-latam"](args);
+    const tested = await runOnServer(card, { source: "google-latam", ...body }, "Lendo o Google Flights e conferindo em milhas…", session);
+    if (tested.google) {
+      setFacts(card.ceilingsEl, [
+        { text: "Google Flights", className: "fact-lead" },
+        `menor ida e volta ${reaisFormat.format(tested.google.lowestReais)}`,
+        `${tested.google.stayDays} dias de viagem`,
+        `${tested.google.days} datas lidas`,
+      ]);
+      card.ceilingsEl.hidden = false;
     }
-    showMilesConfirmation(card, tested.confirmation);
-    card.setStatus("Pronto", "status-done");
-    card.resultEl.hidden = card.minimized;
-    showPartialNotices(card, [tested.partialNotice, ...(tested.notices || [])].filter(Boolean));
-    updateCardActions(card);
-    showAlertButtons(card, "LATAM", origin, destination, [
-      { cabinClass: cabinLabel, outbound: legs[0]?.sections[0], inbound: legs[1]?.sections[0] },
-    ]);
+    showTestedPairs(card, tested, cabinLabel, origin, destination);
   } catch (err) {
     showFailure(card, err);
   } finally {
@@ -3510,6 +3556,7 @@ function selectLatamMode(button) {
   markSelectedTab(latamModeButtons, button);
   latamForm.hidden = button.dataset.mode !== "calendar";
   latamPairsForm.hidden = button.dataset.mode !== "pairs";
+  latamGoogleForm.hidden = button.dataset.mode !== "google";
 }
 
 latamModeButtons.forEach((button) => {
@@ -3571,6 +3618,29 @@ function latamPairsArgs() {
   }
   return [origin, destination, latamPairsCabinSelect.value, { outbound: outbound.dates, return: back.dates }];
 }
+
+function latamGoogleArgs() {
+  clearNotice(latamNotice);
+  const origin = latamGoogleOriginInput.value.trim().toUpperCase();
+  const destination = latamGoogleDestinationInput.value.trim().toUpperCase();
+  if (!origin || !destination) {
+    showNotice(latamNotice, "Preencha origem e destino.");
+    return null;
+  }
+  const stayDays = Number(latamGoogleStayInput.value);
+  if (!Number.isInteger(stayDays) || stayDays < 3 || stayDays > 30) {
+    showNotice(latamNotice, "Os dias de viagem devem ser um número inteiro de 3 a 30.");
+    latamGoogleStayInput.focus();
+    return null;
+  }
+  return [origin, destination, latamGoogleCabinSelect.value, stayDays];
+}
+
+latamGoogleForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const args = latamGoogleArgs();
+  if (args) startGoogleLatamSearch(...args);
+});
 
 latamPairsForm.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -3988,6 +4058,7 @@ const QUEUE_ARGS_BY_SOURCE = {
   aa: [aaArgs, aaNotice],
   latam: [latamArgs, latamNotice],
   "latam-pairs": [latamPairsArgs, latamNotice],
+  "google-latam": [latamGoogleArgs, latamNotice],
   smiles: [smilesArgs, smilesNotice],
   seatspy: [seatspyArgs, seatspyNotice],
 };
@@ -4003,6 +4074,10 @@ const QUEUE_STATUS_LABELS = {
 
 function queueLabel(source, args) {
   if (source === "tap-showcase") return "Vitrine TAP Brasil → Europa";
+  if (source === "google-latam") {
+    const [origin, destination, cabin, stayDays] = args;
+    return `LATAM ${origin} → ${destination} via Google Flights, ${stayDays} dias, na ${LATAM_CABIN_LABELS[cabin] || cabin}`;
+  }
   if (source === "latam-pairs") {
     const [origin, destination, cabin] = args;
     return `LATAM ${origin} → ${destination}, datas testadas na ${LATAM_CABIN_LABELS[cabin] || cabin}`;

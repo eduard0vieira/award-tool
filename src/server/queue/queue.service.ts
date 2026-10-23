@@ -21,6 +21,7 @@ const LANES: Record<string, string> = {
   aa: "chrome",
   latam: "chrome",
   "latam-pairs": "chrome",
+  "google-latam": "chrome",
 };
 
 const TICK_MS = 15_000;
