@@ -1,28 +1,30 @@
-import type { Page } from "playwright";
+import type { Page, Route } from "playwright";
 import { RateLimiter, type OnLog } from "../../core/common.ts";
 
 // Google Flights' price calendar, the one its date picker shows: for each
 // outbound date, the cheapest round trip with a fixed number of days, in reais.
 // It is what Eduardo read by hand to pick LATAM business dates to test.
 //
-// The page calls `FlightsFrontendService/GetCalendarPicker` with a JSON body
-// (route, airlines, cabin, date range, trip length). The bot opens a search so
-// the page hands it a valid endpoint URL, then asks for its own windows from
-// inside the page. Measured on 2026-10-23: the trip length must be one number
-// (a range is refused), and 6 months fit in one call while 12 do not.
+// Google signs the page's own calendar requests: measured on 2026-10-23, a body
+// built by the bot, or the page's body with any field changed, comes back with
+// error 13. So the bot drives the page instead: dates in the search URL, the
+// airline in its filter, then the picker paged forward month by month, reading
+// the calls the page makes.
 
 const GOOGLE_MIN_INTERVAL_MS = Number(process.env.GOOGLE_FLIGHTS_INTERVAL_MS) || 5000;
 const googleRateLimiter = new RateLimiter(GOOGLE_MIN_INTERVAL_MS);
-export const CALENDAR_WINDOW_DAYS = 180;
+const MAX_PICKER_PAGES = 14;
 
-// The cabin codes in the request body, as the page sends them.
+// The cabin codes in the page's request body.
 const CABIN_CODES = { Economy: 1, Business: 3 } as const;
 export type GoogleCabin = keyof typeof CABIN_CODES;
+// The name the airlines filter lists for each code the bot asks for.
+const AIRLINE_NAMES = { LA: "LATAM" } as const;
 
 export type CalendarQuery = {
   origin: string;
   destination: string;
-  airline: string; // IATA, e.g. "LA"
+  airline: keyof typeof AIRLINE_NAMES;
   cabin: GoogleCabin;
   stayDays: number;
 };
@@ -66,126 +68,121 @@ export function readCalendarResponse(text: string): RoundTripPrice[] {
   return prices;
 }
 
-function requestBody(query: CalendarQuery, range: { from: string; until: string }) {
-  const slice = (from: string, to: string) => [
-    [[[from, 0]]],
-    [[[to, 0]]],
-    null,
-    0,
-    [query.airline],
-    null,
-    range.from,
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
-    2,
-  ];
-  const search = [
-    null,
-    [
-      null,
-      null,
-      1,
-      null,
-      [],
-      CABIN_CODES[query.cabin],
-      [1, 0, 0, 0],
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      [slice(query.origin, query.destination), slice(query.destination, query.origin)],
-      null,
-      null,
-      null,
-      1,
-    ],
-    [range.from, range.until],
-    null,
-    [query.stayDays, query.stayDays],
-  ];
-  return `f.req=${encodeURIComponent(JSON.stringify([null, JSON.stringify(search)]))}&`;
-}
+type CalendarCall = { airlines: unknown; cabin: unknown; stay: unknown; range: [string, string]; prices: RoundTripPrice[] };
 
-// Opens a search for the route so the page makes its own calendar call: that
-// call's URL carries the session parameters the endpoint wants.
-export async function openCalendarEndpoint(page: Page, query: CalendarQuery): Promise<string> {
-  await googleRateLimiter.waitTurn();
-  let endpoint = "";
-  const listen = (request: { url: () => string }) => {
-    if (request.url().includes("/GetCalendarPicker")) endpoint = request.url();
+function readCalendarCall(postData: string | null, text: string): CalendarCall {
+  const raw = new URLSearchParams(postData ?? "").get("f.req");
+  if (!raw) fail("o pedido da página não tem f.req");
+  const search = JSON.parse((JSON.parse(raw) as string[])[1]!) as any[];
+  const range = search[2];
+  if (!Array.isArray(range) || typeof range[0] !== "string" || typeof range[1] !== "string") fail("o pedido não tem o período");
+  return {
+    airlines: search[1]?.[13]?.[0]?.[4],
+    cabin: search[1]?.[5],
+    stay: search[4],
+    range: [range[0], range[1]],
+    prices: readCalendarResponse(text),
   };
-  page.on("request", listen);
-  try {
-    const cabin = query.cabin === "Business" ? " business class" : "";
-    const words = `Flights from ${query.origin} to ${query.destination}${cabin}`;
-    await page.goto(`https://www.google.com/travel/flights?q=${encodeURIComponent(words)}&hl=pt-BR&curr=BRL`, {
-      waitUntil: "domcontentloaded",
-      timeout: 60_000,
-    });
-    await page.getByPlaceholder("Partida").first().click({ timeout: 30_000 });
-    for (let waited = 0; !endpoint && waited < 20_000; waited += 500) await page.waitForTimeout(500);
-  } finally {
-    page.off("request", listen);
+}
+
+// A month the page shows for a different airline, cabin or stay would put the
+// wrong prices in the band, so each call is checked against what was asked.
+function checkCall(call: CalendarCall, query: CalendarQuery) {
+  if (JSON.stringify(call.airlines) !== JSON.stringify([query.airline])) {
+    throw new Error(`O filtro de companhia do Google Flights não ficou só em ${AIRLINE_NAMES[query.airline]} (veio ${JSON.stringify(call.airlines)}).`);
   }
-  if (!endpoint) throw new Error("O Google Flights não abriu o calendário de preços da busca.");
-  return endpoint;
-}
-
-export async function fetchCalendarWindow(
-  page: Page,
-  endpoint: string,
-  query: CalendarQuery,
-  range: { from: string; until: string },
-): Promise<RoundTripPrice[]> {
-  await googleRateLimiter.waitTurn();
-  const response = await page.evaluate(
-    async ({ url, body }) => {
-      try {
-        const result = await fetch(url, {
-          method: "POST",
-          headers: { "content-type": "application/x-www-form-urlencoded;charset=UTF-8" },
-          body,
-          credentials: "include",
-        });
-        return { status: result.status, text: await result.text() };
-      } catch (error) {
-        return { status: -1, text: String(error) };
-      }
-    },
-    { url: endpoint, body: requestBody(query, range) },
-  );
-  if (response.status !== 200) {
-    throw new Error(`O calendário do Google Flights respondeu ${response.status} (${response.text.slice(0, 80)}).`);
+  if (call.cabin !== CABIN_CODES[query.cabin]) throw new Error(`O Google Flights buscou outra cabine (código ${call.cabin}).`);
+  if (JSON.stringify(call.stay) !== JSON.stringify([query.stayDays, query.stayDays])) {
+    throw new Error(`O Google Flights buscou viagens de ${JSON.stringify(call.stay)} dias, não de ${query.stayDays}.`);
   }
-  return readCalendarResponse(response.text);
 }
 
-function addDays(date: string, days: number): string {
-  const result = new Date(`${date}T12:00:00Z`);
-  result.setUTCDate(result.getUTCDate() + days);
-  return result.toISOString().slice(0, 10);
+async function openSearch(page: Page, query: CalendarQuery, firstOutbound: string) {
+  const cabin = query.cabin === "Business" ? " business class" : "";
+  const words = `Flights from ${query.origin} to ${query.destination} on ${firstOutbound} through ${addDays(firstOutbound, query.stayDays)}${cabin}`;
+  await page.goto(`https://www.google.com/travel/flights?q=${encodeURIComponent(words)}&hl=pt-BR&curr=BRL`, {
+    waitUntil: "domcontentloaded",
+    timeout: 60_000,
+  });
+  const airlinesChip = page.locator('button[aria-label*="ompanhia"], [role="button"][aria-label*="ompanhia"]').first();
+  await airlinesChip.click({ timeout: 30_000 });
+  const panel = page.locator('[role="dialog"]').filter({ hasText: "Selecionar todas" }).last();
+  await panel.getByRole("switch").first().click({ timeout: 15_000 });
+  await page.waitForTimeout(1000);
+  await panel.getByRole("checkbox", { name: AIRLINE_NAMES[query.airline], exact: true }).first().click({ timeout: 15_000 });
+  await page.waitForTimeout(2000);
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(1000);
 }
 
-// The whole period in windows the endpoint accepts.
 export async function searchGoogleCalendar(
   page: Page,
   query: CalendarQuery,
   period: { from: string; until: string },
   onLog: OnLog = () => {},
 ): Promise<RoundTripPrice[]> {
-  const endpoint = await openCalendarEndpoint(page, query);
-  const prices: RoundTripPrice[] = [];
-  for (let from = period.from; from <= period.until; from = addDays(from, CALENDAR_WINDOW_DAYS + 1)) {
-    const until = [addDays(from, CALENDAR_WINDOW_DAYS), period.until].sort()[0]!;
-    onLog(`Google Flights: ${query.origin} ⇄ ${query.destination}, idas de ${from} a ${until}...`);
-    prices.push(...(await fetchCalendarWindow(page, endpoint, query, { from, until })));
+  await googleRateLimiter.waitTurn();
+  onLog(`Google Flights: ${query.origin} ⇄ ${query.destination}, ${AIRLINE_NAMES[query.airline]}, ida e volta de ${query.stayDays} dias...`);
+  await openSearch(page, query, period.from);
+
+  const calls: Promise<CalendarCall>[] = [];
+  // Read through a route, not page.on("response"): Chrome sometimes drops a
+  // response body before it can be read. The page's own body goes out unchanged.
+  const capture = async (route: Route) => {
+    const call = route.fetch().then(async (response) => {
+      const text = await response.text();
+      await route.fulfill({ response, body: text });
+      return readCalendarCall(route.request().postData(), text);
+    });
+    // A call that arrives after the sweep ends is never awaited; its failure must not go unhandled.
+    call.catch(() => {});
+    calls.push(call);
+    await call.catch(() => route.abort().catch(() => {}));
+  };
+  await page.route("**/GetCalendarPicker*", capture);
+  const byOutbound = new Map<string, RoundTripPrice>();
+  try {
+    const nextCall = async (seen: number) => {
+      for (let waited = 0; calls.length === seen && waited < 20_000; waited += 250) await page.waitForTimeout(250);
+      if (calls.length === seen) return null;
+      const call = await calls[seen]!;
+      checkCall(call, query);
+      for (const price of call.prices) {
+        if (price.outbound >= period.from && price.outbound <= period.until) byOutbound.set(price.outbound, price);
+      }
+      onLog(`Google Flights: ${call.range[0]} a ${call.range[1]}, ${call.prices.length} dias com preço.`);
+      return call;
+    };
+
+    await page.getByPlaceholder("Partida").first().click({ timeout: 30_000 });
+    let last = await nextCall(0);
+    if (!last) throw new Error("O Google Flights não abriu o calendário de preços da busca.");
+    if (last.range[0] > period.from) {
+      throw new Error(`O calendário do Google Flights começou em ${last.range[0]}, depois de ${period.from}.`);
+    }
+    const forward = page.locator('[role="dialog"] button[aria-label="Avançar"]').first();
+    // The last month Google sells has no next one: the calendar ends there.
+    const canGoForward = async () =>
+      (await forward.isVisible().catch(() => false)) && (await forward.isEnabled({ timeout: 2000 }).catch(() => false));
+    for (let pages = 0; last.range[1] < period.until && pages < MAX_PICKER_PAGES; pages++) {
+      if (!(await canGoForward())) break;
+      await googleRateLimiter.waitTurn();
+      const seen = calls.length;
+      await forward.click({ timeout: 10_000 });
+      const call = await nextCall(seen);
+      if (call) last = call;
+      else if (await canGoForward()) {
+        throw new Error(`O Google Flights parou de carregar o calendário depois de ${last.range[1]}.`);
+      }
+    }
+  } finally {
+    await page.unroute("**/GetCalendarPicker*", capture);
   }
-  return prices;
+  return [...byOutbound.values()].sort((a, b) => a.outbound.localeCompare(b.outbound));
+}
+
+function addDays(date: string, days: number): string {
+  const result = new Date(`${date}T12:00:00Z`);
+  result.setUTCDate(result.getUTCDate() + days);
+  return result.toISOString().slice(0, 10);
 }
