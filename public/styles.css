@@ -648,8 +648,13 @@ textarea {
   color: var(--ink);
 }
 
+.field-wide {
+  flex: 1 1 100%;
+}
+
 .field input,
-.field select {
+.field select,
+.field textarea {
   width: 100%;
   min-height: var(--control-height);
   padding: 0 var(--e3);
@@ -659,9 +664,19 @@ textarea {
   transition: border-color var(--transition);
 }
 
+.field textarea {
+  max-width: 40ch;
+  padding: var(--e2) var(--e3);
+  font-family: var(--font-data);
+  font-size: var(--text-md);
+  line-height: 1.5;
+  resize: vertical;
+}
+
 /* An example, not a value: regular weight and the body face even inside the
    bold condensed IATA fields, so an empty field never reads as filled. */
-.field input::placeholder {
+.field input::placeholder,
+.field textarea::placeholder {
   color: var(--ink-soft);
   opacity: 1;
   font-family: var(--font);

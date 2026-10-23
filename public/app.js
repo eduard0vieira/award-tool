@@ -213,6 +213,12 @@ const latamDestinationInput = document.getElementById("latam-destination");
 const latamCeilingInput = document.getElementById("latam-ceiling");
 const latamLowestFareCheckbox = document.getElementById("latam-lowest-fare");
 const latamConfirmMilesCheckbox = document.getElementById("latam-confirm-miles");
+const latamModeButtons = document.querySelectorAll("#panel-latam .panel-subtabs .subtab-button");
+const latamPairsForm = document.getElementById("latam-pairs-form");
+const latamPairsOriginInput = document.getElementById("latam-pairs-origin");
+const latamPairsDestinationInput = document.getElementById("latam-pairs-destination");
+const latamPairsCabinSelect = document.getElementById("latam-pairs-cabin");
+const latamPairsDatesInput = document.getElementById("latam-pairs-dates");
 const latamNotice = document.getElementById("latam-notice");
 const latamQueue = document.getElementById("latam-queue");
 
@@ -242,6 +248,7 @@ const PROGRAM_LABELS = {
   tap: "TAP",
   "tap-calendar": "TAP (Panorama)",
   "tap-showcase": "Vitrine TAP",
+  "latam-pairs": "LATAM (datas)",
   AA: "American Airlines",
   LATAM: "LATAM",
   SMILES: "Smiles",
@@ -308,7 +315,7 @@ function activateTab(tab) {
 // The history used to live under another key with Portuguese fields. It is
 // moved once, then the old key goes away so clearing the history cannot bring it back.
 // The history is the server's: every search anyone ran, kept in its database.
-const PROGRAM_BY_SOURCE = { tap: "tap", "tap-calendar": "tap-calendar", "tap-showcase": "tap-showcase", aa: "AA", latam: "LATAM", smiles: "SMILES", iberia: "IBERIA" };
+const PROGRAM_BY_SOURCE = { tap: "tap", "tap-calendar": "tap-calendar", "tap-showcase": "tap-showcase", "latam-pairs": "latam-pairs", aa: "AA", latam: "LATAM", smiles: "SMILES", iberia: "IBERIA" };
 // Failed and cancelled searches stay on the server, but nobody has dates from them.
 const LISTED_STATUSES = new Set(["queued", "running", "done", "partial"]);
 let currentUser = null;
@@ -319,7 +326,7 @@ function historyItemFrom(row) {
     program: row.source === "seatspy" ? row.request.airline : PROGRAM_BY_SOURCE[row.source] || row.source,
     origin: row.origin,
     destination: row.destination,
-    roundTrip: row.source === "latam" || (row.source === "seatspy" && row.request.roundTrip === true),
+    roundTrip: row.source === "latam" || row.source === "latam-pairs" || (row.source === "seatspy" && row.request.roundTrip === true),
     cabin: row.request.cabin,
     passengers: row.request.passengers,
     user: row.user,
@@ -420,7 +427,13 @@ function dayLabel(timestamp) {
 
 // Fills the right tab's form with the history route and switches to it.
 function repeatSearch(item) {
-  if (item.program === "tap-showcase") {
+  if (item.program === "latam-pairs") {
+    latamPairsOriginInput.value = item.origin;
+    latamPairsDestinationInput.value = item.destination;
+    activateTab("latam");
+    selectLatamMode(latamModeButtons[1]);
+    latamPairsDatesInput.focus();
+  } else if (item.program === "tap-showcase") {
     activateTab("tap");
     selectTapMode(tapModeButtons[0]);
     tapShowcaseButton.focus();
@@ -598,6 +611,9 @@ async function renderHistory() {
 function historyCabins(item) {
   if (item.program === "tap" || item.program === "tap-calendar" || item.program === "tap-showcase") return [["Executiva", "cabin-business"], ["Econômica", "cabin-economy"]];
   if (item.program === "LATAM" || item.program === "IBERIA") return [["Econômica", "cabin-economy"]];
+  if (item.program === "latam-pairs") {
+    return item.cabin === "Economy" ? [["Econômica", "cabin-economy"]] : [["Executiva", "cabin-business"]];
+  }
   if (item.program === "SMILES") return [["Econômica", "cabin-economy"], ["Conforto", "cabin-premium"], ["Executiva", "cabin-business"]];
   if (item.program === "AA") {
     // Passengers only show when more than one, to tell it apart from the regular entry of the same route.
@@ -686,7 +702,7 @@ function createHistoryItem(item) {
   return row;
 }
 
-const TAB_BY_SOURCE = { tap: "tap", "tap-calendar": "tap", "tap-showcase": "tap", seatspy: "seatspy", aa: "aa", latam: "latam", smiles: "smiles", iberia: "iberia" };
+const TAB_BY_SOURCE = { tap: "tap", "tap-calendar": "tap", "tap-showcase": "tap", "latam-pairs": "latam", seatspy: "seatspy", aa: "aa", latam: "latam", smiles: "smiles", iberia: "iberia" };
 
 // Rebuilds the whole card from what the server saved: same dates, copy and alert
 // buttons, no new search and no credit spent.
@@ -1192,6 +1208,7 @@ const LEG_BODIES_BY_SOURCE = {
       },
     },
   ],
+  "latam-pairs": ([origin, destination, cabin, pairs]) => [{ origin, destination, cabin, pairs }],
   latam: ([origin, destination, ceilings, confirmMiles]) => [
     { origin, destination, ceilings, confirmMiles, outboundMarginReais: 100, returnMarginReais: 300 },
   ],
@@ -1212,6 +1229,7 @@ const RESUME_BY_SOURCE = {
   tap: (...args) => startTapSearch(...args),
   "tap-calendar": (...args) => startTapCalendarSearch(...args),
   "tap-showcase": (...args) => startTapShowcase(...args),
+  "latam-pairs": (...args) => startLatamPairsSearch(...args),
   seatspy: (...args) => startSeatspySearch(...args),
   smiles: (...args) => startSmilesSearch(...args),
   aa: (...args) => startAaSearch(...args),
@@ -1358,7 +1376,7 @@ const spectatedGroups = new Map();
 // The originator's browser starts the next leg as soon as the previous one ends.
 const SHARED_LEG_WAIT_MS = 2 * 60 * 1000;
 // The session goes in right after these arguments; a different count would put it in the wrong one.
-const ARG_COUNT_BY_SOURCE = { tap: 4, "tap-calendar": 4, "tap-showcase": 1, seatspy: 5, smiles: 5, aa: 7, latam: 4, iberia: 7 };
+const ARG_COUNT_BY_SOURCE = { tap: 4, "tap-calendar": 4, "tap-showcase": 1, "latam-pairs": 4, seatspy: 5, smiles: 5, aa: 7, latam: 4, iberia: 7 };
 
 function followSharedGroup(group, fromSnapshot) {
   if (ownGroupIds.has(group.id)) return;
@@ -3208,6 +3226,39 @@ function showLatamAlertButton(card, origin, destination, legs, confirmation) {
   card.root.querySelector(".job-header").after(bar);
 }
 
+const LATAM_CABIN_LABELS = { Business: "Executiva", Economy: "Econômica" };
+
+// Pairs picked by hand (from Google Flights, say): each one confirmed in miles on
+// LATAM's site with its capture. The card lists the confirmed dates per
+// direction, so they go to an alert like any other card's.
+async function startLatamPairsSearch(origin, destination, cabin, pairs, session) {
+  const args = [origin, destination, cabin, pairs];
+  session = session || newSession("latam-pairs", args);
+  const cabinLabel = LATAM_CABIN_LABELS[cabin] || cabin;
+  const card = createJobCard(latamQueue, { program: "LATAM", detail: `${cabinLabel}, datas testadas`, origin, destination, roundTrip: true });
+  try {
+    const [body] = LEG_BODIES_BY_SOURCE["latam-pairs"](args);
+    const tested = await runOnServer(card, { source: "latam-pairs", ...body }, `Conferindo ${plural(pairs.length, "par", "pares")} em milhas…`, session);
+    const legs = tested.result;
+    for (const leg of legs) {
+      renderLegSections(card.resultEl, leg.label, leg.sections);
+      recordLegForCopy(card, leg.sections);
+    }
+    showMilesConfirmation(card, tested.confirmation);
+    card.setStatus("Pronto", "status-done");
+    card.resultEl.hidden = card.minimized;
+    showPartialNotices(card, [tested.partialNotice, ...(tested.notices || [])].filter(Boolean));
+    updateCardActions(card);
+    showAlertButtons(card, "LATAM", origin, destination, [
+      { cabinClass: cabinLabel, outbound: legs[0]?.sections[0], inbound: legs[1]?.sections[0] },
+    ]);
+  } catch (err) {
+    showFailure(card, err);
+  } finally {
+    card.progressEl.hidden = true;
+  }
+}
+
 // One search returns both legs (the calendar has both directions, in reais).
 // The alert comes from the miles confirmation, where the number the client pays shows up.
 async function startLatamSearch(origin, destination, ceilings, confirmMiles, session) {
@@ -3450,6 +3501,56 @@ latamForm.addEventListener("submit", (event) => {
   // Searching LATAM is free, so there is no repeat warning like the paid sources have.
   const args = latamArgs();
   if (args) startLatamSearch(...args);
+});
+
+function selectLatamMode(button) {
+  markSelectedTab(latamModeButtons, button);
+  latamForm.hidden = button.dataset.mode !== "calendar";
+  latamPairsForm.hidden = button.dataset.mode !== "pairs";
+}
+
+latamModeButtons.forEach((button) => {
+  button.addEventListener("click", () => selectLatamMode(button));
+  button.addEventListener("keydown", (event) => onTabListKeydown(event, latamModeButtons, selectLatamMode));
+});
+
+const MAX_LATAM_PAIRS = 10;
+
+// "10/12/2026 20/12/2026" per line, any separator between the two dates.
+function latamPairsArgs() {
+  clearNotice(latamNotice);
+  const origin = latamPairsOriginInput.value.trim().toUpperCase();
+  const destination = latamPairsDestinationInput.value.trim().toUpperCase();
+  if (!origin || !destination) {
+    showNotice(latamNotice, "Preencha origem e destino.");
+    return null;
+  }
+  const lines = latamPairsDatesInput.value.split("\n").map((line) => line.trim()).filter(Boolean);
+  const pairs = [];
+  const wrong = [];
+  for (const line of lines) {
+    const dates = line.match(/\d{2}\/\d{2}\/\d{4}/g) ?? [];
+    const [outbound, back] = dates.map(parseTypedDate);
+    if (dates.length !== 2 || !outbound || !back || back <= outbound) wrong.push(line);
+    else pairs.push({ outbound, return: back });
+  }
+  if (wrong.length > 0) {
+    showNotice(latamNotice, `Linha(s) que não são um par de ida e volta válido (DD/MM/AAAA DD/MM/AAAA, volta depois da ida): ${wrong.join("; ")}`);
+    latamPairsDatesInput.focus();
+    return null;
+  }
+  if (pairs.length === 0 || pairs.length > MAX_LATAM_PAIRS) {
+    showNotice(latamNotice, `Informe de 1 a ${MAX_LATAM_PAIRS} pares, um por linha.`);
+    latamPairsDatesInput.focus();
+    return null;
+  }
+  return [origin, destination, latamPairsCabinSelect.value, pairs];
+}
+
+latamPairsForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const args = latamPairsArgs();
+  if (args) startLatamPairsSearch(...args);
 });
 
 // One direction per job, like AA. No cabin: the grid returns one value per day
@@ -3861,6 +3962,7 @@ const QUEUE_ARGS_BY_SOURCE = {
   "tap-showcase": [tapShowcaseArgs, tapNotice],
   aa: [aaArgs, aaNotice],
   latam: [latamArgs, latamNotice],
+  "latam-pairs": [latamPairsArgs, latamNotice],
   smiles: [smilesArgs, smilesNotice],
   seatspy: [seatspyArgs, seatspyNotice],
 };
@@ -3876,6 +3978,10 @@ const QUEUE_STATUS_LABELS = {
 
 function queueLabel(source, args) {
   if (source === "tap-showcase") return "Vitrine TAP Brasil → Europa";
+  if (source === "latam-pairs") {
+    const [origin, destination, cabin, pairs] = args;
+    return `LATAM ${origin} → ${destination}, ${plural(pairs.length, "par testado", "pares testados")} na ${LATAM_CABIN_LABELS[cabin] || cabin}`;
+  }
   if (source === "seatspy") {
     const [program, origin, destination, roundTrip] = args;
     return `${PROGRAM_LABELS[program] || program} (SeatSpy) ${origin} → ${destination}${roundTrip ? ", ida e volta" : ""}`;

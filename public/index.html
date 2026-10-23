@@ -347,7 +347,12 @@
     <!-- Cash fares in economy, no login. The calendar returns both directions,
          so one search brings both legs. -->
     <section id="panel-latam" class="panel" role="tabpanel" aria-labelledby="tab-latam" tabindex="-1" hidden>
-      <form id="latam-search-form">
+      <div class="subtabs panel-subtabs" role="tablist" aria-label="Modo de busca da LATAM">
+        <button type="button" role="tab" id="latam-mode-calendar" aria-controls="latam-search-form" aria-selected="true" class="subtab-button active" data-mode="calendar">Calendário</button>
+        <button type="button" role="tab" id="latam-mode-pairs" aria-controls="latam-pairs-form" aria-selected="false" tabindex="-1" class="subtab-button" data-mode="pairs">Testar datas</button>
+      </div>
+
+      <form id="latam-search-form" role="tabpanel" aria-labelledby="latam-mode-calendar">
         <div class="field">
           <label for="latam-origin">Origem</label>
           <input id="latam-origin" name="origin" placeholder="ex.: GRU" maxlength="3" pattern="[A-Za-z]{3}" title="Código IATA de 3 letras" required autocomplete="off" autocapitalize="characters" spellcheck="false" />
@@ -372,6 +377,31 @@
         </label>
         <button type="button" class="action-button queue-button" data-queue-source="latam">Adicionar à fila</button>
         <button type="submit">Buscar</button>
+      </form>
+
+      <form id="latam-pairs-form" role="tabpanel" aria-labelledby="latam-mode-pairs" hidden>
+        <div class="field">
+          <label for="latam-pairs-origin">Origem</label>
+          <input id="latam-pairs-origin" name="origin" placeholder="ex.: GRU" maxlength="3" pattern="[A-Za-z]{3}" title="Código IATA de 3 letras" required autocomplete="off" autocapitalize="characters" spellcheck="false" />
+        </div>
+        <div class="field">
+          <label for="latam-pairs-destination">Destino</label>
+          <input id="latam-pairs-destination" name="destination" placeholder="ex.: JFK" maxlength="3" pattern="[A-Za-z]{3}" title="Código IATA de 3 letras" required autocomplete="off" autocapitalize="characters" spellcheck="false" />
+        </div>
+        <div class="field">
+          <label for="latam-pairs-cabin">Cabine</label>
+          <select id="latam-pairs-cabin" name="cabin">
+            <option value="Business">Executiva (Premium Business)</option>
+            <option value="Economy">Econômica</option>
+          </select>
+        </div>
+        <button type="button" class="action-button queue-button" data-queue-source="latam-pairs">Adicionar à fila</button>
+        <button type="submit">Testar</button>
+        <div class="field field-wide">
+          <label for="latam-pairs-dates">Datas de ida e volta, um par por linha</label>
+          <textarea id="latam-pairs-dates" name="pairs" rows="4" spellcheck="false" placeholder="10/12/2026 20/12/2026&#10;15/01/2027 25/01/2027"></textarea>
+        </div>
+        <p class="hint">Cada par é conferido em milhas no site da LATAM, com o print da tela, como na confirmação do calendário. Até 10 pares por teste. Precisa da conta LATAM Pass logada no Chrome do bot.</p>
       </form>
 
       <p id="latam-notice" class="notice" hidden></p>
