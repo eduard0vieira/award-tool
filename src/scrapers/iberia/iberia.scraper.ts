@@ -122,7 +122,7 @@ export function iberiaBookingLink(params: IberiaSearchParams, date: string): str
 // Headers copied from the site's real call (recon notes, section 7). Not
 // decoration: with only `content-type`, `/availability` answers 401 even with
 // the valid bearer that `/calendar/grid` accepts.
-function iberiaHeaders(authorization: string, screen: "availability" | "calendar") {
+export function iberiaHeaders(authorization: string, screen: "availability" | "calendar") {
   return {
     accept: "application/json, text/plain, */*",
     "accept-language": "pt-BR",
@@ -337,7 +337,7 @@ async function gotoIgnoringHashAbort(page: Page, url: string) {
   });
 }
 
-async function openResultsPage(
+export async function openResultsPage(
   page: Page,
   params: IberiaSearchParams,
   date: string,
