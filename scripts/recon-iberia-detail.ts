@@ -161,6 +161,10 @@ fs.mkdirSync(outDir, { recursive: true });
 logFile = path.join(outDir, "run.log");
 
 const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+// The logged-in page calls /members/<Iberia Club number>; URL paths are printed
+// and saved, so long digit runs never go out as they are.
+const memberNumbers = new Set<string>();
+const scrubPath = (pathname: string) => pathname.replace(/\d{6,}/g, "[número]");
 
 // Responses leave this machine only after this pass; the redaction is named in
 // the log, the value never is.
@@ -171,6 +175,7 @@ function save(name: string, text: string) {
     ["Bearer", /bearer\s+\S+/gi],
   ];
   if (process.env.IBERIA_EMAIL) patterns.push(["IBERIA_EMAIL", new RegExp(escapeRegExp(process.env.IBERIA_EMAIL), "gi")]);
+  for (const member of memberNumbers) patterns.push(["número Iberia Club", new RegExp(escapeRegExp(member), "g")]);
   let clean = text;
   const hits: string[] = [];
   for (const [label, pattern] of patterns) {
@@ -210,7 +215,7 @@ const minutesToExp = (claims: Claims | null) => (claims ? Number(((claims.exp * 
 function where(url: string) {
   if (!URL.canParse(url)) return "(url inválida)";
   const parsed = new URL(url);
-  return `${parsed.host}${parsed.pathname}${/^#!\/[\w-]+/.exec(parsed.hash)?.[0] ?? ""}`;
+  return `${parsed.host}${scrubPath(parsed.pathname)}${/^#!\/[\w-]+/.exec(parsed.hash)?.[0] ?? ""}`;
 }
 
 const tokens: { atMin: number; azp: string; lifetimeMin: number; minutesToExp: number | null; by: string; seenOn: string }[] = [];
@@ -230,8 +235,10 @@ function watch(page: Page) {
   page.on("request", (request) => {
     if (!URL.canParse(request.url())) return;
     const url = new URL(request.url());
+    const member = /\/members\/(\d+)/.exec(url.pathname)?.[1];
+    if (member) memberNumbers.add(member);
     if (/^login\.iberia\.com$|ibisauth/.test(url.host) && ["document", "xhr", "fetch"].includes(request.resourceType())) {
-      const key = `${request.method()} ${url.host}${url.pathname}`;
+      const key = `${request.method()} ${url.host}${scrubPath(url.pathname)}`;
       if (!authRequests.has(key)) log(`chamada de autenticação: ${key}`);
       authRequests.set(key, (authRequests.get(key) ?? 0) + 1);
     }
@@ -249,7 +256,7 @@ function watch(page: Page) {
       lifetimeMin: Number(((claims.exp - claims.iat) / 60).toFixed(1)),
       minutesToExp: minutesToExp(claims),
       by,
-      seenOn: url.pathname,
+      seenOn: scrubPath(url.pathname),
     };
     tokens.push(entry);
     const how = { first: "primeiro", page_load: "na carga da página", site: "o PRÓPRIO SITE trocou, sem recarregar" }[by];
