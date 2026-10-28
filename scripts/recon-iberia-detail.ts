@@ -10,13 +10,13 @@
 //   scan <file>  the price reading of a saved response, without a browser.
 // Each run writes run.log, summary.json and the responses to data/recon/iberia-detail/.
 // Env: INTERVAL_MS (5000), MAX_MINUTES (25), BATCH (1), PRICE_DAYS (8), RELOGIN_ON_CUT=1.
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type { Page } from "playwright";
 import { closeChromeSession } from "../src/core/chrome-session.ts";
 import { RECON_DIR } from "../src/core/paths.ts";
 import {
-  currentAuthorization,
   ensureLoggedIn,
   iberiaHeaders,
   openResultsPage,
@@ -187,13 +187,21 @@ function save(name: string, text: string) {
   if (hits.length > 0) log(`ATENÇÃO: ${name} tinha ${hits.join(", ")}; trocado por marcador antes de gravar.`);
 }
 
-type Claims = { azp: string; iat: number; exp: number };
+type Claims = {
+  azp: string;
+  iat: number;
+  exp: number;
+  claimNames: string[];
+  acr: string | null;
+  scope: string | null;
+  typ: string | null;
+  roles: string[] | null;
+};
 
-// Only these three claims are read; the token and the rest of the payload
-// (which carries the account's e-mail) are never printed or saved.
-function claimsOf(authorization: string | null): Claims | null {
-  if (!authorization) return null;
-  let payload: { azp?: unknown; iat?: unknown; exp?: unknown };
+// Only the claim names and the non-personal values are kept; the token and the
+// rest of the payload (e-mail, sub, sid) are never printed or saved.
+function claimsOf(authorization: string): Claims | null {
+  let payload: Record<string, unknown>;
   try {
     payload = JSON.parse(Buffer.from(authorization.replace(/^Bearer /i, "").split(".")[1] ?? "", "base64url").toString());
   } catch (error) {
@@ -201,14 +209,26 @@ function claimsOf(authorization: string | null): Claims | null {
     log(`o token não é um JWT legível (${error instanceof Error ? error.name : "erro"})`);
     return null;
   }
-  if (typeof payload.azp !== "string" || typeof payload.iat !== "number" || typeof payload.exp !== "number") {
+  const { azp, iat, exp, acr, scope, typ, realm_access: realmAccess } = payload;
+  if (typeof azp !== "string" || typeof iat !== "number" || typeof exp !== "number") {
     log("o token não trouxe azp, iat e exp com os tipos esperados");
     return null;
   }
-  return { azp: payload.azp, iat: payload.iat, exp: payload.exp };
+  const roles = realmAccess && typeof realmAccess === "object" ? (realmAccess as { roles?: unknown }).roles : undefined;
+  return {
+    azp,
+    iat,
+    exp,
+    claimNames: Object.keys(payload).sort(),
+    acr: typeof acr === "string" ? acr : null,
+    scope: typeof scope === "string" ? scope : null,
+    typ: typeof typ === "string" ? typ : null,
+    roles: Array.isArray(roles) ? roles.filter((role): role is string => typeof role === "string") : null,
+  };
 }
 
-const minutesToExp = (claims: Claims | null) => (claims ? Number(((claims.exp * 1000 - Date.now()) / 60000).toFixed(1)) : null);
+const minutesToExp = (claims: Claims | undefined) =>
+  claims ? Number(((claims.exp * 1000 - Date.now()) / 60000).toFixed(1)) : null;
 
 // Host, path and the SPA's hash route; never the query, which on the login
 // redirects can carry an authorization code.
@@ -218,11 +238,23 @@ function where(url: string) {
   return `${parsed.host}${scrubPath(parsed.pathname)}${/^#!\/[\w-]+/.exec(parsed.hash)?.[0] ?? ""}`;
 }
 
-const tokens: { atMin: number; azp: string; lifetimeMin: number; minutesToExp: number | null; by: string; seenOn: string }[] = [];
+type Token = { authorization: string; fingerprint: string; claims: Claims };
+type TokenSeen = { fingerprint: string; atMin: number; by: string; seenOn: string; lifetimeMin: number; minutesToExp: number | null; claims: Claims };
+
+// The page holds more than one bearer at once (one showed up on /members with
+// 6 min left while another had 14). Taking the last one used on any route, as
+// `currentAuthorization` does, sent the older one to /availability, which
+// died at its exp. The recon follows the one the site itself sends there.
+const tokensSeen = new Map<string, TokenSeen>();
+const unreadableTokens = new Set<string>();
+const fingerprintOf = (authorization: string) => createHash("sha256").update(authorization).digest("hex").slice(0, 8);
+let availabilityToken: Token | null = null;
+const availabilityTokenHistory: { atMin: number; fingerprint: string; minutesToExp: number | null }[] = [];
+const availabilityExpiry = () => minutesToExp(availabilityToken?.claims);
+
 const navigations: { atMin: number; where: string; minutesToExp: number | null }[] = [];
 const authRequests = new Map<string, number>();
 const availabilityCalls = { byScript: 0, seenOnNetwork: 0 };
-let lastClaims: Claims | null = null;
 let lastWhere = "";
 let lastPageLoadAt = 0;
 // A token that shows up this long after a load of the site's page counts as the
@@ -230,6 +262,13 @@ let lastPageLoadAt = 0;
 const PAGE_LOAD_WINDOW_MS = 30_000;
 
 const visitsToLogin = () => navigations.filter((navigation) => navigation.where.startsWith("login.iberia.com")).length;
+
+function describeClaims(claims: Claims) {
+  return (
+    `acr=${claims.acr ?? "-"}, scope=${claims.scope ?? "-"}, typ=${claims.typ ?? "-"}, ` +
+    `papéis=${claims.roles?.join("/") || "-"}, claims: ${claims.claimNames.join(",")}`
+  );
+}
 
 function watch(page: Page) {
   page.on("request", (request) => {
@@ -243,24 +282,41 @@ function watch(page: Page) {
       authRequests.set(key, (authRequests.get(key) ?? 0) + 1);
     }
     if (!/ibisservices\.iberia\.com$/.test(url.host)) return;
-    if (request.method() === "POST" && url.pathname.endsWith("/availability")) availabilityCalls.seenOnNetwork++;
+    const toAvailability = request.method() === "POST" && url.pathname.endsWith("/availability");
+    if (toAvailability) availabilityCalls.seenOnNetwork++;
     const authorization = request.headers()["authorization"];
     if (!authorization) return;
-    const claims = claimsOf(authorization);
-    if (!claims || (lastClaims && claims.iat === lastClaims.iat && claims.exp === lastClaims.exp)) return;
-    const by = tokens.length === 0 ? "first" : Date.now() - lastPageLoadAt < PAGE_LOAD_WINDOW_MS ? "page_load" : "site";
-    lastClaims = claims;
-    const entry = {
-      atMin: minutes(),
-      azp: claims.azp,
-      lifetimeMin: Number(((claims.exp - claims.iat) / 60).toFixed(1)),
-      minutesToExp: minutesToExp(claims),
-      by,
-      seenOn: scrubPath(url.pathname),
-    };
-    tokens.push(entry);
-    const how = { first: "primeiro", page_load: "na carga da página", site: "o PRÓPRIO SITE trocou, sem recarregar" }[by];
-    log(`token novo (${how}): azp=${entry.azp}, dura ${entry.lifetimeMin} min, expira em ${entry.minutesToExp} min, visto em ${entry.seenOn}`);
+    const fingerprint = fingerprintOf(authorization);
+    if (unreadableTokens.has(fingerprint)) return;
+    let seen = tokensSeen.get(fingerprint);
+    if (!seen) {
+      const claims = claimsOf(authorization);
+      if (!claims) {
+        unreadableTokens.add(fingerprint);
+        return;
+      }
+      const by = tokensSeen.size === 0 ? "first" : Date.now() - lastPageLoadAt < PAGE_LOAD_WINDOW_MS ? "page_load" : "site";
+      seen = {
+        fingerprint,
+        atMin: minutes(),
+        by,
+        seenOn: scrubPath(url.pathname),
+        lifetimeMin: Number(((claims.exp - claims.iat) / 60).toFixed(1)),
+        minutesToExp: minutesToExp(claims),
+        claims,
+      };
+      tokensSeen.set(fingerprint, seen);
+      const how = { first: "primeiro", page_load: "na carga da página", site: "o PRÓPRIO SITE trocou, sem recarregar" }[by];
+      log(
+        `token novo ${fingerprint} (${how}): azp=${claims.azp}, dura ${seen.lifetimeMin} min, expira em ${seen.minutesToExp} min, ` +
+          `visto em ${seen.seenOn}; ${describeClaims(claims)}`,
+      );
+    }
+    if (toAvailability && availabilityToken?.fingerprint !== fingerprint) {
+      availabilityToken = { authorization, fingerprint, claims: seen.claims };
+      availabilityTokenHistory.push({ atMin: minutes(), fingerprint, minutesToExp: minutesToExp(seen.claims) });
+      log(`o availability passou a usar o token ${fingerprint} (expira em ${minutesToExp(seen.claims)} min)`);
+    }
   });
   page.on("framenavigated", (frame) => {
     if (frame !== page.mainFrame()) return;
@@ -268,8 +324,8 @@ function watch(page: Page) {
     if (here.startsWith("www.iberia.com")) lastPageLoadAt = Date.now();
     if (here === lastWhere) return;
     lastWhere = here;
-    navigations.push({ atMin: minutes(), where: here, minutesToExp: minutesToExp(lastClaims) });
-    log(`aba em ${here} (token expira em ${minutesToExp(lastClaims) ?? "?"} min)`);
+    navigations.push({ atMin: minutes(), where: here, minutesToExp: availabilityExpiry() });
+    log(`aba em ${here} (token do availability expira em ${availabilityExpiry() ?? "?"} min)`);
   });
 }
 
@@ -277,11 +333,11 @@ type Answer = { status: number; text: string };
 const isOk = (answer: Answer) => answer.status === 200 || answer.status === 204;
 const describe = (answer: Answer) => `status ${answer.status}${isOk(answer) ? "" : ` ${answer.text.slice(0, 100)}`}`;
 
-// -1: the fetch never came back; -2: no token to send; -3: the tab navigated
-// in the middle of the call.
+// -1: the fetch never came back; -2: no availability token to send; -3: the
+// tab navigated in the middle of the call.
 async function availability(page: Page, date: string, market = "US"): Promise<Answer> {
-  const authorization = currentAuthorization(page);
-  if (!authorization) return { status: -2, text: "sem token" };
+  const token = availabilityToken;
+  if (!token) return { status: -2, text: "sem token de availability" };
   availabilityCalls.byScript++;
   return page
     .evaluate(
@@ -306,18 +362,29 @@ async function availability(page: Page, date: string, market = "US"): Promise<An
           marketCode: market,
           preferredCabin: "",
         },
-        headers: iberiaHeaders(authorization, "availability"),
+        headers: iberiaHeaders(token.authorization, "availability"),
       },
     )
     .catch((error: unknown) => ({ status: -3, text: messageOf(error) }));
 }
 
-type Reopening = { atMin: number; renewed: boolean; passedLogin: boolean; minutesToExp: number | null; error?: string };
+type Reopening = {
+  atMin: number;
+  minutesToExpBefore: number | null;
+  renewed: boolean;
+  passedLogin: boolean;
+  pageCalledAvailability: boolean;
+  fingerprint: string | null;
+  minutesToExp: number | null;
+  error?: string;
+};
 const reopenings: Reopening[] = [];
 
 async function reopen(page: Page, date: string): Promise<Reopening> {
-  const before = lastClaims;
+  const before = availabilityToken?.fingerprint ?? null;
+  const minutesToExpBefore = availabilityExpiry();
   const loginVisitsBefore = visitsToLogin();
+  const availabilityCallsBefore = availabilityCalls.seenOnNetwork;
   let error: string | null = null;
   try {
     await openResultsPage(page, params, date, log);
@@ -326,17 +393,21 @@ async function reopen(page: Page, date: string): Promise<Reopening> {
     error = messageOf(caught);
     log(`reabrir a busca falhou: ${error}`);
   }
-  const after = claimsOf(currentAuthorization(page));
+  const after = availabilityToken;
   const result: Reopening = {
     atMin: minutes(),
-    renewed: !!after && (!before || after.iat !== before.iat || after.exp !== before.exp),
+    minutesToExpBefore,
+    renewed: !!after && after.fingerprint !== before,
     passedLogin: visitsToLogin() > loginVisitsBefore,
-    minutesToExp: minutesToExp(after),
+    pageCalledAvailability: availabilityCalls.seenOnNetwork > availabilityCallsBefore,
+    fingerprint: after?.fingerprint ?? null,
+    minutesToExp: availabilityExpiry(),
     ...(error && { error }),
   };
   reopenings.push(result);
   log(
-    `reabri a busca: token ${after ? (result.renewed ? "novo" : "o mesmo") : "nenhum"}, ` +
+    `reabri a busca: a página ${result.pageCalledAvailability ? "chamou" : "NÃO chamou"} o availability, ` +
+      `token do availability ${after ? `${result.renewed ? "novo" : "o mesmo"} (${after.fingerprint})` : "nenhum"}, ` +
       `${result.passedLogin ? "PASSOU pelo login" : "sem passar pelo login"}, expira em ${result.minutesToExp ?? "?"} min`,
   );
   return result;
@@ -427,44 +498,68 @@ async function priceMode(page: Page, days: string[]) {
   log(`RESPOSTA 1 (preço): ${VERDICT_TEXT[overall]}.`);
 }
 
+const msToExp = (token: Token) => token.claims.exp * 1000 - Date.now();
+
 async function tokenMode(page: Page, days: string[]) {
-  const first = claimsOf(currentAuthorization(page));
-  if (!first) throw new Error("a página de resultados não fez nenhuma chamada com token");
-  const deadline = first.exp * 1000 + 5 * 60_000;
-  log(`observando o token sem renovar até 5 min depois do exp (faltam ${minutesToExp(first)} min), uma chamada por minuto`);
-  const probes: { atMin: number; minutesToFirstExp: number | null; status: number; where: string }[] = [];
-  let failuresInRow = 0;
-  for (let index = 0; Date.now() < deadline && failuresInRow < 2; index++) {
-    const answer = await availability(page, days[index % days.length]!);
-    const probe = { atMin: minutes(), minutesToFirstExp: minutesToExp(first), status: answer.status, where: where(page.url()) };
-    probes.push(probe);
-    log(`sonda ${index + 1}: ${describe(answer)}, primeiro token expira em ${probe.minutesToFirstExp} min, aba em ${probe.where}`);
-    failuresInRow = isOk(answer) ? 0 : failuresInRow + 1;
-    await page.waitForTimeout(TOKEN_PROBE_MS);
-  }
-  const firstFailure = probes.find((probe) => probe.status !== 200 && probe.status !== 204) ?? null;
-  const renewedBySite = tokens.filter((token) => token.by === "site").length;
-  const reopened = await reopen(page, days[0]!);
-  const afterReopen = await availability(page, days[0]!);
-  log(`chamada depois de reabrir: ${describe(afterReopen)}`);
-  summary.token = { lifetimeMin: (first.exp - first.iat) / 60, probes, firstFailure, renewedBySite, reopened, afterReopenStatus: afterReopen.status };
+  const first = availabilityToken;
+  if (!first) throw new Error("a busca aberta não chamou o availability, então não há token para seguir");
   log(
-    `RESPOSTA 2 (token): dura ${((first.exp - first.iat) / 60).toFixed(1)} min; ` +
-      `primeira falha ${firstFailure ? `com ${firstFailure.minutesToFirstExp} min para o exp (status ${firstFailure.status}, aba em ${firstFailure.where})` : "não houve"}; ` +
-      `o site trocou o token sozinho ${renewedBySite} vez(es); reabrir a busca ${reopened.renewed ? "trouxe token novo" : "NÃO trouxe token novo"} ` +
-      `${reopened.passedLogin ? "e passou pelo login" : "sem passar pelo login"}; depois disso: status ${afterReopen.status}.`,
+    `sondando o token ${first.fingerprint} uma vez por minuto até faltarem ${RENEW_BEFORE_MS / 60000} min para o exp ` +
+      `(faltam ${minutesToExp(first.claims)} min); depois, reabrir a busca`,
+  );
+  const probes: { atMin: number; phase: string; fingerprint: string | null; minutesToExp: number | null; status: number; where: string }[] = [];
+  let index = 0;
+  const probe = async (phase: string) => {
+    const answer = await availability(page, days[index++ % days.length]!);
+    const entry = {
+      atMin: minutes(),
+      phase,
+      fingerprint: availabilityToken?.fingerprint ?? null,
+      minutesToExp: availabilityExpiry(),
+      status: answer.status,
+      where: where(page.url()),
+    };
+    probes.push(entry);
+    log(`sonda ${phase} ${probes.length}: ${describe(answer)}, token ${entry.fingerprint} expira em ${entry.minutesToExp} min, aba em ${entry.where}`);
+    return answer;
+  };
+
+  let current = first;
+  while (msToExp(current) > RENEW_BEFORE_MS && minutes() < MAX_MINUTES) {
+    await probe("antes");
+    const untilRenewal = msToExp(current) - RENEW_BEFORE_MS;
+    if (untilRenewal > 0) await page.waitForTimeout(Math.min(TOKEN_PROBE_MS, untilRenewal));
+    current = availabilityToken ?? current;
+  }
+  const reopened = await reopen(page, days[0]!);
+  const afterStatuses: number[] = [];
+  for (let call = 0; call < 2; call++) {
+    afterStatuses.push((await probe("depois")).status);
+    await page.waitForTimeout(INTERVAL_MS);
+  }
+  const renewedBySite = [...tokensSeen.values()].filter((token) => token.by === "site").length;
+  summary.token = { firstFingerprint: first.fingerprint, lifetimeMin: (first.claims.exp - first.claims.iat) / 60, probes, reopened, afterStatuses, renewedBySite };
+  log(
+    `RESPOSTA 2 (token): o token do availability (${first.fingerprint}) dura ${((first.claims.exp - first.claims.iat) / 60).toFixed(1)} min; ` +
+      `reabrir a busca com ${reopened.minutesToExpBefore} min para o exp ${reopened.renewed ? "TROUXE token novo" : "NÃO trouxe token novo"} ` +
+      `${reopened.passedLogin ? "e passou pelo login" : "sem passar pelo login"} (a página ${reopened.pageCalledAvailability ? "chamou" : "não chamou"} o availability); ` +
+      `chamadas depois: ${afterStatuses.join(", ")}; o site trocou o token sozinho ${renewedBySite} vez(es); ${tokensSeen.size} token(s) distintos vistos.`,
   );
 }
 
 type Cut = { atMin: number; calls: number; okCalls: number; date: string; status: number; detail: string; where: string };
 
 async function renewIfNeeded(page: Page, date: string) {
-  const authorization = currentAuthorization(page);
-  const claims = claimsOf(authorization);
-  if (authorization && !claims) throw new Error("sem ler o exp do token não há como medir a renovação");
-  if (claims && claims.exp * 1000 - Date.now() > RENEW_BEFORE_MS) return;
-  log(claims ? `faltam ${minutesToExp(claims)} min para o token expirar; renovando` : "sem token; reabrindo a busca");
-  await reopen(page, date);
+  const left = availabilityToken ? msToExp(availabilityToken) : null;
+  if (left !== null && left > RENEW_BEFORE_MS) return;
+  log(left !== null ? `faltam ${availabilityExpiry()} min para o token do availability expirar; renovando` : "sem token de availability; reabrindo a busca");
+  const reopened = await reopen(page, date);
+  // Otherwise the expired token's 401 would be counted as Iberia cutting the sweep.
+  if (!availabilityToken || msToExp(availabilityToken) <= RENEW_BEFORE_MS) {
+    throw new Error(
+      `reabrir a busca não trouxe token de availability novo (${reopened.fingerprint ?? "nenhum"}, expira em ${reopened.minutesToExp ?? "?"} min)`,
+    );
+  }
 }
 
 async function sweepUntilCut(page: Page, days: string[], startIndex: number) {
@@ -570,6 +665,7 @@ try {
   // /availability needs a logged-in account; the calendar does not.
   await ensureLoggedIn(page, log);
   await reopen(page, days[0]!);
+  if (!availabilityToken) throw new Error("a busca aberta não chamou o availability, então não há o token que o site usa ali");
   if (mode === "price") await priceMode(page, days);
   if (mode === "token") await tokenMode(page, days);
   if (mode === "sweep") await sweepMode(page, days);
@@ -580,7 +676,8 @@ try {
   Object.assign(summary, {
     failure,
     minutes: minutes(),
-    tokens,
+    tokens: [...tokensSeen.values()],
+    availabilityTokenHistory,
     reopenings,
     ladderSteps,
     navigations,
