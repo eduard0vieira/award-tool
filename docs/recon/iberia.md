@@ -527,3 +527,101 @@ login resets the quota, and how long a pause gives it back.
 Consequence: the old bot's "every date detailed" does not fit in a single run.
 The detail became sequential (`IBERIA_DETAIL_BATCH`, default 1), which is
 lighter than the per-day page load it replaced.
+
+## 17. Per-flight detail: price, token and cut (2026-10-28)
+
+Measured with `scripts/recon-iberia-detail.ts` (modes `price`, `token`, `sweep`),
+GRU→MAD, on the Mac with a residential IP and the bot's logged-in profile. Each
+run writes `run.log` and `summary.json` to `data/recon/iberia-detail/`, outside
+git.
+
+### Price: direct IB flights carry their Avios
+
+```
+2026-10-28 US/BR: 12 itineraries, 2 direct IB → offers[].totalPrice {"fare":20000,"currency":"AVIOS"}
+2026-12-06 US/BR: 13 itineraries, 2 direct IB → same fields
+connections (LA>IB, BA>BA, AT>AT, BA>IB): no price field at any level
+```
+
+Each offer of a direct IB flight has `totalPrice.fare` and `adultPrice.fare`,
+with `currency: "AVIOS"`, in both markets. Connections have none, which matches
+what `cheap-flights` read. **This corrects §7**: the responses saved back then
+only had Royal Air Maroc flights, and "no price in `/availability`" was true only
+for them.
+
+Consequence: a direct IB flight gets its Avios per offer; a connection has no
+per-flight number, and the only value for its day is the calendar's.
+
+### Token: two families, and the one `/availability` uses
+
+The page holds several bearers at once, all `azp=iberia_web` lasting **15 min**
+(`exp - iat = 900`). They come in two families, told apart by
+`realm_access.roles`:
+
+- **web client**: `ROLE_CLIENT_WEB`, with `aud`/`clientId` claims; seen on
+  `/lgm-ul/.../salesforce-token` and `/location`;
+- **member**: `ROLE_MEMBER`, `ROLE_IBERIA_PLUS`; seen on `/members/<number>`.
+  Before the full login it also has `soft_user`.
+
+**`/availability` uses the member token.** Followed through the token the page
+itself sends there:
+
+```
+member token, 1 call a minute:  200 from 14.1 min to 3.5 min before exp
+at exp (earlier run):           401 {"error":"unauthorized","error_description":"Invalid token"}
+```
+
+At `exp` the tab **stays** on `#!/availability`; there is no redirect to the
+login. In an idle tab the site renewed nothing. A real reload with the token
+still valid returns the **same** token.
+
+Two traps that explain earlier conclusions:
+
+- `currentAuthorization` (the last token seen on ANY route) handed an older
+  token to `/availability`; it died at its `exp`, minutes into the run. That
+  fits §14's "the session drops within minutes" better than a session drop.
+- `page.goto` to the same URL with the same `#!/availability` is an anchor jump
+  in Chrome: no load, no call, no new token. "Reopening the search" this way
+  tested nothing; a real reload needs `about:blank` first.
+
+**Still open:** whether a real reload just before or after `exp` brings a new
+member token without logging in. No sweep got that far (see below).
+
+### Cut: about a dozen calls per page
+
+| pace | ok before the cut | `/availability` on the network | failure | 30 s, same token | page reload | after reload |
+|---|---|---|---|---|---|---|
+| 1 every 5 s | 11 (cut on the 12th, 1.6 min) | 14 | `Failed to fetch`, network `net::ERR_FAILED`, no HTTP response | fails | 200, **same token** | cut on the 5th |
+| batches of 5 every 5 s | 14 (cut on the 15th, 0.4 min) | 17 | same | fails | 200, **same token** | cut on the 5th |
+
+Reading:
+
+- the pace barely changes the count, as in §16;
+- it is not the token: the same valid token works again after a reload;
+- it is not a refusal with a status: the request fails at the network level,
+  with no HTTP response for the page or for Playwright;
+- a reload restores only a few calls, so it looks like the page's anti-bot
+  state (the Akamai sensor endpoints fire on every load), not a fixed quota.
+
+Today's total (12–15) is well below §16's 40–60. Not measured: whether a pause
+or a new login restores the full count.
+
+Consequence for the product: **detailing a whole year flight by flight does not
+fit**, nor do the ~250 days with Avios on this route. Only a short list of days
+(the ones under the client's ceiling) fits, reloading the page every few calls,
+and the result has to declare itself partial when the cut wins.
+
+### Other findings
+
+- **The login lives in session cookies**: every new Chrome (each script run) had
+  to log in again. The automatic login from `.env` worked every time when it came
+  through the search's redirect.
+- **The direct login link fails**: `login.iberia.com/IDY_LoginPage?market=BRpt`,
+  opened by `npm run login:iberia`, answers "Este não parece ser um endereço de
+  e-mail" to the same e-mail that works through the home page.
+- **GRU→LIS**: the calendar's first window came back empty and
+  `searchIberiaYear` stopped there. A route whose awards only start after the
+  first window would come out as "no availability": to review before the source
+  comes back.
+- **The Iberia Club number appears in a URL path** (`/members/<number>`), so the
+  recon masks long digit runs in everything it prints or saves.
