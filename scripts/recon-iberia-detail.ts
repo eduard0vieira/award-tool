@@ -219,7 +219,10 @@ const authRequests = new Map<string, number>();
 const availabilityCalls = { byScript: 0, seenOnNetwork: 0 };
 let lastClaims: Claims | null = null;
 let lastWhere = "";
-let reopening = false;
+let lastPageLoadAt = 0;
+// A token that shows up this long after a load of the site's page counts as the
+// site renewing it by itself, which is the hypothesis being tested.
+const PAGE_LOAD_WINDOW_MS = 30_000;
 
 const visitsToLogin = () => navigations.filter((navigation) => navigation.where.startsWith("login.iberia.com")).length;
 
@@ -227,7 +230,7 @@ function watch(page: Page) {
   page.on("request", (request) => {
     if (!URL.canParse(request.url())) return;
     const url = new URL(request.url());
-    if (/^login\.iberia\.com$|ibisauth/.test(url.host)) {
+    if (/^login\.iberia\.com$|ibisauth/.test(url.host) && ["document", "xhr", "fetch"].includes(request.resourceType())) {
       const key = `${request.method()} ${url.host}${url.pathname}`;
       if (!authRequests.has(key)) log(`chamada de autenticação: ${key}`);
       authRequests.set(key, (authRequests.get(key) ?? 0) + 1);
@@ -238,7 +241,7 @@ function watch(page: Page) {
     if (!authorization) return;
     const claims = claimsOf(authorization);
     if (!claims || (lastClaims && claims.iat === lastClaims.iat && claims.exp === lastClaims.exp)) return;
-    const by = tokens.length === 0 ? "first" : reopening ? "script_reopen" : "site";
+    const by = tokens.length === 0 ? "first" : Date.now() - lastPageLoadAt < PAGE_LOAD_WINDOW_MS ? "page_load" : "site";
     lastClaims = claims;
     const entry = {
       atMin: minutes(),
@@ -249,12 +252,13 @@ function watch(page: Page) {
       seenOn: url.pathname,
     };
     tokens.push(entry);
-    const how = { first: "primeiro", script_reopen: "reabrindo a busca", site: "o PRÓPRIO SITE trocou" }[by];
+    const how = { first: "primeiro", page_load: "na carga da página", site: "o PRÓPRIO SITE trocou, sem recarregar" }[by];
     log(`token novo (${how}): azp=${entry.azp}, dura ${entry.lifetimeMin} min, expira em ${entry.minutesToExp} min, visto em ${entry.seenOn}`);
   });
   page.on("framenavigated", (frame) => {
     if (frame !== page.mainFrame()) return;
     const here = where(frame.url());
+    if (here.startsWith("www.iberia.com")) lastPageLoadAt = Date.now();
     if (here === lastWhere) return;
     lastWhere = here;
     navigations.push({ atMin: minutes(), where: here, minutesToExp: minutesToExp(lastClaims) });
@@ -308,15 +312,12 @@ async function reopen(page: Page, date: string): Promise<Reopening> {
   const before = lastClaims;
   const loginVisitsBefore = visitsToLogin();
   let error: string | null = null;
-  reopening = true;
   try {
     await openResultsPage(page, params, date, log);
     await page.waitForTimeout(5000);
   } catch (caught) {
     error = messageOf(caught);
     log(`reabrir a busca falhou: ${error}`);
-  } finally {
-    reopening = false;
   }
   const after = claimsOf(currentAuthorization(page));
   const result: Reopening = {
