@@ -13,11 +13,12 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import type { Page } from "playwright";
+import type { Page, Request } from "playwright";
 import { closeChromeSession } from "../src/core/chrome-session.ts";
 import { RECON_DIR } from "../src/core/paths.ts";
 import {
   ensureLoggedIn,
+  iberiaBookingLink,
   iberiaHeaders,
   openResultsPage,
   searchIberiaYear,
@@ -263,12 +264,38 @@ const PAGE_LOAD_WINDOW_MS = 30_000;
 
 const visitsToLogin = () => navigations.filter((navigation) => navigation.where.startsWith("login.iberia.com")).length;
 
+const tokenFamily = (claims: Claims) =>
+  claims.roles?.includes("ROLE_MEMBER") ? "membro" : claims.roles?.includes("ROLE_CLIENT_WEB") ? "cliente web" : "desconhecida";
+
+// The whole role and claim lists go to summary.json; the log keeps what tells the tokens apart.
 function describeClaims(claims: Claims) {
   return (
-    `acr=${claims.acr ?? "-"}, scope=${claims.scope ?? "-"}, typ=${claims.typ ?? "-"}, ` +
-    `papéis=${claims.roles?.join("/") || "-"}, claims: ${claims.claimNames.join(",")}`
+    `família ${tokenFamily(claims)}, soft_user ${claims.roles?.includes("soft_user") ? "sim" : "não"}, ` +
+    `acr=${claims.acr ?? "-"}, ${claims.roles?.length ?? 0} papéis`
   );
 }
+
+// What the network saw for each /availability. A blocked response without CORS
+// headers reaches the page's fetch only as "Failed to fetch"; here its status shows.
+type NetworkOutcome = { atMin: number; key: string; status: number | null; server: string | null; failure: string | null };
+const networkOutcomes: NetworkOutcome[] = [];
+
+const isAvailabilityRequest = (request: Request) =>
+  request.method() === "POST" && /^https:\/\/ibisservices\.iberia\.com\/.*\/availability$/.test(request.url().split("?")[0] ?? "");
+
+function availabilityKey(body: string | null) {
+  if (!body) return "(sem corpo)";
+  try {
+    const parsed = JSON.parse(body) as { slices?: { date?: string }[]; marketCode?: string };
+    return `${parsed.slices?.[0]?.date ?? "?"}|${parsed.marketCode ?? "?"}`;
+  } catch (error) {
+    log(`corpo de um availability não é JSON (${error instanceof Error ? error.name : "erro"})`);
+    return "(corpo ilegível)";
+  }
+}
+
+const describeOutcome = (outcome: NetworkOutcome) =>
+  outcome.status !== null ? `${outcome.status}${outcome.server ? ` server=${outcome.server}` : ""}` : `falhou: ${outcome.failure}`;
 
 function watch(page: Page) {
   page.on("request", (request) => {
@@ -318,6 +345,27 @@ function watch(page: Page) {
       log(`o availability passou a usar o token ${fingerprint} (expira em ${minutesToExp(seen.claims)} min)`);
     }
   });
+  page.on("response", (response) => {
+    const request = response.request();
+    if (!isAvailabilityRequest(request)) return;
+    networkOutcomes.push({
+      atMin: minutes(),
+      key: availabilityKey(request.postData()),
+      status: response.status(),
+      server: response.headers()["server"] ?? null,
+      failure: null,
+    });
+  });
+  page.on("requestfailed", (request) => {
+    if (!isAvailabilityRequest(request)) return;
+    networkOutcomes.push({
+      atMin: minutes(),
+      key: availabilityKey(request.postData()),
+      status: null,
+      server: null,
+      failure: request.failure()?.errorText ?? "sem motivo informado",
+    });
+  });
   page.on("framenavigated", (frame) => {
     if (frame !== page.mainFrame()) return;
     const here = where(frame.url());
@@ -329,9 +377,10 @@ function watch(page: Page) {
   });
 }
 
-type Answer = { status: number; text: string };
+type Answer = { status: number; text: string; network?: string };
 const isOk = (answer: Answer) => answer.status === 200 || answer.status === 204;
-const describe = (answer: Answer) => `status ${answer.status}${isOk(answer) ? "" : ` ${answer.text.slice(0, 100)}`}`;
+const describe = (answer: Answer) =>
+  `status ${answer.status}${isOk(answer) ? "" : ` ${answer.text.slice(0, 100)}`}${answer.network ? ` | rede: ${answer.network}` : ""}`;
 
 // -1: the fetch never came back; -2: no availability token to send; -3: the
 // tab navigated in the middle of the call.
@@ -339,7 +388,8 @@ async function availability(page: Page, date: string, market = "US"): Promise<An
   const token = availabilityToken;
   if (!token) return { status: -2, text: "sem token de availability" };
   availabilityCalls.byScript++;
-  return page
+  const outcomesBefore = networkOutcomes.length;
+  const answer: Answer = await page
     .evaluate(
       async ({ body, headers }) => {
         try {
@@ -366,6 +416,13 @@ async function availability(page: Page, date: string, market = "US"): Promise<An
       },
     )
     .catch((error: unknown) => ({ status: -3, text: messageOf(error) }));
+  if (isOk(answer) || answer.status === -2) return answer;
+  const key = `${date}|${market}`;
+  const matching = () => networkOutcomes.slice(outcomesBefore).filter((outcome) => outcome.key === key);
+  // The network event can land a moment after the page's fetch gives up.
+  if (matching().length === 0) await page.waitForTimeout(500).catch((error: unknown) => log(`espera falhou: ${messageOf(error)}`));
+  answer.network = matching().map(describeOutcome).join(", ") || "nada registrado";
+  return answer;
 }
 
 type Reopening = {
@@ -387,6 +444,12 @@ async function reopen(page: Page, date: string): Promise<Reopening> {
   const availabilityCallsBefore = availabilityCalls.seenOnNetwork;
   let error: string | null = null;
   try {
+    // The same URL with the same #! route is an anchor jump for Chrome, not a
+    // load: no availability call and no new token (seen at 12.5 min of a run).
+    const withoutHash = (url: string) => url.split("#")[0];
+    if (withoutHash(page.url()) === withoutHash(iberiaBookingLink(params, date))) {
+      await page.goto("about:blank", { waitUntil: "domcontentloaded" });
+    }
     await openResultsPage(page, params, date, log);
     await page.waitForTimeout(5000);
   } catch (caught) {
@@ -547,7 +610,7 @@ async function tokenMode(page: Page, days: string[]) {
   );
 }
 
-type Cut = { atMin: number; calls: number; okCalls: number; date: string; status: number; detail: string; where: string };
+type Cut = { atMin: number; calls: number; okCalls: number; date: string; status: number; detail: string; network: string | null; where: string };
 
 async function renewIfNeeded(page: Page, date: string) {
   const left = availabilityToken ? msToExp(availabilityToken) : null;
@@ -581,6 +644,7 @@ async function sweepUntilCut(page: Page, days: string[], startIndex: number) {
         date: batch[failed]!,
         status: answer.status,
         detail: answer.text.slice(0, 100),
+        network: answer.network ?? null,
         where: where(page.url()),
       };
       return { cut, calls, nextIndex: index + failed };
@@ -636,7 +700,7 @@ async function sweepMode(page: Page, days: string[]) {
   }
   log(
     `corte na ${first.cut.calls}ª chamada do script (${first.cut.okCalls} ok antes) aos ${first.cut.atMin} min de varredura: ` +
-      `${first.cut.status} ${first.cut.detail} | aba em ${first.cut.where} | chamadas vistas na rede até aqui: ${availabilityCalls.seenOnNetwork}`,
+      `${first.cut.status} ${first.cut.detail} | rede: ${first.cut.network ?? "-"} | aba em ${first.cut.where} | chamadas vistas na rede até aqui: ${availabilityCalls.seenOnNetwork}`,
   );
   const recoveredBy = await ladder(page, first.cut);
   result.recoveredBy = recoveredBy;
@@ -683,6 +747,12 @@ try {
     navigations,
     authRequests: Object.fromEntries(authRequests),
     availabilityCalls,
+    networkStatusCounts: networkOutcomes.reduce<Record<string, number>>((counts, outcome) => {
+      const label = outcome.status !== null ? String(outcome.status) : `falha ${outcome.failure}`;
+      counts[label] = (counts[label] ?? 0) + 1;
+      return counts;
+    }, {}),
+    networkOutcomes,
   });
   fs.writeFileSync(path.join(outDir, "summary.json"), JSON.stringify(summary, null, 2));
   log(`saída em ${outDir}`);
