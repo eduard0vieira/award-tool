@@ -660,7 +660,8 @@ const ladderSteps: { step: string; status: number; where: string }[] = [];
 
 const LADDER_TEXT: Record<string, string> = {
   same_token_after_30s: "o mesmo token, depois de 30 s (sugere limite de ritmo)",
-  fresh_token: "token novo na mesma sessão (sugere cota por token)",
+  page_reload_new_token: "recarregar a página, que trouxe token novo (não separa token de página)",
+  page_reload_same_token: "recarregar a página com o MESMO token (sugere estado da página/anti-bot, não o token)",
   new_login: "login novo (sugere cota por sessão)",
 };
 
@@ -673,8 +674,8 @@ async function ladder(page: Page, cut: Cut): Promise<string | null> {
   };
   await page.waitForTimeout(30_000);
   if (await retry("same_token_after_30s")) return "same_token_after_30s";
-  await reopen(page, cut.date);
-  if (await retry("fresh_token")) return "fresh_token";
+  const reload = (await reopen(page, cut.date)).renewed ? "page_reload_new_token" : "page_reload_same_token";
+  if (await retry(reload)) return reload;
   if (!RELOGIN_ON_CUT) {
     log("degrau do login novo pulado (rode com RELOGIN_ON_CUT=1 para tentar)");
     return null;
