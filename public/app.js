@@ -228,6 +228,8 @@ const latamGoogleStayInput = document.getElementById("latam-google-stay");
 const latamGoogleBandInput = document.getElementById("latam-google-band");
 const latamNotice = document.getElementById("latam-notice");
 const latamQueue = document.getElementById("latam-queue");
+const latamPairsQueue = document.getElementById("latam-pairs-queue");
+const latamGoogleQueue = document.getElementById("latam-google-queue");
 
 const jobTemplate = document.getElementById("job-template");
 const tabButtons = document.querySelectorAll(".tab-button");
@@ -744,8 +746,8 @@ async function openFromHistory(item, button, noticeEl = historyNotice) {
         : { error: leg.error || "Essa parte da busca não terminou." };
     }
     RESUME_BY_SOURCE[card.source](...card.args, session);
-    activateTab(tab);
-    panels[tab].querySelector(".search-job")?.scrollIntoView({ block: "start" });
+    showSourceTab(card.source);
+    panels[tab].querySelector(".search-queue:not([hidden]) .search-job")?.scrollIntoView({ block: "start" });
   } catch (err) {
     showNotice(noticeEl, err.message);
   } finally {
@@ -3318,7 +3320,7 @@ async function startLatamPairsSearch(origin, destination, cabin, dates, session)
   const args = [origin, destination, cabin, dates];
   session = session || newSession("latam-pairs", args);
   const cabinLabel = LATAM_CABIN_LABELS[cabin] || cabin;
-  const card = createJobCard(latamQueue, { program: "LATAM", detail: `${cabinLabel}, datas testadas`, origin, destination, roundTrip: true });
+  const card = createJobCard(latamPairsQueue, { program: "LATAM", detail: `${cabinLabel}, datas testadas`, origin, destination, roundTrip: true });
   try {
     const [body] = LEG_BODIES_BY_SOURCE["latam-pairs"](args);
     const tested = await runOnServer(card, { source: "latam-pairs", ...body }, "Sorteando e conferindo os pares em milhas…", session);
@@ -3352,7 +3354,7 @@ async function startGoogleLatamSearch(origin, destination, cabin, stayDays, band
   const args = [origin, destination, cabin, stayDays, bandPercent];
   session = session || newSession("google-latam", args);
   const cabinLabel = LATAM_CABIN_LABELS[cabin] || cabin;
-  const card = createJobCard(latamQueue, { program: "LATAM", detail: `${cabinLabel}, via Google Flights`, origin, destination, roundTrip: true });
+  const card = createJobCard(latamGoogleQueue, { program: "LATAM", detail: `${cabinLabel}, via Google Flights`, origin, destination, roundTrip: true });
   try {
     const [body] = LEG_BODIES_BY_SOURCE["google-latam"](args);
     const tested = await runOnServer(card, { source: "google-latam", ...body }, "Lendo o Google Flights e conferindo em milhas…", session);
@@ -3628,11 +3630,22 @@ latamForm.addEventListener("submit", (event) => {
   if (args) startLatamSearch(...args);
 });
 
+// Each sub-tab keeps its own cards: a Google Flights search is not a calendar one.
 function selectLatamMode(button) {
   markSelectedTab(latamModeButtons, button);
-  latamForm.hidden = button.dataset.mode !== "calendar";
-  latamPairsForm.hidden = button.dataset.mode !== "pairs";
-  latamGoogleForm.hidden = button.dataset.mode !== "google";
+  const { mode } = button.dataset;
+  latamForm.hidden = latamQueue.hidden = mode !== "calendar";
+  latamPairsForm.hidden = latamPairsQueue.hidden = mode !== "pairs";
+  latamGoogleForm.hidden = latamGoogleQueue.hidden = mode !== "google";
+}
+
+const LATAM_MODE_BY_SOURCE = { latam: "calendar", "latam-pairs": "pairs", "google-latam": "google" };
+
+// The tab, and inside LATAM the sub-tab, where a source's cards are.
+function showSourceTab(source) {
+  activateTab(TAB_BY_SOURCE[source]);
+  const mode = LATAM_MODE_BY_SOURCE[source];
+  if (mode) selectLatamMode([...latamModeButtons].find((button) => button.dataset.mode === mode));
 }
 
 latamModeButtons.forEach((button) => {
@@ -4299,7 +4312,7 @@ function createQueueItem(item) {
     }
   };
   if (item.status === "waiting" && Date.parse(item.runAfter) > Date.now()) action("Rodar agora", (button) => post(button, "run-now"), "Rodar agora");
-  if (item.status === "running") action("Ver", () => activateTab(TAB_BY_SOURCE[item.source]), "Ver a busca rodando");
+  if (item.status === "running") action("Ver", () => showSourceTab(item.source), "Ver a busca rodando");
   if (item.status === "waiting" || item.status === "running") action("Cancelar", (button) => post(button, "cancel"), "Cancelar");
   if (item.status === "done" || item.status === "partial") {
     action("Abrir", (button) => openFromHistory({ groupId: item.id }, button, queueNotice), "Abrir o resultado");
