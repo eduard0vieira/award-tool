@@ -148,6 +148,7 @@ const tapNotice = document.getElementById("tap-notice");
 const tapBusinessCeilingInput = document.getElementById("tap-ceiling-business");
 const tapEconomyCeilingInput = document.getElementById("tap-ceiling-economy");
 const tapQueue = document.getElementById("tap-queue");
+const tapLiveQueue = document.getElementById("tap-live-queue");
 const tapModeButtons = document.querySelectorAll("#panel-tap .panel-subtabs .subtab-button");
 const tapCalendarForm = document.getElementById("tap-calendar-form");
 const tapCalendarOriginInput = document.getElementById("tap-calendar-origin");
@@ -2348,7 +2349,7 @@ function renderShowcase(targetEl, routes, options) {
 }
 
 async function runTapSearch(session, source, legBodies, origin, destination, roundTrip, detail) {
-  const card = createJobCard(tapQueue, { program: "TAP", detail, origin, destination, roundTrip });
+  const card = createJobCard(source === "tap" ? tapLiveQueue : tapQueue, { program: "TAP", detail, origin, destination, roundTrip });
   const partialNotices = [];
   const notices = [];
 
@@ -3537,8 +3538,8 @@ tapForm.addEventListener("submit", async (event) => {
 
 function selectTapMode(button) {
   markSelectedTab(tapModeButtons, button);
-  tapCalendarForm.hidden = button.dataset.mode !== "calendar";
-  tapForm.hidden = button.dataset.mode !== "live";
+  tapCalendarForm.hidden = tapQueue.hidden = button.dataset.mode !== "calendar";
+  tapForm.hidden = tapLiveQueue.hidden = button.dataset.mode !== "live";
 }
 
 tapModeButtons.forEach((button) => {
@@ -3639,13 +3640,22 @@ function selectLatamMode(button) {
   latamGoogleForm.hidden = latamGoogleQueue.hidden = mode !== "google";
 }
 
-const LATAM_MODE_BY_SOURCE = { latam: "calendar", "latam-pairs": "pairs", "google-latam": "google" };
+const SUBTAB_BY_SOURCE = {
+  tap: [() => tapModeButtons, selectTapMode, "live"],
+  "tap-calendar": [() => tapModeButtons, selectTapMode, "calendar"],
+  "tap-showcase": [() => tapModeButtons, selectTapMode, "calendar"],
+  latam: [() => latamModeButtons, selectLatamMode, "calendar"],
+  "latam-pairs": [() => latamModeButtons, selectLatamMode, "pairs"],
+  "google-latam": [() => latamModeButtons, selectLatamMode, "google"],
+};
 
-// The tab, and inside LATAM the sub-tab, where a source's cards are.
+// The tab, and its sub-tab, where a source's cards are.
 function showSourceTab(source) {
   activateTab(TAB_BY_SOURCE[source]);
-  const mode = LATAM_MODE_BY_SOURCE[source];
-  if (mode) selectLatamMode([...latamModeButtons].find((button) => button.dataset.mode === mode));
+  const subtab = SUBTAB_BY_SOURCE[source];
+  if (!subtab) return;
+  const [buttons, select, mode] = subtab;
+  select([...buttons()].find((button) => button.dataset.mode === mode));
 }
 
 latamModeButtons.forEach((button) => {
