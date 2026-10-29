@@ -4249,7 +4249,9 @@ async function enqueueFromForm(button) {
     });
     const body = await response.json().catch(() => null);
     if (!response.ok) throw new Error(body?.error || "Não deu para pôr na fila.");
-    showNotice(noticeEl, `Na fila: ${label}, roda ${queueWhenText(new Date(body.runAfter))}. Acompanhe na aba Fila.`);
+    const text = `Na fila: ${label}, roda ${queueWhenText(new Date(body.runAfter))}. Acompanhe na aba Fila.`;
+    showNotice(noticeEl, text);
+    queuedNotices.set(body.id, { noticeEl, text });
   } catch (err) {
     showNotice(noticeEl, err.message);
   } finally {
@@ -4335,6 +4337,23 @@ const QUEUE_GROUPS = [
 ];
 
 let queueLoad = null;
+// The notice under a form follows its item: waiting, running, then gone.
+const queuedNotices = new Map();
+
+function followQueueNotices(items) {
+  for (const [id, notice] of queuedNotices) {
+    const item = items.find((candidate) => candidate.id === id);
+    if (item?.status === "waiting") continue;
+    const shown = !notice.noticeEl.hidden && notice.noticeEl.textContent === notice.text;
+    if (item?.status === "running") {
+      notice.text = `Rodando da fila: ${item.label}. O card aparece aqui embaixo.`;
+      if (shown) notice.noticeEl.textContent = notice.text;
+      continue;
+    }
+    queuedNotices.delete(id);
+    if (shown) clearNotice(notice.noticeEl);
+  }
+}
 
 async function loadQueue() {
   const response = await apiFetch("/api/queue");
@@ -4343,6 +4362,7 @@ async function loadQueue() {
   const pending = body.filter((item) => item.status === "waiting" || item.status === "running").length;
   queueCount.textContent = pending;
   queueCount.hidden = pending === 0;
+  followQueueNotices(body);
   return body;
 }
 
