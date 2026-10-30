@@ -97,7 +97,7 @@ export class GoogleLatamSource implements SearchSource<GoogleLatamSearchDto> {
     return this.runner.run(this.pool, jobId, async ({ page }) => {
       const job = this.jobs.callbacks(jobId);
       job.progress(0.05);
-      const prices = await searchGoogleCalendar(
+      const { prices, cutAfter } = await searchGoogleCalendar(
         page,
         { origin, destination, airline: "LA", cabin, stayDays },
         { from: dayFromToday(1), until: dayFromToday(HORIZON_DAYS) },
@@ -129,16 +129,21 @@ export class GoogleLatamSource implements SearchSource<GoogleLatamSearchDto> {
           sections: [{ label, colorClass, ...bandSection(band, "return", { origin: destination, destination: origin }) }],
         },
       ];
+      const cut =
+        cutAfter &&
+        `O Google Flights só carregou o calendário até ${cutAfter.date.split("-").reverse().join("/")} (${cutAfter.reason}); as idas depois disso ficaram de fora.`;
       const notices = [
+        cut,
         withoutOffer.length > 0 && `Sem voo em milhas na ${label}: ${withoutOffer.join(", ")}.`,
         failed.length > 0 && `Não conferidos por falha: ${failed.join(" · ")}.`,
       ].filter(Boolean);
+      const partial = failed.length > 0 || cutAfter !== null;
       this.jobs.complete(jobId, {
         legs,
         confirmation: { pairs: confirmed },
         google: { stayDays, bandPercent, lowestReais: lowest, days: prices.length, kept: band.length, pairs: chosen },
-        ...(failed.length > 0 && { partialNotice: notices.join(" ") }),
-        ...(failed.length === 0 && notices.length > 0 && { notices }),
+        ...(partial && { partialNotice: notices.join(" ") }),
+        ...(!partial && notices.length > 0 && { notices }),
       });
     });
   }

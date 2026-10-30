@@ -14,6 +14,8 @@ import { RateLimiter, type OnLog } from "../../core/common.ts";
 const GOOGLE_MIN_INTERVAL_MS = Number(process.env.GOOGLE_FLIGHTS_INTERVAL_MS) || 5000;
 const googleRateLimiter = new RateLimiter(GOOGLE_MIN_INTERVAL_MS);
 const MAX_PICKER_PAGES = 14;
+// A page in a background window answers slowly; 20 s already cut a month short.
+const MONTH_WAIT_MS = 40_000;
 
 // The cabin codes in the page's request body.
 const CABIN_CODES = { Economy: 1, Business: 3 } as const;
@@ -149,15 +151,19 @@ async function openSearch(page: Page, query: CalendarQuery, firstOutbound: strin
   await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => {});
 }
 
+export type GoogleCalendar = { prices: RoundTripPrice[]; cutAfter: { date: string; reason: string } | null };
+
 export async function searchGoogleCalendar(
   page: Page,
   query: CalendarQuery,
   period: { from: string; until: string },
   onLog: OnLog = () => {},
-): Promise<RoundTripPrice[]> {
+): Promise<GoogleCalendar> {
   await googleRateLimiter.waitTurn();
   onLog(`Google Flights: ${query.origin} ⇄ ${query.destination}, ${AIRLINE_NAMES[query.airline]}, ida e volta de ${query.stayDays} dias...`);
   await openSearch(page, query, period.from);
+  // The bot's Chrome is often behind other windows, where Chrome slows the page down.
+  await page.bringToFront();
 
   const calls: Promise<CalendarCall>[] = [];
   // Read through a route, not page.on("response"): Chrome sometimes drops a
@@ -176,10 +182,19 @@ export async function searchGoogleCalendar(
   await page.route("**/GetCalendarPicker*", capture);
   const byOutbound = new Map<string, RoundTripPrice>();
   try {
-    const nextCall = async (seen: number) => {
-      for (let waited = 0; calls.length === seen && waited < 20_000; waited += 250) await page.waitForTimeout(250);
-      if (calls.length === seen) return null;
-      const call = await calls[seen]!;
+    // The month the picker asks for after `trigger`. A wrong airline, cabin or
+    // stay throws; a month that never comes or comes refused is returned as a failure.
+    const loadMonth = async (trigger: () => Promise<void>): Promise<CalendarCall | { failure: string }> => {
+      const seen = calls.length;
+      await trigger();
+      for (let waited = 0; calls.length === seen && waited < MONTH_WAIT_MS; waited += 250) await page.waitForTimeout(250);
+      if (calls.length === seen) return { failure: "o mês seguinte não carregou" };
+      let call: CalendarCall;
+      try {
+        call = await calls[seen]!;
+      } catch (error) {
+        return { failure: (error as Error).message };
+      }
       checkCall(call, query);
       for (const price of call.prices) {
         if (price.outbound >= period.from && price.outbound <= period.until) byOutbound.set(price.outbound, price);
@@ -188,12 +203,22 @@ export async function searchGoogleCalendar(
       return call;
     };
 
-    await page.getByPlaceholder("Partida").first().click({ timeout: 30_000 });
-    let last = await nextCall(0);
-    if (!last) throw new Error("O Google Flights não abriu o calendário de preços da busca.");
-    if (last.range[0] > period.from) {
-      throw new Error(`O calendário do Google Flights começou em ${last.range[0]}, depois de ${period.from}.`);
+    const datePicker = page.getByPlaceholder("Partida").first();
+    let first = await loadMonth(() => datePicker.click({ timeout: 30_000 }));
+    if ("failure" in first) {
+      onLog(`Google Flights: o calendário não abriu (${first.failure}). Abrindo de novo...`);
+      first = await loadMonth(async () => {
+        await page.keyboard.press("Escape");
+        await page.waitForTimeout(1500);
+        await datePicker.click({ timeout: 30_000 });
+      });
     }
+    if ("failure" in first) throw new Error(`O Google Flights não abriu o calendário de preços da busca: ${first.failure}.`);
+    if (first.range[0] > period.from) {
+      throw new Error(`O calendário do Google Flights começou em ${first.range[0]}, depois de ${period.from}.`);
+    }
+
+    let last = first;
     const forward = page.locator('[role="dialog"] button[aria-label="Avançar"]').first();
     // The last month Google sells has no next one: the calendar ends there.
     const canGoForward = async () =>
@@ -201,17 +226,32 @@ export async function searchGoogleCalendar(
     for (let pages = 0; last.range[1] < period.until && pages < MAX_PICKER_PAGES; pages++) {
       if (!(await canGoForward())) break;
       await googleRateLimiter.waitTurn();
-      const seen = calls.length;
-      await forward.click({ timeout: 10_000 });
-      const call = await nextCall(seen);
-      if (call) last = call;
-      else if (await canGoForward()) {
-        throw new Error(`O Google Flights parou de carregar o calendário depois de ${last.range[1]}.`);
+      let next = await loadMonth(() => forward.click({ timeout: 10_000 }));
+      if ("failure" in next && (await canGoForward())) {
+        // Going back a month and forward again makes the picker ask for that month anew.
+        onLog(`Google Flights: o mês depois de ${last.range[1]} falhou (${next.failure}). Tentando de novo...`);
+        next = await loadMonth(async () => {
+          await page.locator('[role="dialog"] button[aria-label="Anterior"]').first().click({ timeout: 10_000 });
+          await page.waitForTimeout(1500);
+          await forward.click({ timeout: 10_000 });
+        });
       }
+      if (!("failure" in next)) {
+        last = next;
+        continue;
+      }
+      if (!(await canGoForward())) break;
+      // What was read stays: a later month lost does not undo the earlier ones.
+      onLog(`Google Flights: parou depois de ${last.range[1]} (${next.failure}).`);
+      return { prices: sortedPrices(byOutbound), cutAfter: { date: last.range[1], reason: next.failure } };
     }
   } finally {
     await page.unroute("**/GetCalendarPicker*", capture);
   }
+  return { prices: sortedPrices(byOutbound), cutAfter: null };
+}
+
+function sortedPrices(byOutbound: Map<string, RoundTripPrice>) {
   return [...byOutbound.values()].sort((a, b) => a.outbound.localeCompare(b.outbound));
 }
 
