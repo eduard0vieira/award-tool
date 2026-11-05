@@ -4,10 +4,12 @@ import { closeChromeSession, isSessionAlive } from "../../../core/chrome-session
 import { config } from "../../config.ts";
 import { JobsModule } from "../../jobs/jobs.module.ts";
 import { sessionPoolProvider } from "../session-pool.provider.ts";
+import { IberiaFlightsController } from "./iberia-flights.controller.ts";
 import { IBERIA_POOL, IberiaSource } from "./iberia.source.ts";
 
 @Module({
   imports: [JobsModule],
+  controllers: [IberiaFlightsController],
   providers: [
     sessionPoolProvider<IberiaSession>(IBERIA_POOL, {
       label: "iberia",

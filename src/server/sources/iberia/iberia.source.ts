@@ -5,24 +5,25 @@ import { SessionPool } from "../../../core/session-pool.ts";
 import { createSearchSheet, writeFlightsCsv, type FlightRow } from "../../../outputs/spreadsheet.ts";
 import {
   buildIberiaReport,
-  CABIN_BY_BOOKING_CLASS,
   detailDays,
-  filterFlights,
   iberiaBookingLink,
   searchIberiaYear,
-  type FlightFilters,
   type IberiaCabin,
   type IberiaFlight,
   type IberiaSearchParams,
   type IberiaSession,
 } from "../../../scrapers/iberia/iberia.scraper.ts";
+import type { StoredSmilesDay } from "../../../scrapers/smiles/smiles-flights.ts";
+import { buildSmilesReport, type SmilesSection } from "../../../scrapers/smiles/smiles.scraper.ts";
 import { JobRunner } from "../../jobs/job-runner.service.ts";
 import { JobStore } from "../../jobs/job-store.service.ts";
 import type { SearchSource } from "../../search/search-source.ts";
-import { recordSearch } from "../record-search.ts";
+import { recordSearch, type Leg } from "../record-search.ts";
 import { IberiaSearchDto } from "./iberia-search.dto.ts";
 
 export const IBERIA_POOL = Symbol("IBERIA_POOL");
+export const DEFAULT_IBERIA_DETAIL_DAYS = 8;
+export const CALENDAR_SECTION_LABEL = "Menor preço do dia, qualquer cabine";
 
 const CABIN_LABELS: Record<IberiaCabin, string> = { economy: "Econômica", premium: "Premium Economy", business: "Executiva" };
 
@@ -54,22 +55,37 @@ export function iberiaFlightRows(flights: IberiaFlight[], route: IberiaSearchPar
   );
 }
 
+// What the flight filter keeps: the priced cabins only. A connection has no
+// Avios of its own, and a price-less flight in a priced list would be read as free.
+export function storedIberiaDays(dates: string[], flights: IberiaFlight[]): StoredSmilesDay[] {
+  return dates.map((date) => ({
+    date,
+    flights: flights
+      .filter((flight) => flight.date === date)
+      .flatMap((flight) =>
+        flight.fares
+          .filter((fare): fare is typeof fare & { avios: number } => fare.avios !== null)
+          // 0 is how the report says "no seat count", not "no seats": a priced offer is bookable.
+          .map((fare) => ({ cabin: fare.cabin, miles: fare.avios, seats: fare.seats ?? 0, stops: flight.stops, carriers: flight.carriers })),
+      ),
+  }));
+}
+
+// The flight report under Iberia's own names: Smiles calls the premium cabin "Conforto".
+export function iberiaFlightSections(days: StoredSmilesDay[], route: IberiaSearchParams): SmilesSection[] {
+  return buildSmilesReport(days, {}, (date) => iberiaBookingLink(route, date)).map((section) =>
+    section.label === "Conforto" ? { ...section, label: CABIN_LABELS.premium } : section,
+  );
+}
+
 export function pickDatesToDetail(dates: string[], aviosByDate: Map<string, number>, howMany: number): string[] {
-  if (howMany === 0) return [];
-  const cheapestFirst = [...dates].sort((a, b) => (aviosByDate.get(a) ?? 0) - (aviosByDate.get(b) ?? 0));
-  return howMany === -1 ? cheapestFirst : cheapestFirst.slice(0, howMany);
+  return [...dates].sort((a, b) => (aviosByDate.get(a) ?? 0) - (aviosByDate.get(b) ?? 0)).slice(0, howMany);
 }
 
-// A date that failed or was never reached has no flights either, so narrowing
-// would present it as "no matching flight" instead of "not looked at".
-export function narrowingBlocker(detail: { failedDates: number; stopped: boolean }): string | null {
-  if (detail.stopped) return "o detalhe foi interrompido antes de olhar todas as datas";
-  if (detail.failedDates > 0) return `${detail.failedDates} data(s) não puderam ser detalhadas`;
-  return null;
-}
-
-// No cabin selector: the Avios grid returns one value per day, the cheapest,
-// without saying which cabin it belongs to (docs/recon/iberia.md, 10 and 13).
+// The calendar gives every day with an award, cheapest in ANY cabin (§15), so
+// its section carries no cabin. The detail then opens the cheapest days flight
+// by flight, as many as Iberia lets one session ask (§17), and only those
+// flights' own Avios go under a cabin.
 @Injectable()
 export class IberiaSource implements SearchSource<IberiaSearchDto> {
   readonly id = "iberia";
@@ -81,9 +97,7 @@ export class IberiaSource implements SearchSource<IberiaSearchDto> {
       destination: request.destination,
       ceiling: request.ceiling ?? null,
       passengers: request.passengers ?? null,
-      detailDays: request.detailDays ?? null,
-      maxStops: request.maxStops ?? null,
-      cabins: [...(request.cabins ?? [])].sort(),
+      detailDays: request.detailDays ?? DEFAULT_IBERIA_DETAIL_DAYS,
     };
   }
 
@@ -97,135 +111,92 @@ export class IberiaSource implements SearchSource<IberiaSearchDto> {
     const { origin, destination } = request;
     const route = { origin, destination, passengers: request.passengers ?? 1 };
     const ceiling = request.ceiling ?? null;
-    const daysToDetail = request.detailDays ?? 0;
-    const filters: FlightFilters = {
-      maxStops: request.maxStops ?? null,
-      cabins: request.cabins?.length
-        ? request.cabins.map((code) => CABIN_BY_BOOKING_CLASS[code]).filter((cabin): cabin is IberiaCabin => Boolean(cabin))
-        : null,
-    };
+    const daysToDetail = request.detailDays ?? DEFAULT_IBERIA_DETAIL_DAYS;
 
     return this.runner.run(this.pool, jobId, async ({ page }) => {
       const job = this.jobs.callbacks(jobId);
-      const result = await searchIberiaYear(page, route, job.log, job.progress, job.notice, job.shouldStop);
-
+      const result = await searchIberiaYear(page, route, job.log, (fraction) => job.progress(0.6 * fraction), job.notice, job.shouldStop);
       // An error never goes down as an empty report: the user must know the search did not happen.
       if (result.kind === "error") throw new Error(result.reason);
 
       const days = result.kind === "no_availability" ? [] : result.days;
-      let section = { label: "Avios", ...buildIberiaReport(days, ceiling, route) };
-      const partialNotice = result.kind === "partial" ? `Cobertura parcial: ${result.reason}` : undefined;
+      const calendar = { label: CALENDAR_SECTION_LABEL, ...buildIberiaReport(days, ceiling, route) };
+      const notices: string[] = [];
+      const partial: string[] = result.kind === "partial" ? [`Cobertura parcial do calendário: ${result.reason}`] : [];
 
-      // The per-flight sheet says which flight and airline operate each day; the
-      // grid only gives date and price. Failing here never drops the date result.
-      let spreadsheetUrl: string | null = null;
-      let localFile: string | null = null;
-      const spreadsheetNotices: string[] = [];
       const aviosByDate = new Map(days.map((day) => [day.date, day.avios]));
-      const chosenDates = pickDatesToDetail(
-        section.days.map((day) => day.date),
+      const chosen = pickDatesToDetail(
+        calendar.days.map((day) => day.date),
         aviosByDate,
         daysToDetail,
       );
-      if (chosenDates.length > 0) {
-        const detailAll = daysToDetail === -1;
-        if (section.days.length > chosenDates.length) {
-          spreadsheetNotices.push(
-            `A planilha de voos traz os ${chosenDates.length} dia(s) mais baratos; ` +
-              `os outros ${section.days.length - chosenDates.length} ficaram sem detalhe.`,
+      let flightSections: SmilesSection[] = [];
+      let stored: StoredSmilesDay[] = [];
+      let spreadsheetUrl: string | null = null;
+      let localFile: string | null = null;
+
+      if (chosen.length > 0) {
+        if (calendar.days.length > chosen.length) {
+          notices.push(
+            `Voo a voo: os ${chosen.length} dia(s) mais baratos do calendário. ` +
+              `Os outros ${calendar.days.length - chosen.length} têm só o preço do calendário.`,
           );
         }
-
-        const { flights, failedDays } = await detailDays(
+        const detail = await detailDays(
           page,
           route,
-          chosenDates,
+          chosen,
           job.log,
-          (fraction) => job.progress(0.7 + 0.3 * fraction),
+          (fraction) => job.progress(0.6 + 0.4 * fraction),
           job.shouldStop,
           job.notice,
         );
-        const firstFailure = failedDays[0];
-        if (firstFailure) {
-          spreadsheetNotices.push(
-            `${failedDays.length} dia(s) não puderam ser detalhados. ` +
-              `Primeira falha (${firstFailure.date}): ${firstFailure.error}`,
+        const detailed = chosen.filter((date) => !detail.failedDays.some((failed) => failed.date === date));
+        if (detail.cut) {
+          partial.push(`A Iberia cortou o detalhe depois de ${detailed.length} de ${chosen.length} dia(s): ${detail.cut}`);
+        } else if (detail.failedDays.length > 0) {
+          const [first] = detail.failedDays;
+          partial.push(`${detail.failedDays.length} dia(s) não puderam ser detalhados. Primeira falha (${first!.date}): ${first!.error}`);
+        }
+
+        stored = storedIberiaDays(detailed, detail.flights);
+        flightSections = iberiaFlightSections(stored, route);
+        const onlyConnections = stored.filter((day) => day.flights.length === 0).length;
+        if (onlyConnections > 0) {
+          notices.push(
+            `${onlyConnections} dia(s) detalhados só tinham voos com conexão, que a Iberia não precifica voo a voo: ` +
+              "esses dias ficam só com o preço do calendário.",
           );
         }
 
-        const filtered = filterFlights(flights, filters);
-        if (flights.length > filtered.length) {
-          spreadsheetNotices.push(`${flights.length - filtered.length} voo(s) ficaram fora pelos filtros pedidos.`);
-        }
-
-        // With every date detailed the filter can also narrow the date list. With
-        // partial detail that would hide good dates that were simply not looked at.
-        const hasFilter = Boolean(filters.cabins?.length) || filters.maxStops != null;
-        const blocker = narrowingBlocker({ failedDates: failedDays.length, stopped: job.shouldStop() });
-        if (detailAll && hasFilter && blocker) {
-          spreadsheetNotices.push(
-            `A lista de datas não foi filtrada pelo detalhe porque ${blocker}; as datas sem detalhe continuam na lista.`,
-          );
-        } else if (detailAll && hasFilter) {
-          const datesWithFlight = new Set(filtered.map((flight) => flight.date));
-          const before = section.days.length;
-          section = {
-            label: section.label,
-            ...buildIberiaReport(
-              days.filter((day) => datesWithFlight.has(day.date)),
-              ceiling,
-              route,
-            ),
-          };
-          spreadsheetNotices.push(
-            `As datas foram filtradas pelo que o detalhe encontrou: ${section.days.length} de ${before} têm voo ` +
-              `dentro do que você pediu.`,
-          );
-        }
-
-        const rows = iberiaFlightRows(filtered, route, aviosByDate);
-
+        const rows = iberiaFlightRows(detail.flights, route, aviosByDate);
         if (rows.length > 0) {
           const stamp = new Date().toISOString().slice(0, 16).replace("T", " ");
           const fileName = `iberia-${origin}-${destination}-${stamp.replace(/[: ]/g, "-")}.csv`;
           try {
             writeFlightsCsv(rows, path.join(SPREADSHEETS_DIR, fileName));
-            // The local file always exists while Google may be down or unconfigured;
-            // without sending it to the screen a saved sheet looked like it was never made.
             localFile = `spreadsheets/${fileName}`;
           } catch (err) {
-            spreadsheetNotices.push(
-              `Não consegui gravar o CSV de voos: ${err instanceof Error ? err.message : String(err)}`,
-            );
+            notices.push(`Não consegui gravar o CSV de voos: ${err instanceof Error ? err.message : String(err)}`);
           }
           spreadsheetUrl = await createSearchSheet({ title: `Iberia ${origin}-${destination} ${stamp}`, rows }, job.log);
-        } else {
-          spreadsheetNotices.push("Nenhum voo sobrou depois dos filtros — a planilha de voos não foi gerada.");
         }
       }
 
-      // The Iberia calendar ignores `preferredCabin` (measured: six variations
-      // return identical responses). Without this, "Executiva" next to 18.000
-      // Avios becomes a wrong promise to the client.
-      const cabinNotice = filters.cabins?.length
-        ? `Atenção: o valor de cada data é o mais barato do dia em QUALQUER cabine — ` +
-          `a Iberia não dá preço por cabine no calendário. O filtro de ` +
-          `${filters.cabins.join("/")} agiu só sobre a planilha de voos.`
-        : undefined;
-      const finalNotice = [cabinNotice, partialNotice, ...spreadsheetNotices].filter(Boolean).join(" ") || undefined;
-
+      const legs: Leg[] = [{ label: `${origin} → ${destination}`, sections: [calendar, ...flightSections] }];
       recordSearch(jobId, {
         source: "IBERIA",
         origin,
         destination,
-        legs: [{ label: `${origin} → ${destination}`, sections: [section] }],
+        legs,
         ceilings: { Avios: ceiling == null ? null : Math.round(ceiling / 10) / 100 },
       });
+      if (stored.length > 0) this.jobs.keepFlights(jobId, stored);
       this.jobs.complete(jobId, {
-        section,
-        partialNotice: finalNotice,
+        legs,
         spreadsheetUrl,
         localFile,
+        ...(partial.length > 0 ? { partialNotice: [...partial, ...notices].join(" ") } : notices.length > 0 ? { notices } : {}),
       });
     });
   }

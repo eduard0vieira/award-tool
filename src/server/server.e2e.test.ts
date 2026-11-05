@@ -17,7 +17,9 @@ import { JobStore } from "./jobs/job-store.service.ts";
 import { RouteRequestDto } from "./search/request-fields.ts";
 import { SEARCH_SOURCES, type SearchSource } from "./search/search-source.ts";
 import { filterSmilesFlights, storedSmilesDays } from "../scrapers/smiles/smiles-flights.ts";
+import { iberiaBookingLink, readFlights } from "../scrapers/iberia/iberia.scraper.ts";
 import { readSmilesResponse, smilesBookingLink } from "../scrapers/smiles/smiles.scraper.ts";
+import { storedIberiaDays } from "./sources/iberia/iberia.source.ts";
 import { FIXTURES_DIR } from "../core/paths.ts";
 import fs from "node:fs";
 import path from "node:path";
@@ -579,6 +581,35 @@ describe("server with auth", () => {
     assert.ok(listed.every((item) => !("flights" in item)));
     const single = (await fetch(`${url}/api/history/${jobId}`, { headers: { cookie } }).then((r) => r.json())) as Record<string, unknown>;
     assert.equal("flights" in single, false);
+  });
+
+  test("filters a saved iberia search's priced flights under iberia's cabin names", async () => {
+    const cookie = await sessionCookie();
+    const raw = fs.readFileSync(path.join(FIXTURES_DIR, "iberia-availability-ib-direct.json"), "utf8");
+    const days = storedIberiaDays(["2026-10-28"], readFlights(raw, "2026-10-28"));
+    const base = { source: "iberia", origin: "GRU", destination: "MAD", requestKey: "k", request: "{}", status: "done" };
+    await prisma.search.create({ data: { ...base, id: "iberia-flights", flights: JSON.stringify(days) } });
+    await prisma.search.create({ data: { ...base, id: "smiles-row", source: "smiles", flights: "[]" } });
+    const filter = (id: string, body: unknown) =>
+      fetch(`${url}/api/iberia/flights/${id}/filter`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", cookie },
+        body: JSON.stringify(body),
+      });
+
+    const response = await filter("iberia-flights", { miles: { premium: { max: 40000 } } });
+    assert.equal(response.status, 200);
+    const result = (await response.json()) as { sections: { label: string; min: number | null; days: { link: string }[] }[] };
+    assert.deepEqual(
+      result.sections.map((section) => [section.label, section.min]),
+      [
+        ["Econômica", 20],
+        ["Premium Economy", 36.75],
+        ["Executiva", null],
+      ],
+    );
+    assert.equal(result.sections[1]!.days[0]!.link, iberiaBookingLink({ origin: "GRU", destination: "MAD", passengers: 1 }, "2026-10-28"));
+    assert.equal((await filter("smiles-row", {})).status, 400);
   });
 
   test("filters a saved smiles search's flights with the search's own rules", async () => {
