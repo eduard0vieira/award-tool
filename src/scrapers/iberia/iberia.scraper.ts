@@ -397,7 +397,7 @@ export async function openResultsPage(
     // Slowing down does not lift it (§16, §17): the cut comes after a number of calls, not a pace.
     throw new IberiaBlockedError(
       "A Iberia respondeu com a tela de erro ('não podemos mostrar os voos'): ela cortou a sessão depois de " +
-        "muitas consultas. Espere pelo menos 20 minutos antes de buscar na Iberia de novo.",
+        "muitas consultas. Espere cerca de 1h30 antes de buscar na Iberia de novo: 20 minutos não bastam.",
     );
   }
 }
