@@ -7,9 +7,12 @@
 //          minute without renewing, then one reopening of the results page.
 //   sweep  where the detail gets cut and what lifts the cut: sequential (or
 //          BATCH=5), renewing the bearer before it expires.
+//   reload how many days fit in a run when the page is reloaded every
+//          RELOAD_EVERY calls, before the cut; also shows whether a reload near
+//          the bearer's exp brings a new one.
 //   scan <file>  the price reading of a saved response, without a browser.
 // Each run writes run.log, summary.json and the responses to data/recon/iberia-detail/.
-// Env: INTERVAL_MS (5000), MAX_MINUTES (25), BATCH (1), PRICE_DAYS (8), RELOGIN_ON_CUT=1.
+// Env: INTERVAL_MS (5000), MAX_MINUTES (25), BATCH (1), PRICE_DAYS (8), RELOAD_EVERY (4), RELOGIN_ON_CUT=1.
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -25,7 +28,7 @@ import {
   startIberiaSession,
 } from "../src/scrapers/iberia/iberia.scraper.ts";
 
-const MODES = ["price", "token", "sweep", "scan"] as const;
+const MODES = ["price", "token", "sweep", "reload", "scan"] as const;
 type Mode = (typeof MODES)[number];
 const [modeArg = "", ...rest] = process.argv.slice(2);
 if (!(MODES as readonly string[]).includes(modeArg)) {
@@ -39,6 +42,7 @@ const MAX_MINUTES = Number(process.env.MAX_MINUTES) || 25;
 const BATCH = Number(process.env.BATCH) || 1;
 const PRICE_DAYS = Number(process.env.PRICE_DAYS) || 8;
 const RELOGIN_ON_CUT = process.env.RELOGIN_ON_CUT === "1";
+const RELOAD_EVERY = Number(process.env.RELOAD_EVERY) || 4;
 const TOKEN_PROBE_MS = 60_000;
 const RENEW_BEFORE_MS = 3 * 60_000;
 const OWN_CARRIERS = new Set(["IB", "I2", "VY"]);
@@ -690,6 +694,45 @@ async function ladder(page: Page, cut: Cut): Promise<string | null> {
   return null;
 }
 
+// §17: the cut came after ~12 calls whatever the pace, and a reload brought a
+// few back with the same token. This asks whether reloading BEFORE the cut
+// keeps the detail going, and for how many days.
+async function reloadMode(page: Page, days: string[]) {
+  log(`um dia por vez, ${INTERVAL_MS} ms entre chamadas, recarregando a página a cada ${RELOAD_EVERY}, até ${MAX_MINUTES} min`);
+  const loads: { atMin: number; ok: number; failedWith: string | null; renewed: boolean; minutesToExpBefore: number | null }[] = [];
+  let index = 0;
+  let emptyLoadsInRow = 0;
+  let detailed = 0;
+  while (minutes() < MAX_MINUTES && emptyLoadsInRow < 2) {
+    let ok = 0;
+    let failedWith: string | null = null;
+    for (let call = 0; call < RELOAD_EVERY; call++) {
+      const answer = await availability(page, days[index % days.length]!);
+      if (!isOk(answer)) {
+        failedWith = describe(answer);
+        break;
+      }
+      ok++;
+      index++;
+      await page.waitForTimeout(INTERVAL_MS);
+    }
+    detailed += ok;
+    emptyLoadsInRow = ok === 0 ? emptyLoadsInRow + 1 : 0;
+    const reopened = await reopen(page, days[index % days.length]!);
+    loads.push({ atMin: minutes(), ok, failedWith, renewed: reopened.renewed, minutesToExpBefore: reopened.minutesToExpBefore });
+    log(`carga ${loads.length}: ${ok} de ${RELOAD_EVERY} ok${failedWith ? `, parou em ${failedWith}` : ""}; ${detailed} dia(s) detalhados até aqui`);
+  }
+  const firstFailure = loads.find((load) => load.failedWith !== null) ?? null;
+  const renewals = loads.filter((load) => load.renewed);
+  summary.reload = { reloadEvery: RELOAD_EVERY, detailed, loads };
+  log(
+    `RESPOSTA (recarga): ${detailed} dia(s) detalhados em ${minutes()} min, recarregando a cada ${RELOAD_EVERY}; ` +
+      `ok por carga: ${loads.map((load) => load.ok).join(",")}; ` +
+      `${firstFailure ? `primeira falha na carga ${loads.indexOf(firstFailure) + 1} (${firstFailure.failedWith})` : "nenhuma falha"}; ` +
+      `${renewals.length ? `a recarga trouxe token novo ${renewals.length} vez(es), a primeira com ${renewals[0]!.minutesToExpBefore} min para o exp` : "nenhuma recarga trouxe token novo"}.`,
+  );
+}
+
 async function sweepMode(page: Page, days: string[]) {
   log(`varrendo em lotes de ${BATCH}, ${INTERVAL_MS} ms entre lotes, até ${MAX_MINUTES} min`);
   const first = await sweepUntilCut(page, days, 0);
@@ -734,6 +777,7 @@ try {
   if (mode === "price") await priceMode(page, days);
   if (mode === "token") await tokenMode(page, days);
   if (mode === "sweep") await sweepMode(page, days);
+  if (mode === "reload") await reloadMode(page, days);
 } catch (error) {
   failure = messageOf(error);
   log(`PAROU: ${failure}`);
