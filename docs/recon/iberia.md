@@ -611,6 +611,30 @@ fit**, nor do the ~250 days with Avios on this route. Only a short list of days
 (the ones under the client's ceiling) fits, reloading the page every few calls,
 and the result has to declare itself partial when the cut wins.
 
+### Reloading before the cut: about 16 days per search (2026-11-05)
+
+Mode `reload`: one day at a time, 5 s apart, a real reload (through
+`about:blank`) every 4 calls, fresh Chrome with the automatic login.
+
+```
+loads 1-4: 4 of 4 ok each      16 days detailed in 4 min
+load 5:    the page itself opens on #!/ibbkerror; 0 of 4, net::ERR_FAILED
+load 6:    same
+member token: the same one throughout (11.5 min left at the cut); no reload brought a new one
+```
+
+Reading:
+
+- reloading every 4 calls never hit the per-page cut, but the session hit a
+  second limit around 16–20 `/availability` calls (the page's own call on each
+  load counts too): after that even the page's load fails;
+- the token is not the cause: it stayed valid to the end;
+- not measured: how long the block lasts.
+
+Consequence for the source: about **16 days per search**, reloading every 4,
+stopping at the first load that lands on `ibbkerror`, and declaring the rest
+undetailed.
+
 ### Other findings
 
 - **The login lives in session cookies**: every new Chrome (each script run) had
