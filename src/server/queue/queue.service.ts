@@ -18,6 +18,7 @@ const LANES: Record<string, string> = {
   "tap-showcase": "awardtool",
   seatspy: "seatspy",
   smiles: "chrome",
+  iberia: "chrome",
   aa: "chrome",
   latam: "chrome",
   "latam-pairs": "chrome",

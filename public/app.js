@@ -4198,6 +4198,7 @@ const QUEUE_ARGS_BY_SOURCE = {
   "latam-pairs": [latamPairsArgs, latamNotice],
   "google-latam": [latamGoogleArgs, latamNotice],
   smiles: [smilesArgs, smilesNotice],
+  iberia: [iberiaArgs, iberiaNotice],
   seatspy: [seatspyArgs, seatspyNotice],
 };
 
@@ -4225,7 +4226,7 @@ function queueLabel(source, args) {
     return `${PROGRAM_LABELS[program] || program} (SeatSpy) ${origin} → ${destination}${roundTrip ? ", ida e volta" : ""}`;
   }
   const [origin, destination] = args;
-  const roundTrip = source === "latam" || (source === "aa" ? args[5] : args[source === "smiles" ? 3 : 2]);
+  const roundTrip = source === "latam" || (source === "aa" ? args[5] : args[source === "smiles" || source === "iberia" ? 3 : 2]);
   const detail = source === "aa" ? `, ${AA_CABIN_LABELS[args[2]] || args[2]}` : "";
   return `${PROGRAM_LABELS[source] || PROGRAM_LABELS[PROGRAM_BY_SOURCE[source]] || source} ${origin} → ${destination}${roundTrip ? ", ida e volta" : ""}${detail}`;
 }
