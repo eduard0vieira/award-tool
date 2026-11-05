@@ -1,8 +1,9 @@
 import { OptionalCeilingField, OptionalIntField, RouteRequestDto } from "../../search/request-fields.ts";
 import { AA_MAX_PASSENGERS } from "../../../scrapers/aa/aa.scraper.ts";
 
-// About 16 days fit in one session before Iberia cuts the detail (docs/recon/iberia.md §17).
-export const IBERIA_MAX_DETAIL_DAYS = 16;
+// Each load of the results page details 5 days, and after a calendar only 3 loads
+// fit before Iberia blocks everything for over an hour (docs/recon/iberia.md §17).
+export const IBERIA_MAX_DETAIL_DAYS = 15;
 
 export class IberiaSearchDto extends RouteRequestDto {
   @OptionalCeilingField("ceiling")

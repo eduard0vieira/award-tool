@@ -490,6 +490,7 @@ function repeatSearch(item) {
     iberiaOriginInput.value = item.origin;
     iberiaDestinationInput.value = item.destination;
     iberiaRoundTripCheckbox.checked = Boolean(item.roundTrip);
+    syncIberiaDetailDays();
     activateTab("iberia");
     iberiaOriginInput.focus();
   } else if ([...seatspyProgramSelect.options].some((option) => option.value === item.program)) {
@@ -3833,6 +3834,21 @@ async function startIberiaSearch(origin, destination, ceilingAvios, roundTrip, d
     card.progressEl.hidden = true;
   }
 }
+
+// Iberia blocks the whole account for over an hour past ~15 detailed days, return
+// calendar included: a round trip leaves room for both calendars (docs/recon/iberia.md §17).
+const IBERIA_ROUND_TRIP_DETAIL_DAYS = 5;
+
+function syncIberiaDetailDays() {
+  const roundTrip = iberiaRoundTripCheckbox.checked;
+  for (const option of iberiaDetailDaysSelect.options) {
+    option.disabled = roundTrip && Number(option.value) > IBERIA_ROUND_TRIP_DETAIL_DAYS;
+  }
+  if (iberiaDetailDaysSelect.selectedOptions[0]?.disabled) iberiaDetailDaysSelect.value = String(IBERIA_ROUND_TRIP_DETAIL_DAYS);
+}
+
+iberiaRoundTripCheckbox.addEventListener("change", syncIberiaDetailDays);
+syncIberiaDetailDays();
 
 function iberiaArgs() {
   clearNotice(iberiaNotice);

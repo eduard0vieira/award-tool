@@ -97,6 +97,16 @@ describe("Iberia flight detail", () => {
     );
   });
 
+  test("fifteen days, the most a search may ask, take three loads and never reach the block", async () => {
+    const site = fakeSite((load) => (load >= 4 ? { blocked: true } : {}));
+
+    const result = await detailDays(site.page, route, dates.slice(0, 15));
+
+    assert.equal(site.loads(), 3);
+    assert.equal(result.cut, null);
+    assert.deepEqual(result.failedDays, []);
+  });
+
   test("a call refused mid-load is retried on the next load, losing no day", async () => {
     const site = fakeSite((load) => (load === 1 ? { refuseAfter: 2 } : load >= 4 ? { blocked: true } : {}));
 

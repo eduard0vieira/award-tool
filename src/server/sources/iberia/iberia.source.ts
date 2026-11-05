@@ -22,7 +22,7 @@ import { recordSearch, type Leg } from "../record-search.ts";
 import { IberiaSearchDto } from "./iberia-search.dto.ts";
 
 export const IBERIA_POOL = Symbol("IBERIA_POOL");
-export const DEFAULT_IBERIA_DETAIL_DAYS = 8;
+export const DEFAULT_IBERIA_DETAIL_DAYS = 5;
 export const CALENDAR_SECTION_LABEL = "Menor preço do dia, qualquer cabine";
 
 const CABIN_LABELS: Record<IberiaCabin, string> = { economy: "Econômica", premium: "Premium Economy", business: "Executiva" };
