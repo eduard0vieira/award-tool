@@ -635,6 +635,35 @@ Consequence for the source: about **16 days per search**, reloading every 4,
 stopping at the first load that lands on `ibbkerror`, and declaring the rest
 undetailed.
 
+### The block is a time window, not a session (2026-11-05)
+
+Two real runs of the source (`searchIberiaYear` + `detailDays`, 4 calls per
+load), GRU→MAD, fresh Chrome with the automatic login each time:
+
+```
+19:43 UTC, 25 min after the reload recon, round trip, 8 days per leg:
+  GRU→MAD calendar: 247 days with Avios
+  GRU→MAD detail:   4 of 8 days, then the 2nd load landed on ibbkerror
+  MAD→GRU calendar: blocked from the first window
+21:15 UTC, 90 min after that block, one way, 16 days:
+  calendar: 246 days (one re-login on the way)
+  detail:   loads 1-3 brought 5 days each; load 4 landed on ibbkerror
+  15 of 16 days, 31 flights with Avios (Economy 20K, Premium 36.75K, Business 50.5K)
+```
+
+Reading:
+
+- a new Chrome with a new login does not reset the limit: the 19:43 run still
+  carried the recon's usage from 25 minutes before. The quota belongs to the
+  account or the IP over a window of time;
+- after 90 minutes the full budget was back: the same ~15–16 days as the
+  reload recon, on top of a whole calendar;
+- 20 minutes is not enough to recover; 90 is.
+
+Consequence: one search gets one calendar plus about 15 days of detail. On a
+round trip the outbound detail eats the budget the return calendar needs, so
+both calendars must run before any detail.
+
 ### Other findings
 
 - **The login lives in session cookies**: every new Chrome (each script run) had
