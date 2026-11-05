@@ -190,8 +190,6 @@ const iberiaOriginInput = document.getElementById("iberia-origin");
 const iberiaDestinationInput = document.getElementById("iberia-destination");
 const iberiaCeilingInput = document.getElementById("iberia-ceiling");
 const iberiaDetailDaysSelect = document.getElementById("iberia-detail-days");
-const iberiaStopsSelect = document.getElementById("iberia-stops");
-const iberiaCabinSelect = document.getElementById("iberia-cabin");
 const iberiaRoundTripCheckbox = document.getElementById("iberia-round-trip");
 const iberiaNotice = document.getElementById("iberia-notice");
 const iberiaQueue = document.getElementById("iberia-queue");
@@ -488,8 +486,6 @@ function repeatSearch(item) {
     latamDestinationInput.value = item.destination;
     activateTab("latam");
     latamOriginInput.focus();
-  } else if (item.program === "IBERIA" && document.getElementById("tab-iberia").disabled) {
-    showNotice(historyNotice, "A busca direta na Iberia ainda não está disponível.");
   } else if (item.program === "IBERIA") {
     iberiaOriginInput.value = item.origin;
     iberiaDestinationInput.value = item.destination;
@@ -627,7 +623,8 @@ async function renderHistory() {
 
 function historyCabins(item) {
   if (item.program === "tap" || item.program === "tap-calendar" || item.program === "tap-showcase") return [["Executiva", "cabin-business"], ["Econômica", "cabin-economy"]];
-  if (item.program === "LATAM" || item.program === "IBERIA") return [["Econômica", "cabin-economy"]];
+  if (item.program === "LATAM") return [["Econômica", "cabin-economy"]];
+  if (item.program === "IBERIA") return [["Avios, qualquer cabine", "cabin-economy"]];
   if (item.program === "latam-pairs" || item.program === "google-latam") {
     return item.cabin === "Economy" ? [["Econômica", "cabin-economy"]] : [["Executiva", "cabin-business"]];
   }
@@ -1206,6 +1203,7 @@ const LEG_BODIES_BY_SOURCE = {
   "tap-calendar": ([origin, destination, roundTrip, options]) => withReturn({ ...options, origin, destination }, roundTrip),
   "tap-showcase": ([options]) => [{ ...options, origin: "BR", destination: "EU" }],
   smiles: ([origin, destination, ceilings, roundTrip, period]) => withReturn({ origin, destination, ceilings, period }, roundTrip),
+  iberia: ([origin, destination, ceiling, roundTrip, detailDays]) => withReturn({ origin, destination, ceiling, detailDays }, roundTrip),
   aa: ([origin, destination, cabin, maxStops, ceiling, roundTrip, passengers]) =>
     withReturn({ origin, destination, cabin, maxStops, ceiling, passengers }, roundTrip),
   // SeatSpy's ceilings are not among the card's arguments: they are read off the
@@ -1399,7 +1397,7 @@ const spectatedGroups = new Map();
 // The originator's browser starts the next leg as soon as the previous one ends.
 const SHARED_LEG_WAIT_MS = 2 * 60 * 1000;
 // The session goes in right after these arguments; a different count would put it in the wrong one.
-const ARG_COUNT_BY_SOURCE = { tap: 4, "tap-calendar": 4, "tap-showcase": 1, "latam-pairs": 4, "google-latam": 5, seatspy: 5, smiles: 5, aa: 7, latam: 4, iberia: 7 };
+const ARG_COUNT_BY_SOURCE = { tap: 4, "tap-calendar": 4, "tap-showcase": 1, "latam-pairs": 4, "google-latam": 5, seatspy: 5, smiles: 5, aa: 7, latam: 4, iberia: 5 };
 
 function followSharedGroup(group, fromSnapshot) {
   if (ownGroupIds.has(group.id)) return;
@@ -2595,8 +2593,8 @@ const SMILES_FILTER_CABINS = [
 let flightFilterCount = 0;
 const FILTER_TYPING_MS = 500;
 
-async function filterSmilesLeg(searchId, filter) {
-  const response = await apiFetch(`/api/smiles/flights/${encodeURIComponent(searchId)}/filter`, {
+async function filterFlightsLeg(endpoint, searchId, filter) {
+  const response = await apiFetch(`/api/${endpoint}/flights/${encodeURIComponent(searchId)}/filter`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(filter),
@@ -2606,7 +2604,11 @@ async function filterSmilesLeg(searchId, filter) {
   return body;
 }
 
+// ctx.endpoint, ctx.cabins and ctx.redraw default to Smiles'.
 function addFlightFilter(card, ctx) {
+  const cabins = ctx.cabins ?? SMILES_FILTER_CABINS;
+  const endpoint = ctx.endpoint ?? "smiles";
+  const redraw = ctx.redraw ?? ((results) => redrawSmilesCard(card, ctx, results));
   const id = `flight-filter-${++flightFilterCount}`;
   const toggle = document.createElement("button");
   toggle.type = "button";
@@ -2621,7 +2623,7 @@ function addFlightFilter(card, ctx) {
   panel.className = "flight-filter";
   panel.noValidate = true;
   panel.hidden = true;
-  const milesFields = SMILES_FILTER_CABINS.map(
+  const milesFields = cabins.map(
     ([cabin, label]) => `
       <div class="field flight-filter-range" role="group" aria-labelledby="${id}-${cabin}-label">
         <span class="flight-filter-range-label" id="${id}-${cabin}-label">${label} (K)</span>
@@ -2662,7 +2664,7 @@ function addFlightFilter(card, ctx) {
   const options = panel.querySelector(".flight-filter-options");
   const status = panel.querySelector(".flight-filter-status");
   const ceilingNote = panel.querySelector(".flight-filter-ceiling");
-  const searchCeilings = SMILES_FILTER_CABINS.filter(([cabin]) => ctx.ceilings?.[cabin]).map(
+  const searchCeilings = cabins.filter(([cabin]) => ctx.ceilings?.[cabin]).map(
     ([cabin, label]) => `${label} ${ctx.ceilings[cabin] / 1000}K`,
   );
   if (searchCeilings.length) {
@@ -2678,7 +2680,7 @@ function addFlightFilter(card, ctx) {
     if (carriers.length) filter.carriers = carriers;
     if (form.get("maxStops") !== "") filter.maxStops = Number(form.get("maxStops"));
     const miles = {};
-    for (const [cabin] of SMILES_FILTER_CABINS) {
+    for (const [cabin] of cabins) {
       const range = {};
       for (const bound of ["min", "max"]) {
         const value = parseFloat(form.get(`${cabin}-${bound}`));
@@ -2692,13 +2694,13 @@ function addFlightFilter(card, ctx) {
 
   const run = async (filter) => {
     status.textContent = "Filtrando…";
-    const results = await Promise.all(ctx.legs.map((leg) => filterSmilesLeg(leg.searchId, filter)));
+    const results = await Promise.all(ctx.legs.map((leg) => filterFlightsLeg(endpoint, leg.searchId, filter)));
     return results;
   };
 
   // The cheapest cabin the airline flies on its own, so its chip says what it costs.
   const startingPrice = (from) => {
-    const found = SMILES_FILTER_CABINS.find(([cabin]) => from[cabin] != null);
+    const found = cabins.find(([cabin]) => from[cabin] != null);
     if (!found) return "";
     const [cabin, label] = found;
     return `, a partir de ${integerFormat.format(from[cabin])}${cabin === "economy" ? "" : ` na ${label}`}`;
@@ -2812,7 +2814,7 @@ function addFlightFilter(card, ctx) {
     try {
       const results = await run(filter);
       if (mine !== latest) return;
-      redrawSmilesCard(card, ctx, results);
+      redraw(results);
       showCarriers(results);
       showMilesValues(results);
       status.textContent = appliedText;
@@ -3755,48 +3757,76 @@ latamPairsForm.addEventListener("submit", (event) => {
 
 // One direction per job, like AA. No cabin: the grid returns one value per day
 // without saying which cabin it is, so there is nothing to choose.
-async function startIberiaSearch(origin, destination, ceilingAvios, roundTrip, detailDays = 0, maxStops = null, cabin = "", session) {
-  session = session || newSession("iberia", [origin, destination, ceilingAvios, roundTrip, detailDays, maxStops, cabin]);
+const IBERIA_FILTER_CABINS = [
+  ["economy", "Econômica"],
+  ["premium", "Premium Economy"],
+  ["business", "Executiva"],
+];
+
+// Only the flight sections become alerts: the calendar's value is the day's
+// cheapest in any cabin, and no cabin can be promised for it.
+function iberiaAlertOptions(outboundSections, returnSections) {
+  const sectionOf = (sections, label) => sections?.find((section) => section.label === label);
+  return IBERIA_FILTER_CABINS.map(([, label]) => ({
+    cabinClass: label,
+    outbound: sectionOf(outboundSections, label),
+    inbound: sectionOf(returnSections, label),
+  }));
+}
+
+async function startIberiaSearch(origin, destination, ceilingAvios, roundTrip, detailDays, session) {
+  const args = [origin, destination, ceilingAvios, roundTrip, detailDays];
+  session = session || newSession("iberia", args);
   const card = createJobCard(iberiaQueue, { program: "Iberia", detail: "Avios", origin, destination, roundTrip });
+  const legBodies = LEG_BODIES_BY_SOURCE.iberia(args);
   const partialNotices = [];
-  const baseBody = { source: "iberia", ceiling: ceilingAvios, detailDays, maxStops, cabins: cabin ? [cabin] : [] };
+  const legs = [];
 
   try {
-    const outbound = await runOnServer(
-      card,
-      { ...baseBody, origin, destination },
-      roundTrip ? "Buscando ida…" : "Buscando…",
-      session,
-    );
-    if (outbound.partialNotice) partialNotices.push(outbound.partialNotice);
-    renderLegSections(card.resultEl, roundTrip ? `Ida: ${origin} → ${destination}` : `${origin} → ${destination}`, [
-      { ...outbound.result, label: "Menor preço do dia, qualquer cabine", colorClass: "" },
-    ]);
-    recordLegForCopy(card, [outbound.result]);
-
-    let inbound = null;
-    if (roundTrip) {
-      inbound = await runOnServer(
-        card,
-        { ...baseBody, origin: destination, destination: origin },
-        "Buscando volta…",
-        session,
-      );
-      if (inbound.partialNotice) partialNotices.push(inbound.partialNotice);
-      renderLegSections(card.resultEl, `Volta: ${destination} → ${origin}`, [{ ...inbound.result, label: "Menor preço do dia, qualquer cabine", colorClass: "" }]);
-      recordLegForCopy(card, [inbound.result]);
+    for (const [index, body] of legBodies.entries()) {
+      const label = !roundTrip ? `${origin} → ${destination}` : index === 0 ? `Ida: ${origin} → ${destination}` : `Volta: ${destination} → ${origin}`;
+      const leg = await runOnServer(card, { source: "iberia", ...body }, !roundTrip ? "Buscando…" : index === 0 ? "Buscando ida…" : "Buscando volta…", session);
+      if (leg.partialNotice) partialNotices.push(leg.partialNotice);
+      partialNotices.push(...(leg.notices || []).map((notice) => (roundTrip ? `${index === 0 ? "Ida" : "Volta"}: ${notice}` : notice)));
+      const [{ sections }] = leg.result;
+      renderLegSections(card.resultEl, label, sections);
+      recordLegForCopy(card, sections);
+      legs.push({ label, searchId: leg.searchId, sections, spreadsheetUrl: leg.spreadsheetUrl, localFile: leg.localFile });
     }
 
     card.setStatus("Pronto", "status-done");
     card.resultEl.hidden = card.minimized;
     showPartialNotices(card, partialNotices);
     updateCardActions(card);
-    // Without this the per-flight sheet was created and the card said nothing:
-    // the file existed and so did the Google tab, but it looked like nothing was made.
-    showSpreadsheetLink(card, outbound.spreadsheetUrl, roundTrip ? "ida" : "busca");
-    showSpreadsheetLink(card, inbound?.spreadsheetUrl, "volta");
-    showLocalFile(card, outbound.localFile, roundTrip ? "ida" : "busca");
-    showLocalFile(card, inbound?.localFile, "volta");
+    legs.forEach((leg, index) => {
+      const which = !roundTrip ? "busca" : index === 0 ? "ida" : "volta";
+      showSpreadsheetLink(card, leg.spreadsheetUrl, which);
+      showLocalFile(card, leg.localFile, which);
+    });
+    showAlertButtons(card, "IB", origin, destination, iberiaAlertOptions(legs[0].sections, legs[1]?.sections));
+    if (detailDays > 0 && legs.every((leg) => leg.searchId)) {
+      addFlightFilter(card, {
+        origin,
+        destination,
+        legs,
+        endpoint: "iberia",
+        cabins: IBERIA_FILTER_CABINS,
+        // The calendar stays on top: the filter only reshapes the flights the detail priced.
+        redraw: (results) => {
+          card.resultEl.replaceChildren();
+          card.copyLegs = [];
+          legs.forEach((leg, index) => {
+            const sections = [leg.sections[0], ...results[index].sections];
+            renderLegSections(card.resultEl, leg.label, sections);
+            recordLegForCopy(card, sections);
+          });
+          card.root.querySelector(":scope > .alert-actions")?.remove();
+          markAlertsOutdated(card);
+          showAlertButtons(card, "IB", origin, destination, iberiaAlertOptions(results[0].sections, results[1]?.sections));
+          updateCardActions(card);
+        },
+      });
+    }
   } catch (err) {
     showFailure(card, err);
   } finally {
@@ -3804,25 +3834,28 @@ async function startIberiaSearch(origin, destination, ceilingAvios, roundTrip, d
   }
 }
 
-iberiaForm.addEventListener("submit", (event) => {
-  event.preventDefault();
+function iberiaArgs() {
   clearNotice(iberiaNotice);
   const origin = iberiaOriginInput.value.trim().toUpperCase();
   const destination = iberiaDestinationInput.value.trim().toUpperCase();
   if (!origin || !destination) {
     showNotice(iberiaNotice, "Preencha origem e destino.");
-    return;
+    return null;
   }
   const ceilingK = parseFloat(iberiaCeilingInput.value);
-  startIberiaSearch(
+  return [
     origin,
     destination,
     Number.isFinite(ceilingK) && ceilingK > 0 ? ceilingK * 1000 : null,
     iberiaRoundTripCheckbox.checked,
-    Number(iberiaDetailDaysSelect.value) || 0,
-    iberiaStopsSelect.value === "" ? null : Number(iberiaStopsSelect.value),
-    iberiaCabinSelect.value,
-  );
+    Number(iberiaDetailDaysSelect.value),
+  ];
+}
+
+iberiaForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const args = iberiaArgs();
+  if (args) startIberiaSearch(...args);
 });
 
 function aaArgs() {

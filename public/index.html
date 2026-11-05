@@ -45,7 +45,7 @@
       <button type="button" role="tab" id="tab-aa" aria-controls="panel-aa" aria-selected="false" tabindex="-1" class="tab-button" data-tab="aa">American</button>
       <button type="button" role="tab" id="tab-latam" aria-controls="panel-latam" aria-selected="false" tabindex="-1" class="tab-button" data-tab="latam">LATAM</button>
       <button type="button" role="tab" id="tab-smiles" aria-controls="panel-smiles" aria-selected="false" tabindex="-1" class="tab-button" data-tab="smiles">Smiles</button>
-      <button type="button" role="tab" id="tab-iberia" aria-controls="panel-iberia" aria-selected="false" tabindex="-1" class="tab-button" data-tab="iberia" disabled title="Em breve">Iberia <span class="tab-soon">Em breve</span></button>
+      <button type="button" role="tab" id="tab-iberia" aria-controls="panel-iberia" aria-selected="false" tabindex="-1" class="tab-button" data-tab="iberia">Iberia</button>
       <button type="button" role="tab" id="tab-queue" aria-controls="panel-queue" aria-selected="false" tabindex="-1" class="tab-button" data-tab="queue">Fila <span class="tab-count" id="queue-count" hidden></span></button>
       <button type="button" role="tab" id="tab-history" aria-controls="panel-history" aria-selected="false" tabindex="-1" class="tab-button" data-tab="history">Histórico</button>
     </div>
@@ -287,15 +287,12 @@
           <input id="iberia-destination" name="destination" placeholder="ex.: MAD" maxlength="3" pattern="[A-Za-z]{3}" title="Código IATA de 3 letras" required autocomplete="off" autocapitalize="characters" spellcheck="false" />
         </div>
         <div class="field">
-          <label for="iberia-detail-days">Quantas datas detalhar voo a voo</label>
+          <label for="iberia-detail-days">Dias voo a voo, por trecho</label>
           <select id="iberia-detail-days" name="detail-days">
-            <option value="0" selected>Nenhuma — só a lista de datas (~40s)</option>
-            <option value="3">As 3 datas mais baratas (~1 min a mais)</option>
-            <option value="5">As 5 mais baratas (~1min30 a mais)</option>
-            <option value="10">As 10 mais baratas (~3 min a mais)</option>
-            <option value="20">As 20 mais baratas (~5 min a mais)</option>
-            <option value="40">As 40 mais baratas (~10 min a mais)</option>
-            <option value="-1">TODAS as datas — como o bot antigo (pode passar de 1 hora)</option>
+            <option value="0">Nenhum: só o calendário</option>
+            <option value="4">Os 4 mais baratos</option>
+            <option value="8" selected>Os 8 mais baratos</option>
+            <option value="16">Os 16 mais baratos (só ida)</option>
           </select>
         </div>
         <label class="checkbox">
@@ -309,34 +306,13 @@
             <label for="iberia-ceiling">Teto de Avios (K) por passageiro</label>
             <input id="iberia-ceiling" name="ceiling" type="number" min="1" step="0.5" placeholder="ex.: 40" autocomplete="off" />
           </div>
-          <div class="field">
-            <label for="iberia-stops">Conexões (só filtra as datas detalhadas)</label>
-            <select id="iberia-stops" name="stops">
-              <option value="">Todos os voos</option>
-              <option value="0">Só voo direto</option>
-              <option value="1">Até 1 conexão</option>
-              <option value="2">Até 2 conexões</option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="iberia-cabin">Cabine (só filtra as datas detalhadas)</label>
-            <select id="iberia-cabin" name="cabin">
-              <option value="">Todas</option>
-              <option value="ECONOMY">Econômica</option>
-              <option value="PREMIUMTOURIST">Premium Economy</option>
-              <option value="BUSINESS">Executiva</option>
-              <option value="FIRST">Primeira</option>
-            </select>
-          </div>
         </div>
         <small class="hint">
-          <strong>O preço de cada data é o mais barato do dia, em qualquer cabine e
-          qualquer roteamento</strong>, inclusive com escala em parceiras: a Iberia
-          não publica preço por cabine. Para saber o voo e a companhia de cada
-          data, detalhe as datas: cada uma leva cerca de 15 segundos e entra na
-          planilha por voo, com escalas, companhia e vagas. Cabine e conexões só
-          filtram as datas detalhadas, exceto no modo <em>TODAS as datas</em>,
-          em que filtram a lista inteira.
+          O calendário traz todos os dias com Avios, pelo <strong>menor preço do dia em qualquer
+          cabine</strong>: a Iberia não dá preço por cabine nele. Os dias mais baratos são então
+          abertos voo a voo, e só os voos diretos da própria Iberia vêm com o Avios de cada cabine.
+          A Iberia corta depois de uns 16 dias por busca: numa ida e volta, até 8 em cada trecho.
+          Depois, filtre os voos por companhia, conexões e Avios.
         </small>
       </form>
 
