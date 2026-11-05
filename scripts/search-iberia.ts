@@ -2,7 +2,8 @@ import "dotenv/config";
 import crypto from "node:crypto";
 import path from "node:path";
 import { SPREADSHEETS_DIR } from "../src/core/paths.ts";
-import { createSearchSheet, saveSearch, writeFlightsCsv, type FlightRow } from "../src/outputs/spreadsheet.ts";
+import { createSearchSheet, saveSearch, writeFlightsCsv } from "../src/outputs/spreadsheet.ts";
+import { iberiaFlightRows } from "../src/server/sources/iberia/iberia.source.ts";
 import {
   buildIberiaReport,
   detailDays,
@@ -158,28 +159,7 @@ async function main() {
       console.log(`⚠️  ${failedDays.length} dia(s) falharam. O primeiro: ${failedDays[0]!.date} — ${failedDays[0]!.error}`);
     }
 
-    const rows: FlightRow[] = filtered.map((flight) => ({
-      departure_date: flight.date,
-      arrival_date: flight.arrivalDate,
-      departure_station: flight.origin,
-      departure_time: flight.departureTime,
-      arrival_station: flight.destination,
-      connections: flight.stops,
-      connecting_airports: flight.connectingAirports,
-      // Empty on purpose: Iberia has no per-flight price. The day's goes in `day_avios`, which is what it is.
-      points: "",
-      duration: flight.durationMinutes,
-      cabin_category: flight.cabins,
-      operation_carriers: flight.airlines,
-      program: "IBERIA",
-      source_fare: flight.fare,
-      available_seats: flight.seats ?? "",
-      aircraft: flight.aircraft,
-      tax: "",
-      class_of_service: flight.serviceClasses,
-      url: iberiaBookingLink(params, flight.date),
-      day_avios: aviosByDate.get(flight.date) ?? "",
-    }));
+    const rows = iberiaFlightRows(filtered, params, aviosByDate);
 
     if (rows.length === 0) {
       console.log("Nenhum voo sobrou depois dos filtros — planilha de voos não foi gerada.");

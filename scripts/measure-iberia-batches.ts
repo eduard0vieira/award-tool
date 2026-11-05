@@ -44,7 +44,7 @@ async function main() {
     if (batches === "detail") {
       const start = Date.now();
       const { flights, failedDays } = await detailDays(page, params, dates, log);
-      const withBusiness = new Set(flights.filter((flight) => flight.cabins.includes("BUSINESS")).map((flight) => flight.date));
+      const withBusiness = new Set(flights.filter((flight) => flight.fares.some((fare) => fare.cabin === "business")).map((flight) => flight.date));
       console.log(
         `\ndetalhe de ${dates.length} datas em ${((Date.now() - start) / 60000).toFixed(1)} min: ` +
           `${flights.length} voos, ${failedDays.length} dia(s) com falha, ${withBusiness.size} dia(s) com executiva`,
@@ -79,10 +79,10 @@ async function main() {
 
       const failures = results.filter((result): result is { date: string; error: string } => "error" in result);
       const successes = results.filter((result): result is { date: string; flights: IberiaFlight[] } => "flights" in result);
-      const daysWithBusiness = successes.filter((result) => result.flights.some((flight) => flight.cabins.includes("BUSINESS"))).length;
+      const daysWithBusiness = successes.filter((result) => result.flights.some((flight) => flight.fares.some((fare) => fare.cabin === "business"))).length;
       for (const result of successes) {
         for (const flight of result.flights) {
-          for (const cabin of flight.cabins.split(", ").filter(Boolean)) cabinsSeen.set(cabin, (cabinsSeen.get(cabin) ?? 0) + 1);
+          for (const { cabin } of flight.fares) cabinsSeen.set(cabin, (cabinsSeen.get(cabin) ?? 0) + 1);
         }
       }
       console.log(

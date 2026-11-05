@@ -5,11 +5,15 @@ import { SessionPool } from "../../../core/session-pool.ts";
 import { createSearchSheet, writeFlightsCsv, type FlightRow } from "../../../outputs/spreadsheet.ts";
 import {
   buildIberiaReport,
+  CABIN_BY_BOOKING_CLASS,
   detailDays,
   filterFlights,
   iberiaBookingLink,
   searchIberiaYear,
   type FlightFilters,
+  type IberiaCabin,
+  type IberiaFlight,
+  type IberiaSearchParams,
   type IberiaSession,
 } from "../../../scrapers/iberia/iberia.scraper.ts";
 import { JobRunner } from "../../jobs/job-runner.service.ts";
@@ -19,6 +23,36 @@ import { recordSearch } from "../record-search.ts";
 import { IberiaSearchDto } from "./iberia-search.dto.ts";
 
 export const IBERIA_POOL = Symbol("IBERIA_POOL");
+
+const CABIN_LABELS: Record<IberiaCabin, string> = { economy: "Econômica", premium: "Premium Economy", business: "Executiva" };
+
+// One row per cabin of each flight: the Avios is that cabin's, and a connection
+// has none (Iberia prices only its own direct flights), so its cell stays empty.
+export function iberiaFlightRows(flights: IberiaFlight[], route: IberiaSearchParams, aviosByDate: Map<string, number>): FlightRow[] {
+  return flights.flatMap((flight) =>
+    flight.fares.map((fare) => ({
+      departure_date: flight.date,
+      arrival_date: flight.arrivalDate,
+      departure_station: flight.origin,
+      departure_time: flight.departureTime,
+      arrival_station: flight.destination,
+      connections: flight.stops,
+      connecting_airports: flight.connectingAirports.join(", "),
+      points: fare.avios ?? "",
+      duration: flight.durationMinutes,
+      cabin_category: CABIN_LABELS[fare.cabin],
+      operation_carriers: flight.carriers.map((carrier) => carrier.code).join(", "),
+      program: "IBERIA",
+      source_fare: "",
+      available_seats: fare.seats ?? "",
+      aircraft: flight.aircraft.join(", "),
+      tax: "",
+      class_of_service: "",
+      url: iberiaBookingLink(route, flight.date),
+      day_avios: aviosByDate.get(flight.date) ?? "",
+    })),
+  );
+}
 
 export function pickDatesToDetail(dates: string[], aviosByDate: Map<string, number>, howMany: number): string[] {
   if (howMany === 0) return [];
@@ -66,7 +100,9 @@ export class IberiaSource implements SearchSource<IberiaSearchDto> {
     const daysToDetail = request.detailDays ?? 0;
     const filters: FlightFilters = {
       maxStops: request.maxStops ?? null,
-      cabins: request.cabins && request.cabins.length > 0 ? request.cabins : null,
+      cabins: request.cabins?.length
+        ? request.cabins.map((code) => CABIN_BY_BOOKING_CLASS[code]).filter((cabin): cabin is IberiaCabin => Boolean(cabin))
+        : null,
     };
 
     return this.runner.run(this.pool, jobId, async ({ page }) => {
@@ -147,27 +183,7 @@ export class IberiaSource implements SearchSource<IberiaSearchDto> {
           );
         }
 
-        const rows: FlightRow[] = filtered.map((flight) => ({
-          departure_date: flight.date,
-          arrival_date: flight.arrivalDate,
-          departure_station: flight.origin,
-          departure_time: flight.departureTime,
-          arrival_station: flight.destination,
-          connections: flight.stops,
-          connecting_airports: flight.connectingAirports,
-          points: "", // Iberia has no per-flight price; the day's goes in day_avios.
-          duration: flight.durationMinutes,
-          cabin_category: flight.cabins,
-          operation_carriers: flight.airlines,
-          program: "IBERIA",
-          source_fare: flight.fare,
-          available_seats: flight.seats ?? "",
-          aircraft: flight.aircraft,
-          tax: "",
-          class_of_service: flight.serviceClasses,
-          url: iberiaBookingLink(route, flight.date),
-          day_avios: aviosByDate.get(flight.date) ?? "",
-        }));
+        const rows = iberiaFlightRows(filtered, route, aviosByDate);
 
         if (rows.length > 0) {
           const stamp = new Date().toISOString().slice(0, 16).replace("T", " ");

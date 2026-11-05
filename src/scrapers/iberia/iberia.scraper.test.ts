@@ -9,34 +9,52 @@ const fixture = (name: string) => fs.readFileSync(path.join(FIXTURES_DIR, name),
 const route = { origin: "GRU", destination: "MAD", passengers: 1 };
 
 describe("Iberia availability parser", () => {
-  test("reads each offer of the day as a flight", () => {
-    const flights = readFlights(fixture("iberia-real.json"), "2026-12-15");
-    assert.equal(flights.length, 5);
-    assert.deepEqual(flights[0], {
-      date: "2026-12-15",
-      departureTime: "00:25",
-      arrivalDate: "2026-12-15",
-      arrivalTime: "18:05",
+  test("prices each cabin of a direct IB flight with its cheapest offer and that offer's seats", () => {
+    const flights = readFlights(fixture("iberia-availability-ib-direct.json"), "2026-10-28");
+    assert.equal(flights.length, 12);
+    assert.deepEqual(flights[1], {
+      date: "2026-10-28",
+      departureTime: "20:30",
+      arrivalDate: "2026-10-29",
+      arrivalTime: flights[1]!.arrivalTime,
       origin: "GRU",
       destination: "MAD",
-      stops: 1,
-      connectingAirports: "CMN",
-      durationMinutes: 820,
-      cabins: "ECONOMY, BUSINESS",
-      airlines: "AT",
-      serviceClasses: "E, Z",
-      aircraft: "Boeing 787-9, Boeing 737",
-      seats: 2,
-      fare: "EATFF, ZATFF",
+      stops: 0,
+      connectingAirports: [],
+      durationMinutes: flights[1]!.durationMinutes,
+      carriers: [{ code: "IB", name: "Iberia" }],
+      aircraft: ["Airbus A330"],
+      fares: [
+        { cabin: "economy", avios: 20000, seats: 9 },
+        { cabin: "premium", avios: 36750, seats: 2 },
+      ],
+      otherCabins: [],
     });
   });
 
-  test("filters flights by stops and by cabin", () => {
-    const flights = readFlights(fixture("iberia-real-plus1.json"), "2026-12-16");
-    assert.equal(flights.length, 9);
-    assert.equal(filterFlights(flights, { maxStops: 0 }).length, 0);
-    assert.equal(filterFlights(flights, { maxStops: 1 }).length, 1);
-    assert.equal(filterFlights(flights, { cabins: ["BUSINESS"] }).length, 9);
+  test("leaves a connection without a price instead of making one up", () => {
+    const flights = readFlights(fixture("iberia-availability-ib-direct.json"), "2026-10-28");
+    const latamToIberia = flights.find((flight) => flight.carriers.map((carrier) => carrier.code).join(">") === "LA>IB")!;
+    assert.deepEqual(latamToIberia.fares, [{ cabin: "economy", avios: null, seats: 7 }]);
+    assert.deepEqual(latamToIberia.connectingAirports, ["FOR"]);
+  });
+
+  test("keeps a cabin offered on only one leg out of the trip's cabins, and says so", () => {
+    const [moroccan] = readFlights(fixture("iberia-real.json"), "2026-12-15");
+    assert.deepEqual(moroccan!.fares, [{ cabin: "economy", avios: null, seats: 4 }]);
+    assert.deepEqual(moroccan!.otherCabins, ["BUSINESS"]);
+  });
+
+  test("refuses a cabin it does not know instead of filing it as economy", () => {
+    const text = fixture("iberia-availability-ib-direct.json").replace('"bookingClass":"PREMIUMTOURIST"', '"bookingClass":"SUPERCLUB"');
+    assert.throws(() => readFlights(text, "2026-10-28"), /cabine 'SUPERCLUB'/);
+  });
+
+  test("filters flights by stops, airline and cabin", () => {
+    const flights = readFlights(fixture("iberia-availability-ib-direct.json"), "2026-10-28");
+    assert.equal(filterFlights(flights, { maxStops: 0 }).length, 2);
+    assert.equal(filterFlights(flights, { airlines: ["IB"] }).length, 2);
+    assert.equal(filterFlights(flights, { cabins: ["premium"] }).length, 1);
   });
 
   test("builds the date report in K with a booking link per day", () => {

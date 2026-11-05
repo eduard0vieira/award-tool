@@ -19,8 +19,8 @@ import {
 //   with an award carry `avios`, the others simply lack the field
 //
 // It is what the "Vista mensal de voos" screen uses. `/availability`, which the
-// old project hit, returns seats per flight and NO price, so it cannot work
-// alone (see "why no seats" further down).
+// old project hit, gives each flight, but prices only Iberia's own direct ones
+// and is cut after a few calls (§17), so it details a short list of days.
 
 export type IberiaSession = ChromeSession;
 
@@ -614,18 +614,18 @@ export function buildIberiaReport(
   };
 }
 
-// Why this source reports no seats: `/availability` has `remainingSeats` per
-// offer but NO price, and the grid has the day's price without saying which
-// flight it belongs to. Joining them would assume the grid's price is the
-// fullest flight's, and announcing one flight's seats with another's price is
-// the lie `buildSmilesReport` avoids on purpose. Until price and flight can be
-// linked by the data, the text carries only dates, as with AA.
-
 // The grid says WHICH days have an award and for how much, nothing about the
 // flight, and the flight matters: on the first real GRU→MAD search all 9
-// itineraries of the day had a stop, all via Casablanca on Royal Air Maroc,
-// taking 14h to 29h. `/availability` tells that. It costs one request per date,
-// so it only runs on the days that matter.
+// itineraries of the day had a stop, all via Casablanca on Royal Air Maroc.
+// `/availability` tells that, and on direct IB flights it also carries each
+// offer's Avios (§17). It costs one request per date, so it only runs on the
+// days that matter.
+
+export type IberiaCabin = "economy" | "premium" | "business";
+export type IberiaCarrier = { code: string; name: string };
+// One cabin of one itinerary: the cheapest priced offer and that offer's own
+// seats. Connections carry no price at any level (§17): `avios` is null, never 0.
+export type IberiaFare = { cabin: IberiaCabin; avios: number | null; seats: number | null };
 
 export type IberiaFlight = {
   date: string; // departure date, YYYY-MM-DD
@@ -635,32 +635,37 @@ export type IberiaFlight = {
   origin: string;
   destination: string;
   stops: number;
-  connectingAirports: string; // "CMN, BCN"
+  connectingAirports: string[];
   durationMinutes: number;
-  cabins: string; // "ECONOMY" or "ECONOMY, BUSINESS"
-  airlines: string; // "AT, IB"
-  serviceClasses: string; // rbd per segment
-  aircraft: string;
-  seats: number | null; // the itinerary's lowest: the bottleneck decides
-  fare: string; // fareBasis
+  carriers: IberiaCarrier[]; // who operates, in flight order
+  aircraft: string[];
+  fares: IberiaFare[];
+  // Booking classes left out of `fares`: Iberia's FIRST has no cabin of ours,
+  // and a cabin offered on only some legs of a connection is no cabin of the trip.
+  otherCabins: string[];
 };
 
 export type FlightFilters = {
   maxStops?: number | null;
   maxDurationMinutes?: number | null;
   airlines?: string[] | null; // accepted IATA codes, e.g. ["IB","I2","VY"]
-  // The offers' `bookingClass`: ECONOMY, BUSINESS, PREMIUMTOURIST, FIRST. Only
-  // exists at this level; the calendar that produces the dates has no cabin.
-  cabins?: string[] | null;
+  cabins?: IberiaCabin[] | null;
 };
 
-type RawOffer = { bookingClass?: string; rbd?: string; remainingSeats?: number; fareBasis?: string };
+export const CABIN_BY_BOOKING_CLASS: Record<string, IberiaCabin | null> = {
+  ECONOMY: "economy",
+  PREMIUMTOURIST: "premium",
+  BUSINESS: "business",
+  FIRST: null,
+};
+
+type RawPrice = { fare?: number; currency?: string };
+type RawOffer = { bookingClass?: string; remainingSeats?: number; totalPrice?: RawPrice };
+type RawCarrier = { code?: string; name?: string };
 type RawSegment = {
-  departureDateTime?: string;
-  arrivalDateTime?: string;
-  departure?: { airport?: { code?: string } };
   arrival?: { airport?: { code?: string } };
-  flight?: { operationalCarrier?: { code?: string }; aircraft?: { description?: string } };
+  departure?: { airport?: { code?: string } };
+  flight?: { operationalCarrier?: RawCarrier; aircraft?: { description?: string } };
   offers?: RawOffer[];
 };
 type RawSlice = {
@@ -675,6 +680,67 @@ type AvailabilityResponse = {
 };
 
 const unique = (values: (string | undefined)[]) => [...new Set(values.filter(Boolean) as string[])];
+
+function aviosOf(offer: RawOffer, date: string): number | null {
+  if (!offer.totalPrice) return null;
+  const { fare, currency } = offer.totalPrice;
+  if (currency !== "AVIOS" || typeof fare !== "number") {
+    throw new Error(`Uma oferta de ${date} veio com preço que não é Avios (${JSON.stringify(offer.totalPrice)}).`);
+  }
+  return fare;
+}
+
+function cabinOf(offer: RawOffer, date: string): IberiaCabin | null {
+  const code = offer.bookingClass;
+  if (!code || !(code in CABIN_BY_BOOKING_CLASS)) {
+    throw new Error(`Uma oferta de ${date} veio com a cabine '${code}', que o bot não conhece.`);
+  }
+  return CABIN_BY_BOOKING_CLASS[code]!;
+}
+
+function faresOf(segments: RawSegment[], date: string): { fares: IberiaFare[]; otherCabins: string[] } {
+  const perSegment = segments.map((segment) => {
+    const byCabin = new Map<IberiaCabin, RawOffer[]>();
+    const other: string[] = [];
+    for (const offer of segment.offers ?? []) {
+      const cabin = cabinOf(offer, date);
+      if (cabin === null) {
+        other.push(offer.bookingClass!);
+        continue;
+      }
+      byCabin.set(cabin, [...(byCabin.get(cabin) ?? []), offer]);
+    }
+    return { byCabin, other };
+  });
+
+  const fares: IberiaFare[] = [];
+  const otherCabins = new Set(perSegment.flatMap((segment) => segment.other));
+  const cabins = new Set(perSegment.flatMap((segment) => [...segment.byCabin.keys()]));
+  for (const cabin of cabins) {
+    if (!perSegment.every((segment) => segment.byCabin.has(cabin))) {
+      otherCabins.add(Object.keys(CABIN_BY_BOOKING_CLASS).find((code) => CABIN_BY_BOOKING_CLASS[code] === cabin)!);
+      continue;
+    }
+    if (segments.length === 1) {
+      const offers = perSegment[0]!.byCabin.get(cabin)!;
+      const priced = offers
+        .map((offer) => ({ offer, avios: aviosOf(offer, date) }))
+        .filter((entry): entry is { offer: RawOffer; avios: number } => entry.avios !== null);
+      if (priced.length > 0) {
+        const cheapest = priced.reduce((a, b) => (a.avios <= b.avios ? a : b));
+        fares.push({ cabin, avios: cheapest.avios, seats: cheapest.offer.remainingSeats ?? null });
+        continue;
+      }
+    }
+    // Without a price the seats are the trip's bottleneck in that cabin: 9 on one leg are useless if the next has 2.
+    const seats = perSegment.map((segment) => {
+      const counts = segment.byCabin.get(cabin)!.map((offer) => offer.remainingSeats).filter((n): n is number => typeof n === "number");
+      return counts.length > 0 ? Math.max(...counts) : null;
+    });
+    fares.push({ cabin, avios: null, seats: seats.includes(null) ? null : Math.min(...(seats as number[])) });
+  }
+  return { fares, otherCabins: [...otherCabins] };
+}
 
 // The page's per-load allowance ran out (a call that never answers) or its
 // token did (401): both are cured by a real reload, not by a retry on the spot.
@@ -754,35 +820,34 @@ export function readFlights(text: string, date: string): IberiaFlight[] {
     for (const slice of originDestination.slices ?? []) {
       const segments = slice.segments ?? [];
       if (segments.length === 0) continue;
+      const field = <T>(value: T | undefined, name: string): T => {
+        if (value === undefined || value === null || value === "") throw new Error(`Um voo de ${date} veio sem '${name}'.`);
+        return value;
+      };
 
-      const [departureDate = "", departureTime = ""] = (slice.departureDateTime ?? "").split(" ");
-      const [arrivalDate = "", arrivalTime = ""] = (slice.arrivalDateTime ?? "").split(" ");
-
-      const offers = segments.flatMap((segment) => segment.offers ?? []);
-      const seats = offers.map((offer) => offer.remainingSeats).filter((n): n is number => typeof n === "number");
+      const [departureDate, departureTime] = field(slice.departureDateTime, "departureDateTime").split(" ") as [string, string];
+      const [arrivalDate, arrivalTime] = field(slice.arrivalDateTime, "arrivalDateTime").split(" ") as [string, string];
+      const carriers = new Map<string, IberiaCarrier>();
+      for (const segment of segments) {
+        const carrier = field(segment.flight?.operationalCarrier, "flight.operationalCarrier");
+        const code = field(carrier.code, "operationalCarrier.code");
+        carriers.set(code, { code, name: field(carrier.name, "operationalCarrier.name") });
+      }
 
       flights.push({
         date: departureDate,
         departureTime,
         arrivalDate,
         arrivalTime,
-        origin: segments[0]!.departure?.airport?.code ?? originDestination.origin ?? "",
-        destination: segments[segments.length - 1]!.arrival?.airport?.code ?? originDestination.destination ?? "",
+        origin: field(segments[0]!.departure?.airport?.code, "departure.airport.code"),
+        destination: field(segments.at(-1)!.arrival?.airport?.code, "arrival.airport.code"),
         stops: slice.stopsNumber ?? segments.length - 1,
-        // Connections are each segment's arrival except the last: the final destination is no stop.
-        connectingAirports: segments
-          .slice(0, -1)
-          .map((segment) => segment.arrival?.airport?.code)
-          .filter(Boolean)
-          .join(", "),
-        durationMinutes: slice.duration ?? 0,
-        cabins: unique(offers.map((offer) => offer.bookingClass)).join(", "),
-        airlines: unique(segments.map((segment) => segment.flight?.operationalCarrier?.code)).join(", "),
-        serviceClasses: unique(offers.map((offer) => offer.rbd)).join(", "),
-        aircraft: unique(segments.map((segment) => segment.flight?.aircraft?.description)).join(", "),
-        // The itinerary's bottleneck: 8 seats on the first leg are useless if the second has 2.
-        seats: seats.length > 0 ? Math.min(...seats) : null,
-        fare: unique(offers.map((offer) => offer.fareBasis)).join(", "),
+        // Each segment's arrival except the last: the final destination is no stop.
+        connectingAirports: segments.slice(0, -1).map((segment) => field(segment.arrival?.airport?.code, "arrival.airport.code")),
+        durationMinutes: field(slice.duration, "duration"),
+        carriers: [...carriers.values()],
+        aircraft: unique(segments.map((segment) => segment.flight?.aircraft?.description)),
+        ...faresOf(segments, date),
       });
     }
   }
@@ -835,16 +900,9 @@ export function filterFlights(flights: IberiaFlight[], filters: FlightFilters): 
   return flights.filter((flight) => {
     if (filters.maxStops != null && flight.stops > filters.maxStops) return false;
     if (filters.maxDurationMinutes != null && flight.durationMinutes > filters.maxDurationMinutes) return false;
-    if (filters.airlines?.length) {
-      const flightAirlines = flight.airlines.split(", ").filter(Boolean);
-      if (!flightAirlines.every((code) => filters.airlines!.includes(code))) return false;
-    }
-    if (filters.cabins?.length) {
-      // ONE offer in the requested cabin is enough: the itinerary works if it
-      // can be booked in that class, even when it has others too.
-      const flightCabins = flight.cabins.split(", ").filter(Boolean);
-      if (!flightCabins.some((cabin) => filters.cabins!.includes(cabin))) return false;
-    }
+    if (filters.airlines?.length && !flight.carriers.every((carrier) => filters.airlines!.includes(carrier.code))) return false;
+    // ONE fare in a requested cabin is enough: the trip works if it can be booked in it.
+    if (filters.cabins?.length && !flight.fares.some((fare) => filters.cabins!.includes(fare.cabin))) return false;
     return true;
   });
 }

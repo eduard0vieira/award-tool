@@ -19,14 +19,15 @@ for (const name of files) {
   for (const flight of flights.slice(0, 3)) {
     console.log(
       `  ${flight.date} ${flight.departureTime} ${flight.origin}→${flight.destination} | ${flight.stops} escala(s)` +
-        `${flight.connectingAirports ? ` via ${flight.connectingAirports}` : ""} | ${flight.airlines}` +
-        ` | ${Math.round(flight.durationMinutes / 60)}h | ${flight.cabins} | vagas ${flight.seats ?? "-"}` +
-        ` | ${flight.aircraft.slice(0, 40)}`,
+        `${flight.connectingAirports.length ? ` via ${flight.connectingAirports.join(", ")}` : ""}` +
+        ` | ${flight.carriers.map((carrier) => carrier.code).join(", ")} | ${Math.round(flight.durationMinutes / 60)}h` +
+        ` | ${flight.fares.map((fare) => `${fare.cabin} ${fare.avios ?? "sem preço"} (${fare.seats ?? "-"})`).join(", ")}` +
+        ` | ${flight.aircraft.join(", ").slice(0, 40)}`,
     );
   }
   console.log(
-    `  sem companhia: ${flights.filter((flight) => !flight.airlines).length} | ` +
-      `sem vagas: ${flights.filter((flight) => flight.seats == null).length}`,
+    `  com Avios: ${flights.filter((flight) => flight.fares.some((fare) => fare.avios !== null)).length} | ` +
+      `sem vagas: ${flights.filter((flight) => flight.fares.every((fare) => fare.seats == null)).length}`,
   );
   console.log(`  filtro até 1 escala: ${filterFlights(flights, { maxStops: 1 }).length} voo(s)`);
   console.log(`  filtro só IB/I2/VY: ${filterFlights(flights, { airlines: ["IB", "I2", "VY"] }).length} voo(s)`);
