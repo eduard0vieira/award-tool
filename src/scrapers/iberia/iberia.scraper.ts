@@ -48,8 +48,6 @@ export type IberiaResult =
   | { kind: "error"; reason: string; http?: number };
 
 const IBERIA_MIN_INTERVAL_MS = Number(process.env.IBERIA_SEARCH_INTERVAL_MS) || 8000;
-const DETAIL_BATCH_SIZE = Number(process.env.IBERIA_DETAIL_BATCH) || 1;
-const PAUSE_AFTER_FAILURE_MS = 30_000;
 const iberiaRateLimiter = new RateLimiter(IBERIA_MIN_INTERVAL_MS);
 
 // The observed grid returned 191 days for `maxSearchTime: 359` and started
@@ -159,13 +157,24 @@ function gridRequestBody(params: IberiaSearchParams, date: string) {
 // page itself sends: the results screen calls `/availability` on load, and the
 // value comes from there. Nothing is printed or stored.
 const tokenByPage = new WeakMap<Page, string>();
+// The page holds two families of 15-minute tokens at once, and only the member
+// one opens `/availability` (§17): the last token on any route was sometimes
+// the other family, and the detail died at its `exp`. This keeps the one the
+// page itself sends to `/availability`.
+const availabilityTokenByPage = new WeakMap<Page, string>();
+const watchedPages = new WeakSet<Page>();
+const AVAILABILITY_PATH = "/api/sse-rpa/rs/v1/availability";
 
 function watchAuthorization(page: Page) {
+  if (watchedPages.has(page)) return;
+  watchedPages.add(page);
   page.on("request", (request) => {
     if (!/ibisservices\.iberia\.com/.test(request.url())) return;
     const headers = request.headers();
     const authorization = headers["authorization"] ?? headers["Authorization"];
-    if (authorization) tokenByPage.set(page, authorization);
+    if (!authorization) return;
+    tokenByPage.set(page, authorization);
+    if (request.url().includes(AVAILABILITY_PATH)) availabilityTokenByPage.set(page, authorization);
   });
 }
 
@@ -174,6 +183,14 @@ function watchAuthorization(page: Page) {
 export function currentAuthorization(page: Page): string | null {
   return tokenByPage.get(page) ?? null;
 }
+
+export function availabilityAuthorization(page: Page): string | null {
+  return availabilityTokenByPage.get(page) ?? null;
+}
+
+// The site's error screen ("não podemos mostrar os voos"): reached when it cut
+// the session, so going on only lengthens the block.
+export class IberiaBlockedError extends Error {}
 
 // The results screen is a hash route and takes a while to settle: checking once
 // right after load catches an intermediate state. Wait for a conclusion.
@@ -376,12 +393,26 @@ export async function openResultsPage(
     }
   }
 
-  if (/ibbkerror/.test(finalUrl)) {
-    throw new Error(
-      "A Iberia respondeu com a tela de erro ('não podemos mostrar os voos'). " +
-        "Costuma ser corte por frequência: espere alguns minutos ou aumente IBERIA_SEARCH_INTERVAL_MS.",
+  if (/ibbkerror/.test(page.url())) {
+    // Slowing down does not lift it (§16, §17): the cut comes after a number of calls, not a pace.
+    throw new IberiaBlockedError(
+      "A Iberia respondeu com a tela de erro ('não podemos mostrar os voos'): ela cortou a sessão depois de " +
+        "muitas consultas. Espere pelo menos 20 minutos antes de buscar na Iberia de novo.",
     );
   }
+}
+
+// `goto` to the same URL with the same `#!/availability` is an anchor jump in
+// Chrome: no load, no call, no new state (§17). Leaving the page first makes it a real load.
+export async function reloadResults(
+  page: Page,
+  params: IberiaSearchParams,
+  date: string,
+  onLog: OnLog,
+  onNotice: OnNotice = () => {},
+) {
+  await page.goto("about:blank");
+  await openResultsPage(page, params, date, onLog, onNotice);
 }
 
 async function fetchGrid(
@@ -645,6 +676,10 @@ type AvailabilityResponse = {
 
 const unique = (values: (string | undefined)[]) => [...new Set(values.filter(Boolean) as string[])];
 
+// The page's per-load allowance ran out (a call that never answers) or its
+// token did (401): both are cured by a real reload, not by a retry on the spot.
+export class AvailabilityRefusedError extends Error {}
+
 export async function fetchDayFlights(
   page: Page,
   params: IberiaSearchParams,
@@ -688,13 +723,13 @@ export async function fetchDayFlights(
   if (response.status === -1) {
     // Where the page was matters: "Failed to fetch" with the tab on an error
     // screen is a different story from "Failed to fetch" with the search open.
-    throw new Error(
+    throw new AvailabilityRefusedError(
       `A disponibilidade de ${date} não chegou a responder (${response.text.slice(0, 100)}). ` +
         `A aba estava em ${page.url().slice(0, 120)}`,
     );
   }
   if (response.status === 401 || response.status === 403) {
-    throw new Error(`A Iberia recusou a autorização em ${date} (${response.status}).`);
+    throw new AvailabilityRefusedError(`A Iberia recusou a autorização em ${date} (${response.status}).`);
   }
   if (response.status !== 200) {
     throw new Error(`A disponibilidade de ${date} respondeu ${response.status}.`);
@@ -815,19 +850,34 @@ export function filterFlights(flights: IberiaFlight[], filters: FlightFilters): 
 }
 
 export type FailedDay = { date: string; error: string };
+export type DetailResult = { flights: IberiaFlight[]; failedDays: FailedDay[]; cut: string | null };
 
-// Details the requested days in batches of `/availability`, from inside the tab
-// and on the session the calendar just used: the `cheap-flights` pace, but
-// through the browser. Measured with `scripts/measure-iberia-batches.ts`: 30 at
-// once get cut immediately ("Failed to fetch" on all), batches of 10 in a row
-// lose days on the second batch, and batches of 5 every 8s get cut for good
-// around day 40. So the default is 1: sequential, no bursts. The rate limiter
-// spaces BATCHES, not requests.
-//
-// A failed batch is retried once after reopening the search (the session drops
-// in minutes and reopening logs back in). A batch that fails ENTIRELY twice is
-// the site cutting: insisting only prolongs the block, so the rest becomes a
-// declared failure and the search comes out partial.
+// Measured in §17: the site stops answering `/availability` after about a dozen
+// calls per page load, at any pace. A real reload every 4 calls never hit that,
+// but around 16–20 calls in a session even the page's own load lands on the
+// error screen. So: reload every few calls, use the call each load makes anyway,
+// and stop at the first load that is refused.
+const DETAIL_CALLS_PER_LOAD = 4;
+
+// Each load of the results page asks `/availability` for the date in its URL:
+// that answer is one day of the detail, at no extra cost against the cut.
+function pageOwnAvailability(page: Page, date: string): Promise<IberiaFlight[] | null> {
+  return page
+    .waitForResponse(
+      (response) =>
+        response.url().includes(AVAILABILITY_PATH) &&
+        response.request().method() === "POST" &&
+        (response.request().postData() ?? "").includes(`"${date}"`),
+      { timeout: 60_000 },
+    )
+    .then(async (response) => {
+      if (response.status() === 204) return [];
+      if (response.status() !== 200) return null;
+      return readFlights(await response.text(), date);
+    })
+    .catch(() => null);
+}
+
 export async function detailDays(
   page: Page,
   params: IberiaSearchParams,
@@ -836,79 +886,59 @@ export async function detailDays(
   onProgress: OnProgress = () => {},
   shouldStop: ShouldStop = () => false,
   onNotice: OnNotice = () => {},
-): Promise<{ flights: IberiaFlight[]; failedDays: FailedDay[] }> {
+): Promise<DetailResult> {
+  watchAuthorization(page);
   const flights: IberiaFlight[] = [];
   const failedDays: FailedDay[] = [];
-  if (dates.length === 0) return { flights, failedDays };
+  let next = 0;
+  let cut: string | null = null;
 
-  // Without a logged-in account EVERY availability call returns 401: checking
-  // once up front saves the whole sweep from failing day by day.
-  try {
-    await ensureLoggedIn(page, onLog, onNotice);
-    await openResultsPage(page, params, dates[0]!, onLog, onNotice);
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    onLog(`Não consegui abrir a busca logada da Iberia: ${reason}`);
-    return { flights, failedDays: dates.map((date) => ({ date, error: reason })) };
-  }
-
-  const queryBatch = async (batch: string[]) => {
-    await ensureOnSearchPage(page, params, batch[0]!, onLog, onNotice);
-    await iberiaRateLimiter.waitTurn();
-    const authorization = currentAuthorization(page);
-    if (!authorization) throw new Error("a página de busca não fez nenhuma chamada com Authorization");
-    return Promise.all(
-      batch.map(async (date) => {
-        try {
-          return { date, flights: await fetchDayFlights(page, params, date, authorization) };
-        } catch (error) {
-          return { date, error: error instanceof Error ? error.message : String(error) };
-        }
-      }),
-    );
-  };
-
-  for (let i = 0; i < dates.length; i += DETAIL_BATCH_SIZE) {
+  while (next < dates.length && cut === null) {
     if (shouldStop()) {
       onLog("Detalhamento cancelado; devolvendo os dias já consultados.");
       break;
     }
-    let pending = dates.slice(i, i + DETAIL_BATCH_SIZE);
-    for (let attempt = 1; attempt <= 2 && pending.length > 0; attempt++) {
-      if (attempt === 2) {
-        onLog(`${pending.length} dia(s) do lote falharam; reabrindo a busca e tentando de novo.`);
-        await page.waitForTimeout(PAUSE_AFTER_FAILURE_MS);
-        try {
-          await openResultsPage(page, params, pending[0]!, onLog, onNotice);
-        } catch (error) {
-          onLog(`Reabrir a busca falhou: ${error instanceof Error ? error.message : String(error)}`);
-        }
-      }
-      const batchPending = pending;
-      const results = await queryBatch(batchPending).catch((error: unknown) =>
-        batchPending.map((date) => ({ date, error: error instanceof Error ? error.message : String(error) })),
-      );
-      pending = [];
-      for (const result of results) {
-        if ("flights" in result) {
-          flights.push(...result.flights);
-        } else if (attempt === 2) {
-          failedDays.push({ date: result.date, error: result.error });
-        } else {
-          pending.push(result.date);
-        }
-      }
-      if (attempt === 2 && results.every((result) => "error" in result)) {
-        const reason = `a Iberia cortou as consultas (lote inteiro falhou duas vezes: ${failedDays.at(-1)!.error.slice(0, 100)})`;
-        onLog(`Parando o detalhe: ${reason}`);
-        for (const date of dates.slice(i + DETAIL_BATCH_SIZE)) failedDays.push({ date, error: reason });
-        return { flights, failedDays };
+    const before = next;
+    const first = dates[next]!;
+    const ownAnswer = pageOwnAvailability(page, first);
+    try {
+      await iberiaRateLimiter.waitTurn();
+      await reloadResults(page, params, first, onLog, onNotice);
+    } catch (error) {
+      cut = error instanceof Error ? error.message : String(error);
+      break;
+    }
+    const firstFlights = await ownAnswer;
+    if (firstFlights) {
+      flights.push(...firstFlights);
+      next++;
+    }
+
+    const authorization = availabilityAuthorization(page);
+    for (let call = 0; call < DETAIL_CALLS_PER_LOAD && next < dates.length && authorization; call++) {
+      if (shouldStop()) break;
+      const date = dates[next]!;
+      await iberiaRateLimiter.waitTurn();
+      try {
+        flights.push(...(await fetchDayFlights(page, params, date, authorization)));
+        next++;
+      } catch (error) {
+        if (error instanceof AvailabilityRefusedError) break;
+        // An answer that cannot be read is that day's failure, not the session's.
+        failedDays.push({ date, error: error instanceof Error ? error.message : String(error) });
+        next++;
       }
     }
-    const done = Math.min(i + DETAIL_BATCH_SIZE, dates.length);
-    onLog(`Detalhe: ${done} de ${dates.length} dia(s) consultados.`);
-    onProgress(done / dates.length);
+    if (next === before) {
+      cut = `a Iberia parou de responder ao detalhe depois de ${before} dia(s), mesmo recarregando a página`;
+    }
+    onLog(`Detalhe: ${next} de ${dates.length} dia(s) consultados.`);
+    onProgress(next / dates.length);
   }
 
-  return { flights, failedDays };
+  if (cut !== null) {
+    onLog(`Parando o detalhe: ${cut}`);
+    for (const date of dates.slice(next)) failedDays.push({ date, error: cut });
+  }
+  return { flights, failedDays, cut };
 }
