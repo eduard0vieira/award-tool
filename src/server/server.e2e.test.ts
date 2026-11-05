@@ -17,7 +17,7 @@ import { JobStore } from "./jobs/job-store.service.ts";
 import { RouteRequestDto } from "./search/request-fields.ts";
 import { SEARCH_SOURCES, type SearchSource } from "./search/search-source.ts";
 import { filterSmilesFlights, storedSmilesDays } from "../scrapers/smiles/smiles-flights.ts";
-import { readSmilesResponse } from "../scrapers/smiles/smiles.scraper.ts";
+import { readSmilesResponse, smilesBookingLink } from "../scrapers/smiles/smiles.scraper.ts";
 import { FIXTURES_DIR } from "../core/paths.ts";
 import fs from "node:fs";
 import path from "node:path";
@@ -599,7 +599,7 @@ describe("server with auth", () => {
     const body = { carriers: ["AF"], maxStops: 1, miles: { economy: { min: 1000 } } };
     const response = await filter("smiles-flights", body);
     assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), JSON.parse(JSON.stringify(filterSmilesFlights(days, body, { origin: "GRU", destination: "CDG" }))));
+    assert.deepEqual(await response.json(), JSON.parse(JSON.stringify(filterSmilesFlights(days, body, (date) => smilesBookingLink({ origin: "GRU", destination: "CDG" }, date)))));
 
     assert.equal((await filter("aa-flights", {})).status, 400);
     assert.equal((await filter("smiles-without-flights", {})).status, 404);

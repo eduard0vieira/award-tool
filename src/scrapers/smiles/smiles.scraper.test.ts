@@ -105,7 +105,7 @@ describe("Smiles response parser", () => {
 
   test("links each date to the site's search for that day", () => {
     const response = readSmilesResponse(fixture("smiles-real.json"), "2026-10-13")!;
-    const [economy] = buildSmilesReport([response], {}, { origin: "GRU", destination: "MIA" });
+    const [economy] = buildSmilesReport([response], {}, (date) => smilesBookingLink({ origin: "GRU", destination: "MIA" }, date));
     assert.equal(economy!.days[0]!.link, smilesBookingLink({ origin: "GRU", destination: "MIA" }, "2026-10-13"));
     assert.match(economy!.days[0]!.link!, /departureDate=1791892800000&.*originAirport=GRU&destinationAirport=MIA$/);
   });

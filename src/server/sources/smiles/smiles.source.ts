@@ -84,7 +84,7 @@ export class SmilesSource implements SearchSource<SmilesSearchDto> {
       // From the stored flights, so each quoted day says who flies it: the alert
       // names that airline instead of assuming GOL.
       const stored = storedSmilesDays(days);
-      const legs: Leg[] = [{ label: `${origin} → ${destination}`, sections: buildSmilesReport(stored, ceilings, { origin, destination }) }];
+      const legs: Leg[] = [{ label: `${origin} → ${destination}`, sections: buildSmilesReport(stored, ceilings, (date) => smilesBookingLink({ origin, destination }, date)) }];
 
       // The gaps come already worded by the scraper, which knows what it left uncovered.
       const notices = [...gaps];

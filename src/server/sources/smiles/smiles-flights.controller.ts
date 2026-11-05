@@ -1,5 +1,6 @@
 import { BadRequestException, Body, Controller, HttpCode, NotFoundException, Param, Post } from "@nestjs/common";
 import { filterSmilesFlights, type StoredSmilesDay } from "../../../scrapers/smiles/smiles-flights.ts";
+import { smilesBookingLink } from "../../../scrapers/smiles/smiles.scraper.ts";
 import { PrismaService } from "../../db/prisma.service.ts";
 import { SmilesFlightFilterDto } from "./smiles-flight-filter.dto.ts";
 
@@ -23,9 +24,7 @@ export class SmilesFlightsController {
         "Os voos dessa busca não foram guardados: ela é de antes do filtro ou tem mais de 30 dias. Busque de novo para filtrar.",
       );
     }
-    return filterSmilesFlights(JSON.parse(row.flights) as StoredSmilesDay[], filter, {
-      origin: row.origin,
-      destination: row.destination,
-    });
+    const route = { origin: row.origin, destination: row.destination };
+    return filterSmilesFlights(JSON.parse(row.flights) as StoredSmilesDay[], filter, (date) => smilesBookingLink(route, date));
   }
 }

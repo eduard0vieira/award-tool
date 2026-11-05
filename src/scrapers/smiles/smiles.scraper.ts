@@ -1005,7 +1005,7 @@ export function smilesBookingLink(route: SmilesRoute, date: string): string {
 export function buildSmilesReport(
   days: { date: string; flights: ReportFlight[] }[],
   ceilings: SmilesCeilings = {},
-  route?: SmilesRoute,
+  linkFor?: (date: string) => string,
 ): SmilesSection[] {
   return SMILES_CABINS.map(({ field, label, colorClass }) => {
     const ceiling = ceilings[field];
@@ -1020,7 +1020,7 @@ export function buildSmilesReport(
         const cheapest = flights.reduce((a, b) => (a.miles <= b.miles ? a : b));
         const quoted: SmilesSectionDay = { date: day.date, valueK: Math.round(cheapest.miles / 10) / 100, seats: cheapest.seats };
         if (cheapest.carriers !== undefined) quoted.carriers = cheapest.carriers;
-        if (route) quoted.link = smilesBookingLink(route, day.date);
+        if (linkFor) quoted.link = linkFor(day.date);
         return quoted;
       })
       .filter((day): day is SmilesSectionDay => day !== null);
