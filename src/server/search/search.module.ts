@@ -5,6 +5,8 @@ import { AaSource } from "../sources/aa/aa.source.ts";
 import { IberiaModule } from "../sources/iberia/iberia.module.ts";
 import { IberiaSource } from "../sources/iberia/iberia.source.ts";
 import { LatamModule } from "../sources/latam/latam.module.ts";
+import { QatarModule } from "../sources/qatar/qatar.module.ts";
+import { QatarSource } from "../sources/qatar/qatar.source.ts";
 import { GoogleLatamSource } from "../sources/latam/google-latam.source.ts";
 import { LatamPairsSource } from "../sources/latam/latam-pairs.source.ts";
 import { LatamSource } from "../sources/latam/latam.source.ts";
@@ -27,7 +29,7 @@ import { SearchController } from "./search.controller.ts";
 import { SearchService } from "./search.service.ts";
 
 @Module({
-  imports: [JobsModule, TapModule, SeatspyModule, AaModule, IberiaModule, SmilesModule, LatamModule],
+  imports: [JobsModule, TapModule, SeatspyModule, AaModule, IberiaModule, SmilesModule, LatamModule, QatarModule],
   controllers: [SearchController, HistoryController, FeedController, QueueController],
   providers: [
     SearchService,
@@ -37,7 +39,7 @@ import { SearchService } from "./search.service.ts";
     {
       provide: SEARCH_SOURCES,
       useFactory: (...sources: SearchSource[]) => new Map(sources.map((source) => [source.id, source])),
-      inject: [TapSource, TapCalendarSource, TapShowcaseSource, SeatspySource, AaSource, IberiaSource, SmilesSource, LatamSource, LatamPairsSource, GoogleLatamSource],
+      inject: [TapSource, TapCalendarSource, TapShowcaseSource, SeatspySource, AaSource, IberiaSource, SmilesSource, LatamSource, LatamPairsSource, GoogleLatamSource, QatarSource],
     },
   ],
 })

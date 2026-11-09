@@ -42,5 +42,7 @@ export const config = {
     smiles: Number(process.env.SMILES_CONCURRENCY) || 2,
     // Iberia's login drops within minutes and the site has already cut a burst once.
     iberia: Number(process.env.IBERIA_CONCURRENCY) || 1,
+    // One member session: two sweeps at once would double the calls on the same account.
+    qatar: Number(process.env.QATAR_CONCURRENCY) || 1,
   },
 };
