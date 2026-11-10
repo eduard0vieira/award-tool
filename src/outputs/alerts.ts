@@ -21,6 +21,7 @@ const SOURCE_INFO: Record<string, { airline: string; program: string; unit: stri
   SMILES: { airline: "GOL", program: "Smiles", unit: "milhas" },
   LATAM: { airline: "LATAM", program: "LATAM Pass", unit: "pontos" },
   IB: { airline: "Iberia", program: "Iberia Club", unit: "Avios" },
+  QR: { airline: "Qatar Airways", program: "Qatar Privilege Club", unit: "Avios" },
   BA: { airline: "British Airways", program: "British Airways Executive Club", unit: "Avios" },
   AF: { airline: "Air France", program: "Air France-KLM Flying Blue", unit: "milhas" },
   KLM: { airline: "KLM", program: "Air France-KLM Flying Blue", unit: "milhas" },
