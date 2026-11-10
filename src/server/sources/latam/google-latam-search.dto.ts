@@ -1,7 +1,7 @@
 import { IsIn, IsOptional } from "class-validator";
 import { OptionalIntField, RouteRequestDto } from "../../search/request-fields.ts";
 
-// The cheapest LATAM round trips on Google Flights, confirmed in miles on LATAM's site.
+// The cheapest LATAM round trips on Google Flights, in reais.
 export class GoogleLatamSearchDto extends RouteRequestDto {
   @IsOptional()
   @IsIn(["Economy", "Business"], { message: "O campo cabin deve ser Economy ou Business." })

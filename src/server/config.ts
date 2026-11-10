@@ -44,5 +44,6 @@ export const config = {
     iberia: Number(process.env.IBERIA_CONCURRENCY) || 1,
     // One member session: two sweeps at once would double the calls on the same account.
     qatar: Number(process.env.QATAR_CONCURRENCY) || 1,
+    google: Number(process.env.GOOGLE_FLIGHTS_CONCURRENCY) || 1,
   },
 };

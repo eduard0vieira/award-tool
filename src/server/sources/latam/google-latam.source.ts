@@ -1,15 +1,15 @@
 import { Inject, Injectable } from "@nestjs/common";
+import type { ChromeSession } from "../../../core/chrome-session.ts";
 import { SessionPool } from "../../../core/session-pool.ts";
 import { searchGoogleCalendar, type RoundTripPrice } from "../../../scrapers/google-flights/google-flights.scraper.ts";
 import { formatDatesByMonth, type FormattedDay } from "../../../core/common.ts";
-import { latamBookingLink, pickBestPairs, type LatamSession } from "../../../scrapers/latam/latam.scraper.ts";
-import { config } from "../../config.ts";
+import { latamBookingLink } from "../../../scrapers/latam/latam.scraper.ts";
 import { JobRunner } from "../../jobs/job-runner.service.ts";
 import { JobStore } from "../../jobs/job-store.service.ts";
 import type { SearchSource } from "../../search/search-source.ts";
-import { confirmPairList } from "./latam-confirmation.ts";
 import { GoogleLatamSearchDto } from "./google-latam-search.dto.ts";
-import { LATAM_POOL } from "./latam.source.ts";
+
+export const GOOGLE_POOL = Symbol("GOOGLE_POOL");
 
 const DEFAULT_STAY_DAYS = 7;
 const DEFAULT_BAND_PERCENT = 10;
@@ -53,21 +53,9 @@ export function bandSection(band: RoundTripPrice[], direction: "outbound" | "ret
   };
 }
 
-// The calendar's own draw over the band: pairs spread over the period. Each
-// outbound only pairs with its own return, since the trip length is fixed.
-export function cheapestPairs(band: RoundTripPrice[], stayDays: number, count = config.latamPairs) {
-  if (band.length === 0) return [];
-  const outbound = band.map((price) => ({ date: price.outbound, price: price.priceReais, lowestFare: false }));
-  const inbound = band.map((price) => ({ date: price.return, price: price.priceReais, lowestFare: false }));
-  return pickBestPairs(outbound, inbound, count, Infinity, Infinity, undefined, stayDays, stayDays).map((pair) => ({
-    outbound: pair.outbound.date,
-    return: pair.inbound.date,
-    priceReais: pair.outbound.price,
-  }));
-}
-
-// What Eduardo did by hand: Google Flights filtered to LATAM, the cheapest dates
-// of its calendar, then each pair tested on LATAM's site, mostly in business.
+// Google Flights filtered to LATAM, the cheapest dates of its calendar, in reais.
+// The LATAM site is never opened: its login and anti-bot used to fail the whole
+// search and throw the Google dates away with it.
 @Injectable()
 export class GoogleLatamSource implements SearchSource<GoogleLatamSearchDto> {
   readonly id = "google-latam";
@@ -84,7 +72,7 @@ export class GoogleLatamSource implements SearchSource<GoogleLatamSearchDto> {
   }
 
   constructor(
-    @Inject(LATAM_POOL) private readonly pool: SessionPool<LatamSession>,
+    @Inject(GOOGLE_POOL) private readonly pool: SessionPool<ChromeSession>,
     private readonly runner: JobRunner,
     private readonly jobs: JobStore,
   ) {}
@@ -107,17 +95,8 @@ export class GoogleLatamSource implements SearchSource<GoogleLatamSearchDto> {
         throw new Error(`O Google Flights não mostrou nenhum ida e volta da LATAM de ${stayDays} dias em ${origin} ⇄ ${destination}.`);
       }
       const band = cheapestBand(prices, bandPercent);
-      const chosen = cheapestPairs(band, stayDays);
       const lowest = Math.min(...prices.map((price) => price.priceReais));
-      job.log(`Google Flights: ${prices.length} dias, menor ida e volta R$ ${lowest}, ${band.length} até ${bandPercent}% acima. Pares: ${chosen.map((pair) => `${pair.outbound}→${pair.return} R$ ${pair.priceReais}`).join(", ")}.`);
-      job.progress(0.2);
-
-      const { confirmed, withoutOffer, failed } = await confirmPairList(jobId, page, job, { origin, destination, cabin }, chosen);
-      if (confirmed.length === 0 && withoutOffer.length === 0) {
-        throw new Error(`Nenhum par pôde ser conferido na LATAM: ${failed.join(" · ")}`);
-      }
-      // Every date of the band, in reais as Google shows them: the pairs only lend
-      // the points the alert announces.
+      job.log(`Google Flights: ${prices.length} dias, menor ida e volta R$ ${lowest}, ${band.length} até ${bandPercent}% acima.`);
       const { label, colorClass } = CABINS[cabin];
       const legs = [
         {
@@ -129,22 +108,14 @@ export class GoogleLatamSource implements SearchSource<GoogleLatamSearchDto> {
           sections: [{ label, colorClass, ...bandSection(band, "return", { origin: destination, destination: origin }) }],
         },
       ];
-      const cut =
-        cutAfter &&
-        `O Google Flights só carregou o calendário até ${cutAfter.date.split("-").reverse().join("/")} (${cutAfter.reason}); as idas depois disso ficaram de fora.`;
-      const notices = [
-        cut,
-        withoutOffer.length > 0 && `Sem voo em milhas na ${label}: ${withoutOffer.join(", ")}.`,
-        failed.length > 0 && `Não conferidos por falha: ${failed.join(" · ")}.`,
-      ].filter(Boolean);
-      const partial = failed.length > 0 || cutAfter !== null;
-      this.jobs.complete(jobId, {
-        legs,
-        confirmation: { pairs: confirmed },
-        google: { stayDays, bandPercent, lowestReais: lowest, days: prices.length, kept: band.length, pairs: chosen },
-        ...(partial && { partialNotice: notices.join(" ") }),
-        ...(!partial && notices.length > 0 && { notices }),
-      });
+      const google = { stayDays, bandPercent, lowestReais: lowest, days: prices.length, kept: band.length };
+      if (cutAfter) {
+        const until = cutAfter.date.split("-").reverse().join("/");
+        const partialNotice = `O Google Flights só carregou o calendário até ${until} (${cutAfter.reason}); as idas depois disso ficaram de fora.`;
+        this.jobs.complete(jobId, { legs, google, partialNotice });
+      } else {
+        this.jobs.complete(jobId, { legs, google });
+      }
     });
   }
 }

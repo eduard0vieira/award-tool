@@ -1,10 +1,10 @@
 import { Module } from "@nestjs/common";
 import { startLatamSession, type LatamSession } from "../../../scrapers/latam/latam.scraper.ts";
-import { closeChromeSession, isSessionAlive } from "../../../core/chrome-session.ts";
+import { closeChromeSession, isSessionAlive, openChromeSession, type ChromeSession } from "../../../core/chrome-session.ts";
 import { config } from "../../config.ts";
 import { JobsModule } from "../../jobs/jobs.module.ts";
 import { sessionPoolProvider } from "../session-pool.provider.ts";
-import { GoogleLatamSource } from "./google-latam.source.ts";
+import { GOOGLE_POOL, GoogleLatamSource } from "./google-latam.source.ts";
 import { LatamPairsSource } from "./latam-pairs.source.ts";
 import { LATAM_POOL, LatamSource } from "./latam.source.ts";
 
@@ -15,6 +15,13 @@ import { LATAM_POOL, LatamSource } from "./latam.source.ts";
       label: "latam",
       size: config.concurrency.latam,
       createSession: (headless) => startLatamSession(headless),
+      isAlive: isSessionAlive,
+      closeSession: closeChromeSession,
+    }),
+    sessionPoolProvider<ChromeSession>(GOOGLE_POOL, {
+      label: "google",
+      size: config.concurrency.google,
+      createSession: (headless) => openChromeSession(headless, "Google Flights"),
       isAlive: isSessionAlive,
       closeSession: closeChromeSession,
     }),
