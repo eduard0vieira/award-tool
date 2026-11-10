@@ -31,6 +31,7 @@ function fakeSite(site: Site) {
   let loginWaits = 0;
   const handlers = new Set<(request: unknown) => void>();
   const gotos: string[] = [];
+  const filled: Record<string, string> = {};
   const asked: { month: string; headers: Record<string, string>; body: { cabinClass: string; itineraries: { departureDate: string }[] } }[] = [];
 
   const firePageCall = () => {
@@ -71,13 +72,17 @@ function fakeSite(site: Site) {
       }
     },
     bringToFront: async () => {},
+    locator: (selector: string) => ({
+      locator: (field: string) => ({ first: () => ({ fill: async (value: string) => void (filled[`${selector} ${field}`] = value) }) }),
+      click: async () => void (filled[selector] = "clicked"),
+    }),
     evaluate: async (_fn: unknown, args: { headers: Record<string, string>; body: { cabinClass: string; itineraries: { departureDate: string }[] } }) => {
       const month = args.body.itineraries[0]!.departureDate.slice(0, 7);
       asked.push({ month, headers: args.headers, body: args.body });
       return site.answer(month, asked.length);
     },
   };
-  return { page: page as unknown as Page, gotos, asked };
+  return { page: page as unknown as Page, gotos, asked, filled };
 }
 
 const calendarFor = (month: string): Answer => ({ status: 200, text: month === "2027-08" ? august : december });
@@ -134,6 +139,25 @@ describe("Qatar year sweep", () => {
     assert.match(notices[0]!, /Faça o login no Privilege Club na janela do Chrome do bot/);
     assert.ok(site.gotos.some((target) => target.includes("loginpage")));
     assert.equal(result.days.length, 41);
+  });
+
+  test("with the login in .env it fills the form and leaves only the e-mail code to the person", async () => {
+    process.env.QATAR_EMAIL = "member@example.com";
+    process.env.QATAR_PASSWORD = "not-a-real-password";
+    try {
+      const notices: string[] = [];
+      const site = fakeSite({ loggedIn: false, loginAfterWaits: 2, answer: calendarFor });
+
+      await searchQatarYear(site.page, route, () => {}, () => {}, (message) => notices.push(message));
+
+      assert.equal(site.filled['#j-login-form input[type="text"]'], "member@example.com");
+      assert.equal(site.filled['#j-login-form input[type="password"]'], "not-a-real-password");
+      assert.equal(site.filled["#loginButtonInvoke"], "clicked");
+      assert.match(notices[0]!, /já colocou o e-mail e a senha/);
+    } finally {
+      delete process.env.QATAR_EMAIL;
+      delete process.env.QATAR_PASSWORD;
+    }
   });
 
   test("nobody logging in is an error, never an empty calendar", async () => {

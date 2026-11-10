@@ -19,6 +19,7 @@ const QATAR_MIN_INTERVAL_MS = Number(process.env.QATAR_SEARCH_INTERVAL_MS) || 60
 const qatarRateLimiter = new RateLimiter(QATAR_MIN_INTERVAL_MS);
 const LOGIN_WAIT_MINUTES = Number(process.env.QATAR_LOGIN_WAIT_MINUTES) || 10;
 const OWN_CALL_WAIT_MS = 25_000;
+const LOGIN_FIELD_TIMEOUT_MS = 15_000;
 // Qatar sells about 361 days ahead: this month plus the next twelve.
 const MONTHS_TO_SWEEP = 13;
 const MAX_CONSECUTIVE_FAILED_MONTHS = 3;
@@ -59,6 +60,31 @@ async function loadCalendar(page: Page, route: QatarRoute, date: string): Promis
   }
 }
 
+// With QATAR_EMAIL and QATAR_PASSWORD in .env the bot fills the login form
+// (fields read from the real page on 2026-11-10); the e-mail code, and any
+// captcha, stay with the person. A form that changed is not an error: the
+// person logs in by hand. No password ever shows up in a log.
+async function fillQatarLogin(page: Page, onLog: OnLog): Promise<boolean> {
+  const email = process.env.QATAR_EMAIL;
+  const password = process.env.QATAR_PASSWORD;
+  if (!email || !password) {
+    onLog("Sem QATAR_EMAIL/QATAR_PASSWORD no .env: o login da Qatar é todo manual.");
+    return false;
+  }
+  try {
+    const form = page.locator("#j-login-form");
+    await form.locator('input[type="text"]').first().fill(email, { timeout: LOGIN_FIELD_TIMEOUT_MS });
+    await form.locator('input[type="password"]').first().fill(password, { timeout: LOGIN_FIELD_TIMEOUT_MS });
+    await page.locator("#loginButtonInvoke").click({ timeout: LOGIN_FIELD_TIMEOUT_MS });
+    onLog("Login da Qatar: e-mail e senha enviados.");
+    return true;
+  } catch (err) {
+    const reason = err instanceof Error ? err.message.split("\n")[0] : String(err);
+    onLog(`Login da Qatar: o formulário não foi preenchido (${reason}). O login fica manual.`);
+    return false;
+  }
+}
+
 // Not logged in, the deep link lands on the home page. The login page is
 // opened for the person, and the calendar is reopened once the tab leaves it.
 async function openCalendar(page: Page, route: QatarRoute, date: string, onLog: OnLog, onNotice: OnNotice): Promise<CalendarCall> {
@@ -69,13 +95,16 @@ async function openCalendar(page: Page, route: QatarRoute, date: string, onLog: 
     throw new Error("O calendário da Qatar abriu, mas não fez a chamada de preços. A página pode ter mudado.");
   }
 
-  const message =
-    "A sessão da Qatar caiu. Faça o login no Privilege Club na janela do Chrome do bot, com o código que chega " +
-    `no e-mail. A busca espera até ${LOGIN_WAIT_MINUTES} min e continua sozinha.`;
-  onNotice(message);
-  onLog(message);
   await page.goto(LOGIN_PAGE, { waitUntil: "domcontentloaded", timeout: 60_000 });
   await page.bringToFront();
+  const filled = await fillQatarLogin(page, onLog);
+  const message =
+    (filled
+      ? "A sessão da Qatar caiu. O bot já colocou o e-mail e a senha: digite na janela do Chrome do bot o código que chegou no e-mail."
+      : "A sessão da Qatar caiu. Faça o login no Privilege Club na janela do Chrome do bot, com o código que chega no e-mail.") +
+    ` A busca espera até ${LOGIN_WAIT_MINUTES} min e continua sozinha.`;
+  onNotice(message);
+  onLog(message);
 
   for (let waited = 0; waited < LOGIN_WAIT_MINUTES * 60_000; waited += 3000) {
     await page.waitForTimeout(3000);
