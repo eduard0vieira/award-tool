@@ -3367,7 +3367,7 @@ function showTestedPairs(card, tested, cabinLabel, origin, destination) {
   ]);
 }
 
-// Google Flights filtered to LATAM, its cheapest round trips, each confirmed in miles on LATAM's site.
+// Google Flights filtered to LATAM: the cheapest round trips of its calendar, in reais.
 async function startGoogleLatamSearch(origin, destination, cabin, stayDays, bandPercent, session) {
   const args = [origin, destination, cabin, stayDays, bandPercent];
   session = session || newSession("google-latam", args);
@@ -3375,7 +3375,7 @@ async function startGoogleLatamSearch(origin, destination, cabin, stayDays, band
   const card = createJobCard(latamGoogleQueue, { program: "LATAM", detail: `${cabinLabel}, via Google Flights`, origin, destination, roundTrip: true });
   try {
     const [body] = LEG_BODIES_BY_SOURCE["google-latam"](args);
-    const tested = await runOnServer(card, { source: "google-latam", ...body }, "Lendo o Google Flights e conferindo em milhas…", session);
+    const tested = await runOnServer(card, { source: "google-latam", ...body }, "Lendo o calendário do Google Flights…", session);
     if (tested.google) {
       setFacts(card.ceilingsEl, [
         { text: "Google Flights", className: "fact-lead" },
@@ -3385,18 +3385,15 @@ async function startGoogleLatamSearch(origin, destination, cabin, stayDays, band
       ]);
       card.ceilingsEl.hidden = false;
     }
-    // Every Google date of the band; the confirmed pairs only lend the points, as in the calendar search.
     const legs = tested.result;
     for (const leg of legs) {
       renderLegSections(card.resultEl, leg.label, leg.sections);
       recordLegForCopy(card, leg.sections);
     }
-    showMilesConfirmation(card, tested.confirmation);
     card.setStatus("Pronto", "status-done");
     card.resultEl.hidden = card.minimized;
     showPartialNotices(card, [tested.partialNotice, ...(tested.notices || [])].filter(Boolean));
     updateCardActions(card);
-    showLatamAlertButton(card, origin, destination, legs, tested.confirmation, cabinLabel);
   } catch (err) {
     showFailure(card, err);
   } finally {
