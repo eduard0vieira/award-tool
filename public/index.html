@@ -45,6 +45,7 @@
       <button type="button" role="tab" id="tab-aa" aria-controls="panel-aa" aria-selected="false" tabindex="-1" class="tab-button" data-tab="aa">American</button>
       <button type="button" role="tab" id="tab-latam" aria-controls="panel-latam" aria-selected="false" tabindex="-1" class="tab-button" data-tab="latam">LATAM</button>
       <button type="button" role="tab" id="tab-smiles" aria-controls="panel-smiles" aria-selected="false" tabindex="-1" class="tab-button" data-tab="smiles">Smiles</button>
+      <button type="button" role="tab" id="tab-qatar" aria-controls="panel-qatar" aria-selected="false" tabindex="-1" class="tab-button" data-tab="qatar">Qatar</button>
       <button type="button" role="tab" id="tab-iberia" aria-controls="panel-iberia" aria-selected="false" tabindex="-1" class="tab-button" data-tab="iberia" disabled title="Em breve">Iberia <span class="tab-soon">Em breve</span></button>
       <button type="button" role="tab" id="tab-queue" aria-controls="panel-queue" aria-selected="false" tabindex="-1" class="tab-button" data-tab="queue">Fila <span class="tab-count" id="queue-count" hidden></span></button>
       <button type="button" role="tab" id="tab-history" aria-controls="panel-history" aria-selected="false" tabindex="-1" class="tab-button" data-tab="history">Histórico</button>
@@ -271,6 +272,41 @@
       <p id="aa-notice" class="notice" hidden></p>
 
       <div id="aa-queue" class="search-queue"></div>
+    </section>
+
+    <section id="panel-qatar" class="panel" role="tabpanel" aria-labelledby="tab-qatar" tabindex="-1" hidden>
+      <form id="qatar-search-form">
+        <div class="field">
+          <label for="qatar-origin">Origem</label>
+          <input id="qatar-origin" name="origin" placeholder="ex.: GRU" maxlength="3" pattern="[A-Za-z]{3}" title="Código IATA de 3 letras" required autocomplete="off" autocapitalize="characters" spellcheck="false" />
+        </div>
+        <div class="field">
+          <label for="qatar-destination">Destino</label>
+          <input id="qatar-destination" name="destination" placeholder="ex.: NRT" maxlength="3" pattern="[A-Za-z]{3}" title="Código IATA de 3 letras" required autocomplete="off" autocapitalize="characters" spellcheck="false" />
+        </div>
+        <label class="checkbox">
+          <input type="checkbox" id="qatar-round-trip" name="round-trip" checked />
+          Ida e volta
+        </label>
+        <button type="button" class="action-button queue-button" data-queue-source="qatar">Adicionar à fila</button>
+        <button type="submit">Buscar</button>
+
+        <div class="ceilings-row">
+          <div class="field">
+            <label for="qatar-ceiling">Teto de Avios (K) por trecho</label>
+            <input id="qatar-ceiling" name="ceiling" type="number" min="1" step="0.5" value="70" placeholder="ex.: 70" autocomplete="off" />
+          </div>
+        </div>
+        <p class="hint">
+          Calendário de prêmios do Privilege Club, na Econômica: o menor valor do dia em Avios, só nos voos operados
+          pela própria Qatar. Precisa da sessão logada no Chrome do bot; se ela cair, a busca pede o login com o
+          código do e-mail e espera.
+        </p>
+      </form>
+
+      <p id="qatar-notice" class="notice" hidden></p>
+
+      <div id="qatar-queue" class="search-queue"></div>
     </section>
 
     <!-- The Avios calendar returns ONE value per day, the cheapest, without saying

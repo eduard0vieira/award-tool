@@ -207,6 +207,13 @@ const smilesPremiumCeilingInput = document.getElementById("smiles-ceiling-premiu
 const smilesBusinessCeilingInput = document.getElementById("smiles-ceiling-business");
 const smilesNotice = document.getElementById("smiles-notice");
 const smilesQueue = document.getElementById("smiles-queue");
+const qatarForm = document.getElementById("qatar-search-form");
+const qatarOriginInput = document.getElementById("qatar-origin");
+const qatarDestinationInput = document.getElementById("qatar-destination");
+const qatarCeilingInput = document.getElementById("qatar-ceiling");
+const qatarRoundTripCheckbox = document.getElementById("qatar-round-trip");
+const qatarNotice = document.getElementById("qatar-notice");
+const qatarQueue = document.getElementById("qatar-queue");
 
 const latamForm = document.getElementById("latam-search-form");
 const latamOriginInput = document.getElementById("latam-origin");
@@ -240,6 +247,7 @@ const panels = {
   aa: document.getElementById("panel-aa"),
   iberia: document.getElementById("panel-iberia"),
   smiles: document.getElementById("panel-smiles"),
+  qatar: document.getElementById("panel-qatar"),
   latam: document.getElementById("panel-latam"),
   queue: document.getElementById("panel-queue"),
   history: document.getElementById("panel-history"),
@@ -266,6 +274,7 @@ const PROGRAM_LABELS = {
   // `IB` is Iberia seen through SeatSpy; `IBERIA` is the direct search on its own
   // site. They are different sources and the history must tell them apart.
   IBERIA: "Iberia (Avios)",
+  QATAR: "Qatar (Avios)",
   AF: "Air France",
   B6: "JetBlue",
   BA: "British Airways",
@@ -326,7 +335,7 @@ function activateTab(tab) {
 // The history used to live under another key with Portuguese fields. It is
 // moved once, then the old key goes away so clearing the history cannot bring it back.
 // The history is the server's: every search anyone ran, kept in its database.
-const PROGRAM_BY_SOURCE = { tap: "tap", "tap-calendar": "tap-calendar", "tap-showcase": "tap-showcase", "latam-pairs": "latam-pairs", "google-latam": "google-latam", aa: "AA", latam: "LATAM", smiles: "SMILES", iberia: "IBERIA" };
+const PROGRAM_BY_SOURCE = { tap: "tap", "tap-calendar": "tap-calendar", "tap-showcase": "tap-showcase", "latam-pairs": "latam-pairs", "google-latam": "google-latam", aa: "AA", latam: "LATAM", smiles: "SMILES", iberia: "IBERIA", qatar: "QATAR" };
 // Failed and cancelled searches stay on the server, but nobody has dates from them.
 const LISTED_STATUSES = new Set(["queued", "running", "done", "partial"]);
 let currentUser = null;
@@ -474,6 +483,12 @@ function repeatSearch(item) {
     smilesRoundTripCheckbox.checked = Boolean(item.roundTrip);
     activateTab("smiles");
     smilesOriginInput.focus();
+  } else if (item.program === "QATAR") {
+    qatarOriginInput.value = item.origin;
+    qatarDestinationInput.value = item.destination;
+    qatarRoundTripCheckbox.checked = Boolean(item.roundTrip);
+    activateTab("qatar");
+    qatarOriginInput.focus();
   } else if (item.program === "AA") {
     aaOriginInput.value = item.origin;
     aaDestinationInput.value = item.destination;
@@ -719,7 +734,7 @@ function createHistoryItem(item) {
   return row;
 }
 
-const TAB_BY_SOURCE = { tap: "tap", "tap-calendar": "tap", "tap-showcase": "tap", "latam-pairs": "latam", "google-latam": "latam", seatspy: "seatspy", aa: "aa", latam: "latam", smiles: "smiles", iberia: "iberia" };
+const TAB_BY_SOURCE = { tap: "tap", "tap-calendar": "tap", "tap-showcase": "tap", "latam-pairs": "latam", "google-latam": "latam", seatspy: "seatspy", aa: "aa", latam: "latam", smiles: "smiles", iberia: "iberia", qatar: "qatar" };
 
 // Rebuilds the whole card from what the server saved: same dates, copy and alert
 // buttons, no new search and no credit spent.
@@ -1206,6 +1221,7 @@ const LEG_BODIES_BY_SOURCE = {
   "tap-calendar": ([origin, destination, roundTrip, options]) => withReturn({ ...options, origin, destination }, roundTrip),
   "tap-showcase": ([options]) => [{ ...options, origin: "BR", destination: "EU" }],
   smiles: ([origin, destination, ceilings, roundTrip, period]) => withReturn({ origin, destination, ceilings, period }, roundTrip),
+  qatar: ([origin, destination, ceiling, roundTrip]) => withReturn({ origin, destination, ceiling }, roundTrip),
   aa: ([origin, destination, cabin, maxStops, ceiling, roundTrip, passengers]) =>
     withReturn({ origin, destination, cabin, maxStops, ceiling, passengers }, roundTrip),
   // SeatSpy's ceilings are not among the card's arguments: they are read off the
@@ -1256,6 +1272,7 @@ const RESUME_BY_SOURCE = {
   aa: (...args) => startAaSearch(...args),
   latam: (...args) => startLatamSearch(...args),
   iberia: (...args) => startIberiaSearch(...args),
+  qatar: (...args) => startQatarSearch(...args),
 };
 
 async function restoreSearches() {
@@ -1399,7 +1416,7 @@ const spectatedGroups = new Map();
 // The originator's browser starts the next leg as soon as the previous one ends.
 const SHARED_LEG_WAIT_MS = 2 * 60 * 1000;
 // The session goes in right after these arguments; a different count would put it in the wrong one.
-const ARG_COUNT_BY_SOURCE = { tap: 4, "tap-calendar": 4, "tap-showcase": 1, "latam-pairs": 4, "google-latam": 5, seatspy: 5, smiles: 5, aa: 7, latam: 4, iberia: 7 };
+const ARG_COUNT_BY_SOURCE = { tap: 4, "tap-calendar": 4, "tap-showcase": 1, "latam-pairs": 4, "google-latam": 5, seatspy: 5, smiles: 5, aa: 7, latam: 4, iberia: 7, qatar: 4 };
 
 function followSharedGroup(group, fromSnapshot) {
   if (ownGroupIds.has(group.id)) return;
@@ -3852,6 +3869,54 @@ aaForm.addEventListener("submit", (event) => {
   if (args) startAaSearch(...args);
 });
 
+// One job per direction, like AA: the calendar is read one way at a time.
+async function startQatarSearch(origin, destination, ceiling, roundTrip, session) {
+  session = session || newSession("qatar", [origin, destination, ceiling, roundTrip]);
+  const card = createJobCard(qatarQueue, { program: "Qatar", detail: "Econômica, Avios", origin, destination, roundTrip });
+  const partialNotices = [];
+  const legBodies = LEG_BODIES_BY_SOURCE.qatar([origin, destination, ceiling, roundTrip]);
+  const sections = [];
+
+  try {
+    for (const [index, body] of legBodies.entries()) {
+      const label = !roundTrip ? `${origin} → ${destination}` : index === 0 ? `Ida: ${origin} → ${destination}` : `Volta: ${destination} → ${origin}`;
+      const leg = await runOnServer(card, { source: "qatar", ...body }, !roundTrip ? "Buscando…" : index === 0 ? "Buscando ida…" : "Buscando volta…", session);
+      if (leg.partialNotice) partialNotices.push(roundTrip ? `${index === 0 ? "Ida" : "Volta"}: ${leg.partialNotice}` : leg.partialNotice);
+      renderLegSections(card.resultEl, label, [{ ...leg.result, colorClass: "cabin-economy" }]);
+      recordLegForCopy(card, [leg.result]);
+      sections.push(leg.result);
+    }
+
+    card.setStatus("Pronto", "status-done");
+    card.resultEl.hidden = card.minimized;
+    showPartialNotices(card, partialNotices);
+    updateCardActions(card);
+    showAlertButtons(card, "QR", origin, destination, [{ cabinClass: "Econômica", outbound: sections[0], inbound: sections[1] ?? null }]);
+  } catch (err) {
+    showFailure(card, err);
+  } finally {
+    card.progressEl.hidden = true;
+  }
+}
+
+function qatarArgs() {
+  clearNotice(qatarNotice);
+  const origin = qatarOriginInput.value.trim().toUpperCase();
+  const destination = qatarDestinationInput.value.trim().toUpperCase();
+  if (!origin || !destination) {
+    showNotice(qatarNotice, "Preencha origem e destino.");
+    return null;
+  }
+  const ceilingK = parseFloat(qatarCeilingInput.value);
+  return [origin, destination, Number.isFinite(ceilingK) && ceilingK > 0 ? ceilingK * 1000 : null, qatarRoundTripCheckbox.checked];
+}
+
+qatarForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const args = qatarArgs();
+  if (args) startQatarSearch(...args);
+});
+
 // "31/12/2026" → "2026-12-31". A date that does not exist (31/02) is null, never
 // rolled over into the next month.
 function parseTypedDate(text) {
@@ -4161,6 +4226,7 @@ const QUEUE_ARGS_BY_SOURCE = {
   "tap-calendar": [tapCalendarArgs, tapNotice],
   "tap-showcase": [tapShowcaseArgs, tapNotice],
   aa: [aaArgs, aaNotice],
+  qatar: [qatarArgs, qatarNotice],
   latam: [latamArgs, latamNotice],
   "latam-pairs": [latamPairsArgs, latamNotice],
   "google-latam": [latamGoogleArgs, latamNotice],
@@ -4192,7 +4258,7 @@ function queueLabel(source, args) {
     return `${PROGRAM_LABELS[program] || program} (SeatSpy) ${origin} → ${destination}${roundTrip ? ", ida e volta" : ""}`;
   }
   const [origin, destination] = args;
-  const roundTrip = source === "latam" || (source === "aa" ? args[5] : args[source === "smiles" ? 3 : 2]);
+  const roundTrip = source === "latam" || (source === "aa" ? args[5] : args[source === "smiles" || source === "qatar" ? 3 : 2]);
   const detail = source === "aa" ? `, ${AA_CABIN_LABELS[args[2]] || args[2]}` : "";
   return `${PROGRAM_LABELS[source] || PROGRAM_LABELS[PROGRAM_BY_SOURCE[source]] || source} ${origin} → ${destination}${roundTrip ? ", ida e volta" : ""}${detail}`;
 }
