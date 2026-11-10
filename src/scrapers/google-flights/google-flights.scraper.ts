@@ -16,6 +16,8 @@ const googleRateLimiter = new RateLimiter(GOOGLE_MIN_INTERVAL_MS);
 const MAX_PICKER_PAGES = 14;
 // A page in a background window answers slowly; 20 s already cut a month short.
 const MONTH_WAIT_MS = 40_000;
+const FIRST_MONTH_ATTEMPTS = 3;
+const FIRST_MONTH_RETRY_MS = 10_000;
 
 // The cabin codes in the page's request body.
 const CABIN_CODES = { Economy: 1, Business: 3 } as const;
@@ -172,6 +174,7 @@ export async function searchGoogleCalendar(
     const call = route.fetch().then(async (response) => {
       const text = await response.text();
       await route.fulfill({ response, body: text });
+      if (response.status() !== 200) throw new Error(`o Google Flights respondeu HTTP ${response.status()}`);
       return readCalendarCall(route.request().postData(), text);
     });
     // A call that arrives after the sweep ends is never awaited; its failure must not go unhandled.
@@ -205,11 +208,13 @@ export async function searchGoogleCalendar(
 
     const datePicker = page.getByPlaceholder("Partida").first();
     let first = await loadMonth(() => datePicker.click({ timeout: 30_000 }));
-    if ("failure" in first) {
-      onLog(`Google Flights: o calendário não abriu (${first.failure}). Abrindo de novo...`);
+    // On 2026-11-10 the first month failed twice in a row and a hand search a
+    // minute later worked: the retry opens a fresh search page, and waits longer each time.
+    for (let attempt = 2; "failure" in first && attempt <= FIRST_MONTH_ATTEMPTS; attempt++) {
+      onLog(`Google Flights: o calendário não abriu (${first.failure}). Tentativa ${attempt} de ${FIRST_MONTH_ATTEMPTS}...`);
+      await page.waitForTimeout(FIRST_MONTH_RETRY_MS * (attempt - 1));
       first = await loadMonth(async () => {
-        await page.keyboard.press("Escape");
-        await page.waitForTimeout(1500);
+        await openSearch(page, query, period.from);
         await datePicker.click({ timeout: 30_000 });
       });
     }
